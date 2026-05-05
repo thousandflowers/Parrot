@@ -10,8 +10,8 @@ actor LocalLLMService: @preconcurrency LLMService {
     func handleOpenAIHTTPStatus(_ statusCode: Int, data: Data) throws {
         switch statusCode {
         case 200: return
+        case 500, 502: throw CorrectionError.serverTimeout
         case 503: throw CorrectionError.serverNotRunning
-        case 500: throw CorrectionError.serverTimeout
         default: throw CorrectionError.outputParsingFailed(raw: "HTTP \(statusCode)")
         }
     }

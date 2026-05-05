@@ -15,10 +15,6 @@ struct LLMServiceFactory {
         }
     }
 
-    static func makeFluency() -> LLMService {
-        make(with: resolveFluencyServiceType())
-    }
-
     static func resolveFluencyServiceType() -> ServiceType {
         resolveServiceType(for: Constants.UserDefaultsKey.fluencyServiceType)
     }

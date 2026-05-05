@@ -88,9 +88,19 @@ actor RequestQueue {
             }
 
             let result = try await service.correct(text: request.text, promptType: promptType)
+            guard Date() <= request.deadline else {
+                isProcessing = false
+                Task { await processQueue() }
+                return
+            }
             await ResultCache.shared.set(result, for: request.text, modelID: serviceTypeLabel)
             request.continuation.resume(returning: result)
         } catch {
+            guard Date() <= request.deadline else {
+                isProcessing = false
+                Task { await processQueue() }
+                return
+            }
             request.continuation.resume(throwing: error)
         }
 

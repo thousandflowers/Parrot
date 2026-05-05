@@ -18,6 +18,7 @@ struct TextCheckCoordinator: Sendable {
     }
 
     func checkFluency() {
+        guard UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.isFluencyCheckingEnabled) else { return }
         performCheck { text, resolved in
             let serviceType = resolved.serviceType ?? LLMServiceFactory.resolveFluencyServiceType()
             let service = LLMServiceFactory.make(with: serviceType)

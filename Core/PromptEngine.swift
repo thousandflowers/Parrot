@@ -64,10 +64,23 @@ struct PromptEngine {
         }
     }
 
+    private var styleInstruction: String {
+        switch style {
+        case "formale":         return "Use formal, professional tone."
+        case "informale":       return "Use casual, conversational tone."
+        case "accademico":      return "Use academic, scholarly tone."
+        default:                return ""
+        }
+    }
+
     func buildGrammarPrompt(for text: String, customInstruction: String? = nil) -> String {
         let extra = grammarFamilyInstruction
+        let styleLine = styleInstruction
+        var header = "Fix only grammar/spelling for correctness; no style/fluency edits."
+        if !extra.isEmpty { header += "\n\(extra)" }
+        if !styleLine.isEmpty { header += "\n\(styleLine)" }
         return """
-        Fix only grammar/spelling for correctness; no style/fluency edits.\(extra.isEmpty ? "" : "\n\(extra)")
+        \(header)
 
         <TEXT>\(text)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
 
