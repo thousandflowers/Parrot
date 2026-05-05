@@ -3,8 +3,9 @@ import Foundation
 actor ServerHealthMonitor: Sendable {
     static let shared = ServerHealthMonitor()
 
-
     private var monitorTask: Task<Void, Never>?
+    private var consecutiveFailures = 0
+    private let maxBackoff: TimeInterval = 60
 
     func startMonitoring() {
         monitorTask?.cancel()
@@ -28,11 +29,17 @@ actor ServerHealthMonitor: Sendable {
         let url = URL(string: "http://127.0.0.1:\(port)/health")!
         do {
             let (_, response) = try await URLSession.shared.data(from: url)
-            if (response as? HTTPURLResponse)?.statusCode != 200 {
-                await restartServer()
+            if (response as? HTTPURLResponse)?.statusCode == 200 {
+                consecutiveFailures = 0
+                return
             }
-        } catch {
+        } catch {}
+
+        consecutiveFailures += 1
+        guard consecutiveFailures <= 3 else {
             await restartServer()
+            consecutiveFailures = 0
+            return
         }
     }
 

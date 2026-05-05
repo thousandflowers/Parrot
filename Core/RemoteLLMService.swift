@@ -26,7 +26,9 @@ final class RemoteLLMService: LLMService, Sendable {
     func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
         let engine = PromptEngine(language: language)
         let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-        let apiKey = try KeychainService.shared.load(for: "openai")
+        let apiKey: String
+        do { apiKey = try KeychainService.shared.load(for: "openai") }
+        catch { throw CorrectionError.invalidAPIKey }
         let model = openAIModel
 
         let corrected = try await performOpenAIRequest(
@@ -41,7 +43,9 @@ final class RemoteLLMService: LLMService, Sendable {
     func correctFluency(text: String) async throws -> CorrectionResult {
         let engine = PromptEngine(language: language)
         let prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
-        let apiKey = try KeychainService.shared.load(for: "openai")
+        let apiKey: String
+        do { apiKey = try KeychainService.shared.load(for: "openai") }
+        catch { throw CorrectionError.invalidAPIKey }
         let model = openAIModel
 
         let corrected = try await performOpenAIRequest(
@@ -56,7 +60,9 @@ final class RemoteLLMService: LLMService, Sendable {
     func explain(original: String, corrected: String) async throws -> String {
         let engine = PromptEngine(language: language)
         let prompt = engine.buildExplainPrompt(original: original, corrected: corrected, customInstruction: nil)
-        let apiKey = try KeychainService.shared.load(for: "openai")
+        let apiKey: String
+        do { apiKey = try KeychainService.shared.load(for: "openai") }
+        catch { throw CorrectionError.invalidAPIKey }
 
         return try await performOpenAIRequest(
             body: chatBody(model: openAIModel, prompt: prompt, systemPrompt: nil, temperature: 0.3, maxTokens: 512),

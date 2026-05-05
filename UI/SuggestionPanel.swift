@@ -44,7 +44,7 @@ final class SuggestionPanelController {
         self.currentResult = result
 
         if panel == nil {
-            panel = createFluencyPanel(with: result)
+            panel = createPanel(with: result, stateFor: { .fluencySuggestion($0) })
         } else {
             let hostingView = NSHostingView(rootView: SuggestionView(
                 result: result,
@@ -89,7 +89,7 @@ final class SuggestionPanelController {
         panel.orderFrontRegardless()
     }
 
-    private func createPanel(with result: CorrectionResult? = nil, loading: Bool = false) -> NSPanel {
+    private func createPanel(with result: CorrectionResult? = nil, loading: Bool = false, stateFor: ((CorrectionResult) -> SuggestionState)? = nil) -> NSPanel {
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 400, height: 220),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -107,42 +107,10 @@ final class SuggestionPanelController {
         let state: SuggestionState
         if loading {
             state = .loading
+        } else if let result = result, let mapper = stateFor {
+            state = result.hasChanges ? mapper(result) : .noErrors
         } else if let result = result {
             state = result.hasChanges ? .suggestion(result) : .noErrors
-        } else {
-            state = .noErrors
-        }
-
-        let hostingView = NSHostingView(rootView: SuggestionView(
-            result: result,
-            state: state,
-            onApply: { [weak self] in self?.applyCorrection() },
-            onExplain: { [weak self] in self?.requestExplanation() },
-            onDismiss: { [weak self] in self?.close() }
-        ))
-        panel.contentView = hostingView
-
-        return panel
-    }
-
-    private func createFluencyPanel(with result: CorrectionResult? = nil) -> NSPanel {
-        let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 220),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = true
-        panel.isMovableByWindowBackground = true
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-
-        let state: SuggestionState
-        if let result = result {
-            state = result.hasChanges ? .fluencySuggestion(result) : .noErrors
         } else {
             state = .noErrors
         }

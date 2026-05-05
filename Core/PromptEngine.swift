@@ -89,8 +89,11 @@ struct PromptEngine {
     }
 
     func buildFluencyPrompt(for text: String, customInstruction: String? = nil) -> String {
-        """
-        Improve fluency and naturalness only; do not fix grammar already correct.
+        let styleLine = styleInstruction
+        var header = "Improve fluency and naturalness only; do not fix grammar already correct."
+        if !styleLine.isEmpty { header += "\n\(styleLine)" }
+        return """
+        \(header)
 
         <TEXT>\(text)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
 
@@ -99,10 +102,13 @@ struct PromptEngine {
     }
 
     func buildExplainPrompt(original: String, corrected: String, customInstruction: String? = nil) -> String {
-        """
-        Explain the grammar, spelling, or style errors in the original text.
-        Be educational but concise.
-        Explain in \(language).
+        let styleLine = styleInstruction
+        var header = "Explain the grammar, spelling, or style errors in the original text."
+        header += "\nBe educational but concise."
+        header += "\nExplain in \(language)."
+        if !styleLine.isEmpty { header += "\n\(styleLine)" }
+        return """
+        \(header)
 
         Original:
         <TEXT>\(original)</TEXT>
