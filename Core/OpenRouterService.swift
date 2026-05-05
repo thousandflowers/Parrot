@@ -14,116 +14,62 @@ final class OpenRouterService: LLMService, Sendable {
         (try? KeychainService.shared.load(for: "openrouter")) ?? ""
     }
 
-    func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
-        let engine = PromptEngine(language: language)
-        let fullPrompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-
-        let apiKey = openRouterAPIKey
-        guard !apiKey.isEmpty else { throw CorrectionError.invalidAPIKey }
-
-        let model = openRouterModel
-        let body: [String: Any] = [
-            "model": model,
-            "messages": [
-                ["role": "system", "content": "You are a helpful writing assistant. Follow the user instructions exactly."],
-                ["role": "user", "content": fullPrompt]
-            ],
-            "temperature": 0.1,
-            "max_tokens": 1024,
-            "stream": false
-        ]
-
-        let url = URL(string: baseURL)!
-        var request = try buildLLMRequest(url: url, apiKey: apiKey, body: body)
-        request.setValue(Constants.bundleID, forHTTPHeaderField: "HTTP-Referer")
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else { throw CorrectionError.networkUnavailable }
-        switch httpResponse.statusCode {
-        case 200: break
+    func handleOpenAIHTTPStatus(_ statusCode: Int, data: Data) throws {
+        switch statusCode {
+        case 200: return
         case 401, 403: throw CorrectionError.invalidAPIKey
         case 429: throw CorrectionError.rateLimited
         case 500, 502, 503: throw CorrectionError.serverTimeout
-        default: throw CorrectionError.outputParsingFailed(raw: "HTTP \(httpResponse.statusCode)")
+        default: throw CorrectionError.outputParsingFailed(raw: "HTTP \(statusCode)")
         }
+    }
 
-        let corrected = try parseResponse(data: data)
-        return CorrectionResult(
-            original: text,
-            corrected: corrected.isEmpty ? text : corrected,
-            modelID: model,
-            confidence: 0.9,
-            promptType: promptType.label
+    func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
+        let engine = PromptEngine(language: language)
+        let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
+        let apiKey = openRouterAPIKey
+        guard !apiKey.isEmpty else { throw CorrectionError.invalidAPIKey }
+        let model = openRouterModel
+
+        let corrected = try await performOpenAIRequest(
+            body: chatBody(model: model, prompt: prompt, temperature: 0.1),
+            url: URL(string: baseURL)!,
+            apiKey: apiKey,
+            extraHeaders: ["HTTP-Referer": Constants.bundleID]
         )
+        return CorrectionResult(original: text, corrected: corrected.isEmpty ? text : corrected,
+                               modelID: model, confidence: 0.9, promptType: promptType.label)
     }
 
     func correctFluency(text: String) async throws -> CorrectionResult {
         let engine = PromptEngine(language: language)
-        let fluencyPrompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
-
+        let prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
         let apiKey = openRouterAPIKey
         guard !apiKey.isEmpty else { throw CorrectionError.invalidAPIKey }
-
         let model = openRouterModel
-        let body: [String: Any] = [
-            "model": model,
-            "messages": [
-                ["role": "system", "content": "You are a helpful writing assistant. Follow the user instructions exactly."],
-                ["role": "user", "content": fluencyPrompt]
-            ],
-            "temperature": 0.3,
-            "max_tokens": 1024,
-            "stream": false
-        ]
 
-        let url = URL(string: baseURL)!
-        var request = try buildLLMRequest(url: url, apiKey: apiKey, body: body)
-        request.setValue(Constants.bundleID, forHTTPHeaderField: "HTTP-Referer")
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else { throw CorrectionError.networkUnavailable }
-        switch httpResponse.statusCode {
-        case 200: break
-        case 401, 403: throw CorrectionError.invalidAPIKey
-        case 429: throw CorrectionError.rateLimited
-        case 500, 502, 503: throw CorrectionError.serverTimeout
-        default: throw CorrectionError.outputParsingFailed(raw: "HTTP \(httpResponse.statusCode)")
-        }
-
-        let corrected = try parseResponse(data: data)
-        return CorrectionResult(
-            original: text,
-            corrected: corrected.isEmpty ? text : corrected,
-            modelID: model,
-            confidence: 0.9,
-            promptType: "fluency"
+        let corrected = try await performOpenAIRequest(
+            body: chatBody(model: model, prompt: prompt, temperature: 0.3),
+            url: URL(string: baseURL)!,
+            apiKey: apiKey,
+            extraHeaders: ["HTTP-Referer": Constants.bundleID]
         )
+        return CorrectionResult(original: text, corrected: corrected.isEmpty ? text : corrected,
+                               modelID: model, confidence: 0.9, promptType: "fluency")
     }
 
     func explain(original: String, corrected: String) async throws -> String {
         let engine = PromptEngine(language: language)
-        let explainPrompt = engine.buildExplainPrompt(original: original, corrected: corrected, customInstruction: nil)
-
+        let prompt = engine.buildExplainPrompt(original: original, corrected: corrected, customInstruction: nil)
         let apiKey = openRouterAPIKey
         guard !apiKey.isEmpty else { throw CorrectionError.invalidAPIKey }
 
-        let body: [String: Any] = [
-            "model": openRouterModel,
-            "messages": [["role": "user", "content": explainPrompt]],
-            "temperature": 0.3,
-            "max_tokens": 512,
-            "stream": false
-        ]
-
-        let url = URL(string: baseURL)!
-        var request = try buildLLMRequest(url: url, apiKey: apiKey, body: body)
-        request.setValue(Constants.bundleID, forHTTPHeaderField: "HTTP-Referer")
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw CorrectionError.serverTimeout
-        }
-        return try parseResponse(data: data)
+        return try await performOpenAIRequest(
+            body: chatBody(model: openRouterModel, prompt: prompt, systemPrompt: nil, temperature: 0.3, maxTokens: 512),
+            url: URL(string: baseURL)!,
+            apiKey: apiKey,
+            extraHeaders: ["HTTP-Referer": Constants.bundleID]
+        )
     }
 
     func streamCorrect(text: String, promptType: PromptType) -> AsyncStream<String> {

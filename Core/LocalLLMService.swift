@@ -7,112 +7,56 @@ actor LocalLLMService: @preconcurrency LLMService {
         UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.language) ?? "it"
     }
 
+    func handleOpenAIHTTPStatus(_ statusCode: Int, data: Data) throws {
+        switch statusCode {
+        case 200: return
+        case 503: throw CorrectionError.serverNotRunning
+        case 500: throw CorrectionError.serverTimeout
+        default: throw CorrectionError.outputParsingFailed(raw: "HTTP \(statusCode)")
+        }
+    }
+
     func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
         let engine = PromptEngine(language: language)
-        let fullPrompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-
+        let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
         let port = await ServerManager.shared.currentPort
         guard port > 0 else { throw CorrectionError.serverNotRunning }
 
-        let body: [String: Any] = [
-            "model": "local-model",
-            "messages": [
-                ["role": "system", "content": "You are a helpful writing assistant. Follow the user instructions exactly."],
-                ["role": "user", "content": fullPrompt]
-            ],
-            "temperature": 0.1,
-            "max_tokens": 1024,
-            "stream": false
-        ]
-
-        let url = URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!
-        let request = try buildLLMRequest(url: url, apiKey: nil, body: body)
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw CorrectionError.serverNotRunning
-        }
-        switch httpResponse.statusCode {
-        case 200: break
-        case 503: throw CorrectionError.serverNotRunning
-        case 500: throw CorrectionError.serverTimeout
-        default: throw CorrectionError.outputParsingFailed(raw: "HTTP \(httpResponse.statusCode)")
-        }
-
-        let corrected = try parseResponse(data: data)
-        return CorrectionResult(
-            original: text,
-            corrected: corrected.isEmpty ? text : corrected,
-            modelID: "local-qwen",
-            confidence: 0.9,
-            promptType: promptType.label
+        let corrected = try await performOpenAIRequest(
+            body: chatBody(model: "local-qwen", prompt: prompt, temperature: 0.1),
+            url: URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!,
+            apiKey: nil
         )
+        return CorrectionResult(original: text, corrected: corrected.isEmpty ? text : corrected,
+                               modelID: "local-qwen", confidence: 0.9, promptType: promptType.label)
     }
 
     func correctFluency(text: String) async throws -> CorrectionResult {
         let engine = PromptEngine(language: language)
-        let fluencyPrompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
-
+        let prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
         let port = await ServerManager.shared.currentPort
         guard port > 0 else { throw CorrectionError.serverNotRunning }
 
-        let body: [String: Any] = [
-            "model": "local-model",
-            "messages": [
-                ["role": "system", "content": "You are a helpful writing assistant. Follow the user instructions exactly."],
-                ["role": "user", "content": fluencyPrompt]
-            ],
-            "temperature": 0.3,
-            "max_tokens": 1024,
-            "stream": false
-        ]
-
-        let url = URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!
-        let request = try buildLLMRequest(url: url, apiKey: nil, body: body)
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw CorrectionError.serverNotRunning
-        }
-        switch httpResponse.statusCode {
-        case 200: break
-        case 503: throw CorrectionError.serverNotRunning
-        case 500: throw CorrectionError.serverTimeout
-        default: throw CorrectionError.outputParsingFailed(raw: "HTTP \(httpResponse.statusCode)")
-        }
-
-        let corrected = try parseResponse(data: data)
-        return CorrectionResult(
-            original: text,
-            corrected: corrected.isEmpty ? text : corrected,
-            modelID: "local-qwen",
-            confidence: 0.9,
-            promptType: "fluency"
+        let corrected = try await performOpenAIRequest(
+            body: chatBody(model: "local-qwen", prompt: prompt, temperature: 0.3),
+            url: URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!,
+            apiKey: nil
         )
+        return CorrectionResult(original: text, corrected: corrected.isEmpty ? text : corrected,
+                               modelID: "local-qwen", confidence: 0.9, promptType: "fluency")
     }
 
     func explain(original: String, corrected: String) async throws -> String {
         let engine = PromptEngine(language: language)
-        let explainPrompt = engine.buildExplainPrompt(original: original, corrected: corrected, customInstruction: nil)
-
+        let prompt = engine.buildExplainPrompt(original: original, corrected: corrected, customInstruction: nil)
         let port = await ServerManager.shared.currentPort
         guard port > 0 else { throw CorrectionError.serverNotRunning }
 
-        let body: [String: Any] = [
-            "model": "local-model",
-            "messages": [["role": "user", "content": explainPrompt]],
-            "temperature": 0.3,
-            "max_tokens": 512,
-            "stream": false
-        ]
-        let url = URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!
-        let request = try buildLLMRequest(url: url, apiKey: nil, body: body)
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw CorrectionError.serverNotRunning
-        }
-        return try parseResponse(data: data)
+        return try await performOpenAIRequest(
+            body: chatBody(model: "local-qwen", prompt: prompt, systemPrompt: nil, temperature: 0.3, maxTokens: 512),
+            url: URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!,
+            apiKey: nil
+        )
     }
 
     func streamCorrect(text: String, promptType: PromptType) -> AsyncStream<String> {

@@ -66,4 +66,5 @@ protocol LLMService: AnyObject, Sendable {
     func correctFluency(text: String) async throws -> CorrectionResult
     func explain(original: String, corrected: String) async throws -> String
     func streamCorrect(text: String, promptType: PromptType) -> AsyncStream<String>
+    func handleOpenAIHTTPStatus(_ statusCode: Int, data: Data) throws
 }
