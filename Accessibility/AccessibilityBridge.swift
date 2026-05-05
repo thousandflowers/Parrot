@@ -4,6 +4,8 @@ actor AccessibilityBridge {
     static let shared = AccessibilityBridge()
 
     private(set) var lastSelectionBounds: CGRect = .zero
+    private var cachedBundleID: String?
+    private var cachedBundleIDTimestamp: Date = .distantPast
 
     func fetchSelectedText() async throws -> String {
         guard AXIsProcessTrusted() else {
@@ -138,6 +140,10 @@ actor AccessibilityBridge {
     }
 
     func frontAppBundleID() async -> String? {
+        if -cachedBundleIDTimestamp.timeIntervalSinceNow < 1, let cached = cachedBundleID {
+            return cached
+        }
+
         let systemAX = AXUIElementCreateSystemWide()
 
         var frontAppRef: CFTypeRef?
@@ -155,11 +161,16 @@ actor AccessibilityBridge {
                 &bundleIDRef
             )
             if bundleResult == .success, let id = bundleIDRef as? String {
+                cachedBundleID = id
+                cachedBundleIDTimestamp = Date()
                 return id
             }
         }
 
-        return NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let fallback = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        cachedBundleID = fallback
+        cachedBundleIDTimestamp = Date()
+        return fallback
     }
 
     // MARK: - Private Helpers
