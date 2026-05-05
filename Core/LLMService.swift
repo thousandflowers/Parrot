@@ -49,14 +49,24 @@ enum CorrectionError: Error, LocalizedError, Sendable {
             return "Impossibile leggere il testo da \(appName)."
         case .serverNotRunning:
             return "Il motore AI e offline. Riavvio in corso..."
+        case .serverTimeout:
+            return "Timeout del server. Riprova tra qualche secondo."
+        case .modelNotLoaded:
+            return "Modello non caricato. Verifica che sia installato correttamente."
+        case .modelDownloadFailed(let url):
+            return "Download del modello fallito da \(url.host ?? url.absoluteString)."
+        case .modelCorrupted(let sha):
+            return "Modello corrotto (SHA: \(sha.prefix(12))...). Scarica di nuovo il modello."
         case .outOfMemory:
             return "Memoria insufficiente. Chiudi altre app o usa un modello piu piccolo."
+        case .networkUnavailable:
+            return "Connessione di rete non disponibile."
         case .invalidAPIKey:
             return "API Key non valida. Verifica le impostazioni."
         case .rateLimited:
             return "Troppe richieste. Attendi qualche secondo."
-        default:
-            return "Errore imprevisto. Riprova."
+        case .outputParsingFailed:
+            return "Risposta AI non valida. Riprova."
         }
     }
 }

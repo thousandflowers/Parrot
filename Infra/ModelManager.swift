@@ -80,8 +80,16 @@ actor ModelManager: Sendable {
 
 
     private func computeSHA256(for url: URL) throws -> String {
-        let data = try Data(contentsOf: url)
-        return SHA256.hash(data: data).compactMap { String(format: "%02x", $0) }.joined()
+        guard let handle = FileHandle(forReadingAtPath: url.path(percentEncoded: false)) else {
+            throw CorrectionError.modelCorrupted(expectedSHA: "unreadable")
+        }
+        defer { try? handle.close() }
+
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: 1_048_576) { // 1MB chunks
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().compactMap { String(format: "%02x", $0) }.joined()
     }
 
     private func sha256ForFile(_ filename: String) -> String? {

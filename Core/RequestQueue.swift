@@ -89,6 +89,7 @@ actor RequestQueue {
 
             let result = try await service.correct(text: request.text, promptType: promptType)
             guard Date() <= request.deadline else {
+                request.continuation.resume(throwing: CorrectionError.serverTimeout)
                 isProcessing = false
                 Task { await processQueue() }
                 return
@@ -97,6 +98,7 @@ actor RequestQueue {
             request.continuation.resume(returning: result)
         } catch {
             guard Date() <= request.deadline else {
+                request.continuation.resume(throwing: CorrectionError.serverTimeout)
                 isProcessing = false
                 Task { await processQueue() }
                 return

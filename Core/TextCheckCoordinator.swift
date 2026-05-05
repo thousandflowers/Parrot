@@ -64,7 +64,7 @@ struct TextCheckCoordinator: Sendable {
             } catch let error as CorrectionError {
                 await MainActor.run { SuggestionPanelController.shared.showError(error) }
             } catch {
-                await MainActor.run { SuggestionPanelController.shared.showError(.textExtractionFailed(appName: "unknown")) }
+                await MainActor.run { SuggestionPanelController.shared.showError(.outputParsingFailed(raw: error.localizedDescription)) }
             }
         }
     }

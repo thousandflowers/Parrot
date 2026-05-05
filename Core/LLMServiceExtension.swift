@@ -1,10 +1,19 @@
 import Foundation
-import CryptoKit
 
 extension LLMService {
     func parseResponse(data: Data) throws -> String {
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = json["choices"] as? [[String: Any]],
+        let json: [String: Any]
+        do {
+            guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw CorrectionError.outputParsingFailed(raw: String(data: data, encoding: .utf8) ?? "nil")
+            }
+            json = parsed
+        } catch is CorrectionError {
+            throw CorrectionError.outputParsingFailed(raw: String(data: data, encoding: .utf8) ?? "nil")
+        } catch {
+            throw CorrectionError.outputParsingFailed(raw: error.localizedDescription)
+        }
+        guard let choices = json["choices"] as? [[String: Any]],
               let first = choices.first,
               let message = first["message"] as? [String: Any],
               let content = message["content"] as? String else {

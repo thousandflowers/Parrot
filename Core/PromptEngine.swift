@@ -124,7 +124,14 @@ struct PromptEngine {
         case .fluency:
             return buildFluencyPrompt(for: text, customInstruction: customInstruction)
         case .explain:
-            fatalError("Use buildExplainPrompt(original:corrected:) directly — buildPrompt does not support explain")
+            assertionFailure("Use buildExplainPrompt(original:corrected:) directly — buildPrompt does not support explain")
+            return """
+            Explain any errors in the following text.
+            
+            <TEXT>\(text)</TEXT>
+            
+            Output only your explanation. Do not include <TEXT>/<CUSTOM> tags.
+            """
         case .custom(let name, let template):
             let customObj = CustomPrompt(id: UUID(), name: name, template: template)
             var result = customObj.buildPrompt(for: text, language: language)
