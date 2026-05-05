@@ -72,7 +72,7 @@ actor RequestQueue {
                 serviceTypeLabel = "default"
             }
 
-            // Check cache before calling LLM
+            // Check cache before calling LLM — use result modelID for consistency
             if let cached = await ResultCache.shared.get(for: request.text, modelID: serviceTypeLabel) {
                 request.continuation.resume(returning: cached)
                 isProcessing = false
@@ -110,7 +110,7 @@ actor RequestQueue {
     }
 }
 
-private final class ContinuationBox<T>: @unchecked Sendable {
+final class ContinuationBox<T>: @unchecked Sendable {
     var continuation: CheckedContinuation<T, Error>?
     let lock = NSLock()
     func resume(throwing error: Error) {

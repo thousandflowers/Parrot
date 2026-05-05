@@ -178,10 +178,19 @@ final class SuggestionPanelController {
         Task {
             do {
                 let service = LLMServiceFactory.make()
-                let explanation = try await service.explain(
-                    original: result.originalText,
-                    corrected: result.correctedText
-                )
+                let explanation = try await withTimeout(seconds: 30) { continuation in
+                    Task {
+                        do {
+                            let result = try await service.explain(
+                                original: result.originalText,
+                                corrected: result.correctedText
+                            )
+                            continuation.resume(returning: result)
+                        } catch {
+                            continuation.resume(throwing: error)
+                        }
+                    }
+                }
                 guard !explanation.isEmpty else { return }
 
                 let alert = NSAlert()
