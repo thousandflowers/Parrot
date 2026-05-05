@@ -4,6 +4,8 @@ enum ServiceType: String, Codable, CaseIterable {
     case stub
     case local
     case remote
+    case ollama
+    case openRouter
 }
 
 enum PromptType: Sendable {
@@ -11,6 +13,15 @@ enum PromptType: Sendable {
     case fluency
     case explain
     case custom(name: String, template: String)
+
+    var label: String {
+        switch self {
+        case .grammar: "grammar"
+        case .fluency: "fluency"
+        case .explain: "explain"
+        case .custom: "custom"
+        }
+    }
 }
 
 enum CorrectionError: Error, LocalizedError, Sendable {
@@ -52,6 +63,7 @@ enum CorrectionError: Error, LocalizedError, Sendable {
 
 protocol LLMService: AnyObject, Sendable {
     func correct(text: String, promptType: PromptType) async throws -> CorrectionResult
+    func correctFluency(text: String) async throws -> CorrectionResult
     func explain(original: String, corrected: String) async throws -> String
     func streamCorrect(text: String, promptType: PromptType) -> AsyncStream<String>
 }

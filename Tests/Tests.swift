@@ -6,8 +6,76 @@ final class PromptEngineTests: XCTestCase {
         let engine = PromptEngine(language: "en", style: "formal")
         let prompt = engine.buildGrammarPrompt(for: "This is a test")
         XCTAssertTrue(prompt.contains("This is a test"))
-        XCTAssertTrue(prompt.contains("<|TEXT_START|>"))
-        XCTAssertTrue(prompt.contains("<|TEXT_END|>"))
+        XCTAssertTrue(prompt.contains("<TEXT>"))
+        XCTAssertTrue(prompt.contains("</TEXT>"))
+        XCTAssertTrue(prompt.contains("Output only the corrected text; no notes. Do not include <TEXT>/<CUSTOM> tags."))
+    }
+
+    func testLanguageFamily_latin() {
+        XCTAssertEqual(LanguageFamily.family(for: "it"), .latin)
+        XCTAssertEqual(LanguageFamily.family(for: "en"), .latin)
+        XCTAssertEqual(LanguageFamily.family(for: "es"), .latin)
+        XCTAssertEqual(LanguageFamily.family(for: "fr"), .latin)
+        XCTAssertEqual(LanguageFamily.family(for: "de"), .latin)
+        XCTAssertEqual(LanguageFamily.family(for: "pt"), .latin)
+        XCTAssertEqual(LanguageFamily.family(for: "en-US"), .latin)
+    }
+
+    func testLanguageFamily_cjk() {
+        XCTAssertEqual(LanguageFamily.family(for: "zh"), .cjk)
+        XCTAssertEqual(LanguageFamily.family(for: "ja"), .cjk)
+        XCTAssertEqual(LanguageFamily.family(for: "ko"), .cjk)
+    }
+
+    func testLanguageFamily_slavic() {
+        XCTAssertEqual(LanguageFamily.family(for: "ru"), .slavic)
+        XCTAssertEqual(LanguageFamily.family(for: "pl"), .slavic)
+        XCTAssertEqual(LanguageFamily.family(for: "cs"), .slavic)
+    }
+
+    func testLanguageFamily_arabic() {
+        XCTAssertEqual(LanguageFamily.family(for: "ar"), .arabic)
+        XCTAssertEqual(LanguageFamily.family(for: "fa"), .arabic)
+        XCTAssertEqual(LanguageFamily.family(for: "he"), .arabic)
+    }
+
+    func testLanguageFamily_nordic() {
+        XCTAssertEqual(LanguageFamily.family(for: "sv"), .nordic)
+        XCTAssertEqual(LanguageFamily.family(for: "da"), .nordic)
+        XCTAssertEqual(LanguageFamily.family(for: "no"), .nordic)
+    }
+
+    func testGrammarPrompt_cjk_hasFullWidthInstruction() {
+        let engine = PromptEngine(language: "zh", style: "formal")
+        let prompt = engine.buildGrammarPrompt(for: "test")
+        XCTAssertTrue(prompt.contains("Preserve full-width punctuation. Do not convert to ASCII."))
+    }
+
+    func testGrammarPrompt_arabic_hasRTLInstruction() {
+        let engine = PromptEngine(language: "ar", style: "formal")
+        let prompt = engine.buildGrammarPrompt(for: "test")
+        XCTAssertTrue(prompt.contains("Preserve right-to-left text direction and Arabic punctuation."))
+    }
+
+    func testGrammarPrompt_slavic_hasDeclensionInstruction() {
+        let engine = PromptEngine(language: "ru", style: "formal")
+        let prompt = engine.buildGrammarPrompt(for: "test")
+        XCTAssertTrue(prompt.contains("Pay attention to case declensions and aspect of verbs."))
+    }
+
+    func testGrammarPrompt_nordic_hasSpecialCharsInstruction() {
+        let engine = PromptEngine(language: "sv", style: "formal")
+        let prompt = engine.buildGrammarPrompt(for: "test")
+        XCTAssertTrue(prompt.contains("Preserve special characters"))
+    }
+
+    func testGrammarPrompt_latin_hasNoExtraInstruction() {
+        let engine = PromptEngine(language: "it", style: "formal")
+        let prompt = engine.buildGrammarPrompt(for: "test")
+        XCTAssertFalse(prompt.contains("Preserve full-width punctuation"))
+        XCTAssertFalse(prompt.contains("Preserve right-to-left"))
+        XCTAssertFalse(prompt.contains("Pay attention to case declensions"))
+        XCTAssertFalse(prompt.contains("Preserve special characters"))
     }
 }
 

@@ -137,10 +137,22 @@ struct FloatingEditorView: View {
 
         Task {
             do {
+                let bundleID = await AccessibilityBridge.shared.frontAppBundleID()
+                let resolved = await MainActor.run {
+                    let prefs = PreferencesStore.shared
+                    return RuleResolver.resolve(
+                        appBundleID: bundleID,
+                        customPrompts: prefs.customPrompts,
+                        appRules: prefs.appRules
+                    )
+                }
+
                 let result = try await RequestQueue.shared.enqueue(
                     text: inputText,
                     type: .grammar,
-                    priority: .floatingEditor
+                    priority: .floatingEditor,
+                    overrideServiceType: resolved.serviceType,
+                    overrideCustomPrompt: resolved.prompt
                 )
                 self.correctedText = result.correctedText
                 self.isLoading = false

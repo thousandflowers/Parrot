@@ -4,6 +4,7 @@ import Cocoa
 enum SuggestionState: Sendable {
     case loading
     case suggestion(CorrectionResult)
+    case fluencySuggestion(CorrectionResult)
     case noErrors
     case error(CorrectionError)
     case textTooLong(length: Int, maxLength: Int)
@@ -27,6 +28,27 @@ final class SuggestionPanelController {
             let hostingView = NSHostingView(rootView: SuggestionView(
                 result: result,
                 state: .suggestion(result),
+                onApply: { [weak self] in self?.applyCorrection() },
+                onExplain: { [weak self] in self?.requestExplanation() },
+                onDismiss: { [weak self] in self?.close() }
+            ))
+            panel?.contentView = hostingView
+        }
+
+        let mouseLoc = NSEvent.mouseLocation
+        panel?.setFrameOrigin(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20))
+        panel?.orderFrontRegardless()
+    }
+
+    func showFluency(result: CorrectionResult) {
+        self.currentResult = result
+
+        if panel == nil {
+            panel = createFluencyPanel(with: result)
+        } else {
+            let hostingView = NSHostingView(rootView: SuggestionView(
+                result: result,
+                state: .fluencySuggestion(result),
                 onApply: { [weak self] in self?.applyCorrection() },
                 onExplain: { [weak self] in self?.requestExplanation() },
                 onDismiss: { [weak self] in self?.close() }
@@ -103,6 +125,40 @@ final class SuggestionPanelController {
         return panel
     }
 
+    private func createFluencyPanel(with result: CorrectionResult? = nil) -> NSPanel {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 220),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = true
+        panel.isMovableByWindowBackground = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+        let state: SuggestionState
+        if let result = result {
+            state = result.hasChanges ? .fluencySuggestion(result) : .noErrors
+        } else {
+            state = .noErrors
+        }
+
+        let hostingView = NSHostingView(rootView: SuggestionView(
+            result: result,
+            state: state,
+            onApply: { [weak self] in self?.applyCorrection() },
+            onExplain: { [weak self] in self?.requestExplanation() },
+            onDismiss: { [weak self] in self?.close() }
+        ))
+        panel.contentView = hostingView
+
+        return panel
+    }
+
     private func applyCorrection() {
         guard let result = currentResult else { return }
 
@@ -122,7 +178,7 @@ final class SuggestionPanelController {
         Task {
             do {
                 let engine = PromptEngine(language: PreferencesStore.shared.language)
-                let prompt = engine.buildExplainPrompt(original: result.originalText, corrected: result.correctedText)
+                let prompt = engine.buildExplainPrompt(original: result.originalText, corrected: result.correctedText, customInstruction: nil)
 
                 let explainResult = try await RequestQueue.shared.enqueue(
                     text: prompt,

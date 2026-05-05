@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineCloneTests.build/primary.swiftdeps"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Tests/Tests.swift": {
+    "dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineCloneTests.build/Tests.d",
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineCloneTests.build/Tests.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineCloneTests.build/Tests~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineCloneTests.build/Tests.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineCloneTests.build/Tests.dia"
+  }
+}

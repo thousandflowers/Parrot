@@ -56,6 +56,12 @@ final class GlobalHotkeyManager {
         )
 
         register(
+            keyCode: UInt32(kVK_ANSI_T),
+            modifiers: UInt32(cmdKey | shiftKey),
+            action: { TextCheckCoordinator.shared.checkFluency() }
+        )
+
+        register(
             keyCode: UInt32(kVK_ANSI_F),
             modifiers: UInt32(cmdKey | shiftKey),
             action: { Task { await TextCheckCoordinator.shared.openFloatingEditor() } }

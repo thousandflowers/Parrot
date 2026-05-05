@@ -3,15 +3,25 @@ import Foundation
 final class RemoteLLMService: LLMService, Sendable {
     static let shared = RemoteLLMService()
 
+    nonisolated private var language: String {
+        UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.language) ?? "it"
+    }
+    nonisolated private var openAIBaseURL: String {
+        UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openAIBaseURL) ?? "https://api.openai.com/v1"
+    }
+    nonisolated private var openAIModel: String {
+        UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openAIModel) ?? "gpt-4o-mini"
+    }
+
     func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
-        let engine = PromptEngine(language: PreferencesStore.shared.language)
-        let fullPrompt = engine.buildPrompt(for: text, type: promptType)
+        let engine = PromptEngine(language: language)
+        let fullPrompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
 
         let apiKey: String
         do { apiKey = try KeychainService.shared.load(for: "openai") }
         catch { throw CorrectionError.invalidAPIKey }
 
-        let model = PreferencesStore.shared.openAIModel
+        let model = openAIModel
         let body: [String: Any] = [
             "model": model,
             "messages": [
@@ -23,7 +33,7 @@ final class RemoteLLMService: LLMService, Sendable {
             "stream": false
         ]
 
-        let url = URL(string: "\(PreferencesStore.shared.openAIBaseURL)/chat/completions")!
+        let url = URL(string: "\(openAIBaseURL)/chat/completions")!
         let request = try buildLLMRequest(url: url, apiKey: apiKey, body: body)
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -41,26 +51,70 @@ final class RemoteLLMService: LLMService, Sendable {
             original: text,
             corrected: corrected.isEmpty ? text : corrected,
             modelID: model,
-            confidence: 0.9
+            confidence: 0.9,
+            promptType: promptType.label
+        )
+    }
+
+    func correctFluency(text: String) async throws -> CorrectionResult {
+        let engine = PromptEngine(language: language)
+        let fluencyPrompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
+
+        let apiKey: String
+        do { apiKey = try KeychainService.shared.load(for: "openai") }
+        catch { throw CorrectionError.invalidAPIKey }
+
+        let model = openAIModel
+        let body: [String: Any] = [
+            "model": model,
+            "messages": [
+                ["role": "system", "content": "You are a helpful writing assistant. Follow the user instructions exactly."],
+                ["role": "user", "content": fluencyPrompt]
+            ],
+            "temperature": 0.3,
+            "max_tokens": 1024,
+            "stream": false
+        ]
+
+        let url = URL(string: "\(openAIBaseURL)/chat/completions")!
+        let request = try buildLLMRequest(url: url, apiKey: apiKey, body: body)
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else { throw CorrectionError.networkUnavailable }
+        switch httpResponse.statusCode {
+        case 200: break
+        case 401, 403: throw CorrectionError.invalidAPIKey
+        case 429: throw CorrectionError.rateLimited
+        case 500, 502, 503: throw CorrectionError.serverTimeout
+        default: throw CorrectionError.outputParsingFailed(raw: "HTTP \(httpResponse.statusCode)")
+        }
+
+        let corrected = try parseResponse(data: data)
+        return CorrectionResult(
+            original: text,
+            corrected: corrected.isEmpty ? text : corrected,
+            modelID: model,
+            confidence: 0.9,
+            promptType: "fluency"
         )
     }
 
     func explain(original: String, corrected: String) async throws -> String {
-        let engine = PromptEngine(language: PreferencesStore.shared.language)
-        let explainPrompt = engine.buildExplainPrompt(original: original, corrected: corrected)
+        let engine = PromptEngine(language: language)
+        let explainPrompt = engine.buildExplainPrompt(original: original, corrected: corrected, customInstruction: nil)
 
         let apiKey: String
         do { apiKey = try KeychainService.shared.load(for: "openai") }
         catch { throw CorrectionError.invalidAPIKey }
 
         let body: [String: Any] = [
-            "model": PreferencesStore.shared.openAIModel,
+            "model": openAIModel,
             "messages": [["role": "user", "content": explainPrompt]],
             "temperature": 0.3,
             "max_tokens": 512,
             "stream": false
         ]
-        let url = URL(string: "\(PreferencesStore.shared.openAIBaseURL)/chat/completions")!
+        let url = URL(string: "\(openAIBaseURL)/chat/completions")!
         let request = try buildLLMRequest(url: url, apiKey: apiKey, body: body)
         let (data, response) = try await URLSession.shared.data(for: request)
 

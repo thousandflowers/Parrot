@@ -13,35 +13,30 @@ actor AccessibilityBridge {
         let systemAX = AXUIElementCreateSystemWide()
 
         var frontAppRef: CFTypeRef?
-        defer { if let ref = frontAppRef { CFRelease(ref) } }
         let appResult = AXUIElementCopyAttributeValue(
             systemAX,
             kAXFocusedApplicationAttribute as CFString,
             &frontAppRef
         )
 
-        guard appResult == .success,
-              let frontApp = frontAppRef,
-              let frontAppAX = frontApp as? AXUIElement else {
+        guard appResult == .success, let frontApp = frontAppRef else {
             throw CorrectionError.textExtractionFailed(appName: appName(from: frontAppRef))
         }
+        let frontAppAX = frontApp as! AXUIElement
 
         var focusedRef: CFTypeRef?
-        defer { if let ref = focusedRef { CFRelease(ref) } }
         let focusResult = AXUIElementCopyAttributeValue(
             frontAppAX,
             kAXFocusedUIElementAttribute as CFString,
             &focusedRef
         )
 
-        guard focusResult == .success,
-              let focusedElement = focusedRef,
-              let axElement = focusedElement as? AXUIElement else {
+        guard focusResult == .success, let focusedElement = focusedRef else {
             throw CorrectionError.noTextSelected
         }
+        let axElement = focusedElement as! AXUIElement
 
         var selectedTextRef: CFTypeRef?
-        defer { if let ref = selectedTextRef { CFRelease(ref) } }
         let textResult = AXUIElementCopyAttributeValue(
             axElement,
             kAXSelectedTextAttribute as CFString,
@@ -54,7 +49,6 @@ actor AccessibilityBridge {
         }
 
         var valueRef: CFTypeRef?
-        defer { if let ref = valueRef { CFRelease(ref) } }
         let valueResult = AXUIElementCopyAttributeValue(
             axElement,
             kAXValueAttribute as CFString,
@@ -77,30 +71,28 @@ actor AccessibilityBridge {
         let systemAX = AXUIElementCreateSystemWide()
 
         var frontAppRef: CFTypeRef?
-        defer { if let ref = frontAppRef { CFRelease(ref) } }
         AXUIElementCopyAttributeValue(
             systemAX,
             kAXFocusedApplicationAttribute as CFString,
             &frontAppRef
         )
 
-        guard let frontApp = frontAppRef,
-              let frontAppAX = frontApp as? AXUIElement else {
+        guard let frontApp = frontAppRef else {
             throw CorrectionError.noTextSelected
         }
+        let frontAppAX = frontApp as! AXUIElement
 
         var focusedRef: CFTypeRef?
-        defer { if let ref = focusedRef { CFRelease(ref) } }
         AXUIElementCopyAttributeValue(
             frontAppAX,
             kAXFocusedUIElementAttribute as CFString,
             &focusedRef
         )
 
-        guard let focusedElement = focusedRef,
-              let axElement = focusedElement as? AXUIElement else {
+        guard let focusedElement = focusedRef else {
             throw CorrectionError.noTextSelected
         }
+        let axElement = focusedElement as! AXUIElement
 
         let setResult = AXUIElementSetAttributeValue(
             axElement,
@@ -132,12 +124,12 @@ actor AccessibilityBridge {
         pasteboard.setString(correctedText, forType: .string)
 
         let source = CGEventSource(stateID: .hidSystemState)
-        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true)
-        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false)
-        keyDown?.flags = .maskCommand
-        keyUp?.flags = .maskCommand
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
+        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: true)
+        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: false)
+        keyDown?.flags = CGEventFlags.maskCommand
+        keyUp?.flags = CGEventFlags.maskCommand
+        keyDown?.post(tap: CGEventTapLocation.cghidEventTap)
+        keyUp?.post(tap: CGEventTapLocation.cghidEventTap)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) {
             pasteboard.clearContents()
@@ -145,20 +137,44 @@ actor AccessibilityBridge {
         }
     }
 
+    func frontAppBundleID() async -> String? {
+        let systemAX = AXUIElementCreateSystemWide()
+
+        var frontAppRef: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(
+            systemAX,
+            kAXFocusedApplicationAttribute as CFString,
+            &frontAppRef
+        )
+
+        if result == .success, let app = frontAppRef {
+            var bundleIDRef: CFTypeRef?
+            let bundleResult = AXUIElementCopyAttributeValue(
+                app as! AXUIElement,
+                "AXBundleIdentifier" as CFString,
+                &bundleIDRef
+            )
+            if bundleResult == .success, let id = bundleIDRef as? String {
+                return id
+            }
+        }
+
+        return NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+    }
+
     // MARK: - Private Helpers
 
     private func appName(from ref: CFTypeRef?) -> String {
-        guard let element = ref as? AXUIElement else { return "unknown" }
+        guard let element = ref else { return "unknown" }
+        let axElement = element as! AXUIElement
         var name: CFTypeRef?
-        defer { if let ref = name { CFRelease(ref) } }
-        let result = AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &name)
+        let result = AXUIElementCopyAttributeValue(axElement, kAXTitleAttribute as CFString, &name)
         guard result == .success, let appName = name as? String else { return "unknown" }
         return appName
     }
 
     private func updateBounds(axElement: AXUIElement) async {
         var rangeRef: CFTypeRef?
-        defer { if let ref = rangeRef { CFRelease(ref) } }
         AXUIElementCopyAttributeValue(
             axElement,
             kAXSelectedTextRangeAttribute as CFString,
@@ -175,10 +191,10 @@ actor AccessibilityBridge {
                 &boundsRef
             )
 
-            defer { if let ref = boundsRef { CFRelease(ref) } }
-            if boundsResult == .success, let boundsValue = boundsRef as? AXValue {
+            if boundsResult == .success, let boundsValue = boundsRef {
+                let axValue = boundsValue as! AXValue
                 var rect = CGRect()
-                AXValueGetValue(boundsValue, .cgRect, &rect)
+                AXValueGetValue(axValue, .cgRect, &rect)
                 self.lastSelectionBounds = rect
                 return
             }
@@ -187,23 +203,24 @@ actor AccessibilityBridge {
         var frontWindowRef: CFTypeRef?
         let systemAX = AXUIElementCreateSystemWide()
         var frontAppRef: CFTypeRef?
-        defer { if let ref = frontAppRef { CFRelease(ref) } }
         AXUIElementCopyAttributeValue(systemAX, kAXFocusedApplicationAttribute as CFString, &frontAppRef)
-        if let app = frontAppRef as? AXUIElement {
-            defer { if let ref = frontWindowRef { CFRelease(ref) } }
-            AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &frontWindowRef)
-            if let window = frontWindowRef as? AXUIElement {
+        if let app = frontAppRef {
+            let axApp = app as! AXUIElement
+            AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &frontWindowRef)
+            if let window = frontWindowRef {
+                let axWindow = window as! AXUIElement
                 var pos: CFTypeRef?
                 var size: CFTypeRef?
-                AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &pos)
-                AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &size)
+                AXUIElementCopyAttributeValue(axWindow, kAXPositionAttribute as CFString, &pos)
+                AXUIElementCopyAttributeValue(axWindow, kAXSizeAttribute as CFString, &size)
 
-                defer { if let r = pos { CFRelease(r) }; if let r = size { CFRelease(r) } }
-                if let p = pos as? AXValue, let s = size as? AXValue {
+                if let p = pos, let s = size {
+                    let axPos = p as! AXValue
+                    let axSize = s as! AXValue
                     var point = CGPoint()
                     var sz = CGSize()
-                    AXValueGetValue(p, .cgPoint, &point)
-                    AXValueGetValue(s, .cgSize, &sz)
+                    AXValueGetValue(axPos, .cgPoint, &point)
+                    AXValueGetValue(axSize, .cgSize, &sz)
                     self.lastSelectionBounds = CGRect(origin: point, size: sz)
                     return
                 }

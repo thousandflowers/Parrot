@@ -61,6 +61,9 @@ struct SuggestionView: View {
         case .suggestion:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundColor(.green)
+        case .fluencySuggestion:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(.blue)
         case .noErrors:
             Image(systemName: "checkmark.shield.fill")
                 .foregroundColor(.green)
@@ -77,6 +80,7 @@ struct SuggestionView: View {
         switch state {
         case .loading:         return "Analizzando..."
         case .suggestion:      return "Suggerimento"
+        case .fluencySuggestion: return "Fluidita"
         case .noErrors:        return "Nessun errore"
         case .error:           return "Errore"
         case .textTooLong:     return "Testo troppo lungo"
@@ -91,7 +95,7 @@ struct SuggestionView: View {
                 ProgressView("Elaborazione in corso...")
                     .frame(height: 60)
             }
-        case .suggestion(let result):
+        case .suggestion(let result), .fluencySuggestion(let result):
             ScrollView(.vertical) {
                 Text(result.correctedText)
                     .font(.body)
@@ -134,7 +138,7 @@ struct SuggestionView: View {
     private var footerView: some View {
         HStack {
             switch state {
-            case .suggestion:
+            case .suggestion, .fluencySuggestion:
                 Button("Ignora") { onDismiss() }
                 Spacer()
                 Button("Spiega") { onExplain() }

@@ -11,6 +11,7 @@ actor ServerManager: Sendable {
         currentPort = try allocatePort()
 
         guard let serverURL = Bundle.main.url(forAuxiliaryExecutable: "llama-server") else {
+            currentPort = 0
             throw CorrectionError.serverNotRunning
         }
 
@@ -29,6 +30,7 @@ actor ServerManager: Sendable {
         do {
             try process.run()
         } catch {
+            currentPort = 0
             throw CorrectionError.serverNotRunning
         }
         self.process = process
@@ -40,6 +42,7 @@ actor ServerManager: Sendable {
 
         process.terminate()
         self.process = nil
+        currentPort = 0
         throw CorrectionError.serverTimeout
     }
 

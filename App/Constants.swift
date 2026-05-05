@@ -10,6 +10,8 @@ enum Constants {
     static let cacheTTL: TimeInterval = 3600
     static let cacheMaxEntries = 100
     static let maxRetries = 3
+    static let huggingFaceMirror = "https://hf-mirror.com"
+    static let huggingFaceMain = "https://huggingface.co"
 
     enum UserDefaultsKey {
         static let selectedModelID = "selectedModelID"
@@ -20,5 +22,12 @@ enum Constants {
         static let autoCheckEnabled = "autoCheckEnabled"
         static let openAIBaseURL = "openAIBaseURL"
         static let openAIModel = "openAIModel"
+        static let isFluencyCheckingEnabled = "isFluencyCheckingEnabled"
+        static let fluencyServiceType = "fluencyServiceType"
+        static let appRules = "appRules"
+        static let excludedBundleIDs = "excludedBundleIDs"
+        static let ollamaBaseURL = "ollamaBaseURL"
+        static let ollamaModel = "ollamaModel"
+        static let openRouterModel = "openRouterModel"
     }
 }

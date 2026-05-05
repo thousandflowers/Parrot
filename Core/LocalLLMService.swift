@@ -1,11 +1,15 @@
 import Foundation
 
-actor LocalLLMService: LLMService {
+actor LocalLLMService: @preconcurrency LLMService {
     static let shared = LocalLLMService()
 
+    nonisolated private var language: String {
+        UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.language) ?? "it"
+    }
+
     func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
-        let engine = PromptEngine(language: PreferencesStore.shared.language)
-        let fullPrompt = engine.buildPrompt(for: text, type: promptType)
+        let engine = PromptEngine(language: language)
+        let fullPrompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
 
         let port = await ServerManager.shared.currentPort
         guard port > 0 else { throw CorrectionError.serverNotRunning }
@@ -40,13 +44,56 @@ actor LocalLLMService: LLMService {
             original: text,
             corrected: corrected.isEmpty ? text : corrected,
             modelID: "local-qwen",
-            confidence: 0.9
+            confidence: 0.9,
+            promptType: promptType.label
+        )
+    }
+
+    func correctFluency(text: String) async throws -> CorrectionResult {
+        let engine = PromptEngine(language: language)
+        let fluencyPrompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
+
+        let port = await ServerManager.shared.currentPort
+        guard port > 0 else { throw CorrectionError.serverNotRunning }
+
+        let body: [String: Any] = [
+            "model": "local-model",
+            "messages": [
+                ["role": "system", "content": "You are a helpful writing assistant. Follow the user instructions exactly."],
+                ["role": "user", "content": fluencyPrompt]
+            ],
+            "temperature": 0.3,
+            "max_tokens": 1024,
+            "stream": false
+        ]
+
+        let url = URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!
+        let request = try buildLLMRequest(url: url, apiKey: nil, body: body)
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw CorrectionError.serverNotRunning
+        }
+        switch httpResponse.statusCode {
+        case 200: break
+        case 503: throw CorrectionError.serverNotRunning
+        case 500: throw CorrectionError.serverTimeout
+        default: throw CorrectionError.outputParsingFailed(raw: "HTTP \(httpResponse.statusCode)")
+        }
+
+        let corrected = try parseResponse(data: data)
+        return CorrectionResult(
+            original: text,
+            corrected: corrected.isEmpty ? text : corrected,
+            modelID: "local-qwen",
+            confidence: 0.9,
+            promptType: "fluency"
         )
     }
 
     func explain(original: String, corrected: String) async throws -> String {
-        let engine = PromptEngine(language: PreferencesStore.shared.language)
-        let explainPrompt = engine.buildExplainPrompt(original: original, corrected: corrected)
+        let engine = PromptEngine(language: language)
+        let explainPrompt = engine.buildExplainPrompt(original: original, corrected: corrected, customInstruction: nil)
 
         let port = await ServerManager.shared.currentPort
         guard port > 0 else { throw CorrectionError.serverNotRunning }

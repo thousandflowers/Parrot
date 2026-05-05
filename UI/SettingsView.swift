@@ -14,6 +14,12 @@ struct SettingsView: View {
             PromptTab()
                 .tabItem { Label("Prompt", systemImage: "text.quote") }
 
+            AppRulesTab()
+                .tabItem { Label("Regole App", systemImage: "apps.iphone") }
+
+            ExclusionsTab()
+                .tabItem { Label("Esclusioni", systemImage: "eye.slash") }
+
             AdvancedTab()
                 .tabItem { Label("Avanzate", systemImage: "wrench.adjustable") }
         }
@@ -34,6 +40,8 @@ struct GeneralTab: View {
                     Text("Stub (test)").tag(ServiceType.stub)
                     Text("Locale (llama.cpp)").tag(ServiceType.local)
                     Text("Remoto (OpenAI)").tag(ServiceType.remote)
+                    Text("Ollama").tag(ServiceType.ollama)
+                    Text("OpenRouter").tag(ServiceType.openRouter)
                 }
 
                 if prefs.serviceType == .remote {
@@ -44,6 +52,28 @@ struct GeneralTab: View {
                     TextField("Modello", text: Binding(
                         get: { prefs.openAIModel },
                         set: { prefs.openAIModel = $0 }
+                    ))
+                }
+
+                if prefs.serviceType == .ollama {
+                    TextField("URL Ollama", text: Binding(
+                        get: { prefs.ollamaBaseURL },
+                        set: { prefs.ollamaBaseURL = $0 }
+                    ))
+                    TextField("Modello", text: Binding(
+                        get: { prefs.ollamaModel },
+                        set: { prefs.ollamaModel = $0 }
+                    ))
+                }
+
+                if prefs.serviceType == .openRouter {
+                    SecureField("API Key OpenRouter", text: Binding(
+                        get: { prefs.openRouterAPIKey },
+                        set: { prefs.openRouterAPIKey = $0 }
+                    ))
+                    TextField("Modello (es. openai/gpt-4o-mini)", text: Binding(
+                        get: { prefs.openRouterModel },
+                        set: { prefs.openRouterModel = $0 }
                     ))
                 }
             }
@@ -156,5 +186,104 @@ struct AdvancedTab: View {
         }
         .formStyle(.grouped)
         .padding()
+    }
+}
+
+struct AppRulesTab: View {
+    @State private var prefs = PreferencesStore.shared
+    @State private var newBundleID = ""
+    @State private var newDisplayName = ""
+
+    var body: some View {
+        VStack {
+            List {
+                ForEach(prefs.appRules) { rule in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(rule.displayName).font(.headline)
+                            Text(rule.bundleID)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: Binding(
+                            get: { rule.isEnabled },
+                            set: { newValue in
+                                var updated = rule
+                                updated.isEnabled = newValue
+                                prefs.updateAppRule(updated)
+                            }
+                        ))
+                        .labelsHidden()
+                    }
+                    .padding(.vertical, 2)
+                }
+                .onDelete { indexSet in
+                    for idx in indexSet {
+                        prefs.deleteAppRule(prefs.appRules[idx])
+                    }
+                }
+            }
+
+            HStack {
+                TextField("Bundle ID (es. com.apple.Safari)", text: $newBundleID)
+                TextField("Nome (es. Safari)", text: $newDisplayName)
+                Button("Aggiungi") {
+                    guard !newBundleID.isEmpty, !newDisplayName.isEmpty else { return }
+                    prefs.addAppRule(AppRule(
+                        bundleID: newBundleID,
+                        displayName: newDisplayName
+                    ))
+                    newBundleID = ""
+                    newDisplayName = ""
+                }
+                .disabled(newBundleID.isEmpty || newDisplayName.isEmpty)
+            }
+            .padding()
+        }
+    }
+}
+
+struct ExclusionsTab: View {
+    @State private var prefs = PreferencesStore.shared
+
+    var body: some View {
+        VStack {
+            List {
+                ForEach(Array(prefs.excludedBundleIDs).sorted(), id: \.self) { bundleID in
+                    HStack {
+                        Text(bundleID)
+                        Spacer()
+                        Text("escluso")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .onDelete { indexSet in
+                    for idx in indexSet {
+                        let id = Array(prefs.excludedBundleIDs).sorted()[idx]
+                        prefs.removeExclusion(id)
+                    }
+                }
+            }
+
+            HStack {
+                Button("Aggiungi app") {
+                    let panel = NSOpenPanel()
+                    panel.allowedContentTypes = [.application]
+                    panel.canChooseDirectories = false
+                    panel.allowsMultipleSelection = false
+                    panel.message = "Seleziona un'app da escludere dal controllo automatico"
+                    if panel.runModal() == .OK,
+                       let url = panel.url,
+                       let bundle = Bundle(url: url),
+                       let id = bundle.bundleIdentifier {
+                        prefs.addExclusion(id)
+                    }
+                }
+                Spacer()
+            }
+            .padding()
+        }
     }
 }

@@ -22,10 +22,25 @@ final class StubLLMService: LLMService, @unchecked Sendable {
             original: text,
             corrected: fakeCorrection,
             modelID: "stub-v1",
-            explanation: promptType == .explain
-                ? "Spiegazione stub: il verbo era coniugato male. Prova a riformulare usando il tempo corretto."
-                : nil,
-            confidence: 0.95
+            explanation: {
+                if case .explain = promptType {
+                    return "Spiegazione stub: il verbo era coniugato male. Prova a riformulare usando il tempo corretto."
+                }
+                return nil
+            }(),
+            confidence: 0.95,
+            promptType: promptType.label
+        )
+    }
+
+    func correctFluency(text: String) async throws -> CorrectionResult {
+        try await Task.sleep(for: .milliseconds(500))
+        return CorrectionResult(
+            original: text,
+            corrected: "[FLUENCY-STUB] \(text) (fluidita migliorata)",
+            modelID: "stub-v1",
+            confidence: 0.95,
+            promptType: "fluency"
         )
     }
 

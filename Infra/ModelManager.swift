@@ -29,8 +29,8 @@ actor ModelManager: Sendable {
         return appSupport.appendingPathComponent("RefineClone/Models")
     }()
 
-    var currentModelPath: String? {
-        let id = PreferencesStore.shared.selectedModelID
+    nonisolated var currentModelPath: String? {
+        let id = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID) ?? ""
         guard !id.isEmpty else { return nil }
         return modelsDir.appendingPathComponent("\(id).gguf").path(percentEncoded: false)
     }
@@ -90,10 +90,33 @@ actor ModelManager: Sendable {
         return nil
     }
 
+    private func mirrorURL(for url: URL) -> URL? {
+        guard let host = url.host, host.contains("huggingface.co") else { return nil }
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.host = "hf-mirror.com"
+        return components?.url
+    }
+
+    private func downloadFile(from url: URL) async throws -> URL {
+        do {
+            return try await URLSession.shared.download(from: url).0
+        } catch {
+            guard let mirror = mirrorURL(for: url) else {
+                throw CorrectionError.modelDownloadFailed(url: url)
+            }
+            print("Trying mirror: hf-mirror.com")
+            do {
+                return try await URLSession.shared.download(from: mirror).0
+            } catch {
+                throw CorrectionError.modelDownloadFailed(url: url)
+            }
+        }
+    }
+
     func downloadModel(from url: URL) async throws -> URL {
         try FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
 
-        let (tempURL, _) = try await URLSession.shared.download(from: url)
+        let tempURL = try await downloadFile(from: url)
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
         let filename = url.lastPathComponent

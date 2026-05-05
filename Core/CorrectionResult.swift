@@ -9,6 +9,8 @@ struct CorrectionResult: Identifiable, Codable, Sendable {
     let diffOperations: [DiffOp]?
     let timestamp: Date
     let modelID: String
+    let customInstruction: String?
+    let promptType: String
 
     struct DiffOp: Codable, Sendable {
         enum OpType: String, Codable {
@@ -28,7 +30,9 @@ struct CorrectionResult: Identifiable, Codable, Sendable {
         corrected: String,
         modelID: String,
         explanation: String? = nil,
-        confidence: Double? = nil
+        confidence: Double? = nil,
+        customInstruction: String? = nil,
+        promptType: String = ""
     ) {
         self.id = UUID()
         self.originalText = original
@@ -38,19 +42,21 @@ struct CorrectionResult: Identifiable, Codable, Sendable {
         self.diffOperations = CorrectionResult.computeDiff(original: original, corrected: corrected)
         self.timestamp = Date()
         self.modelID = modelID
+        self.customInstruction = customInstruction
+        self.promptType = promptType
     }
 
     static func computeDiff(original: String, corrected: String) -> [DiffOp]? {
         guard original != corrected else { return [] }
 
-        // Use Swift's CollectionDifference for line-level diffing
         let origWords = original.split(separator: " ", omittingEmptySubsequences: false)
         let corrWords = corrected.split(separator: " ", omittingEmptySubsequences: false)
 
-        guard let diff = corrWords.difference(from: origWords).inferringMoves() else { return nil }
+        let diff = corrWords.difference(from: origWords)
         if diff.isEmpty { return [] }
 
         var ops: [DiffOp] = []
+        var offset = 0
 
         for change in diff {
             switch change {
