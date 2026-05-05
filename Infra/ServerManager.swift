@@ -59,6 +59,7 @@ actor ServerManager: Sendable {
             kill(pid_t(process.processIdentifier), SIGKILL)
         }
         self.process = nil
+        currentPort = 0
     }
 
     /// Allocates a kernel-assigned port via bind(0) — no TOCTOU race.
