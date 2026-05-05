@@ -13,6 +13,13 @@ enum Constants {
     static let huggingFaceMirror = "https://hf-mirror.com"
     static let huggingFaceMain = "https://huggingface.co"
 
+    static let securityExcludedBundleIDs: Set<String> = [
+        "com.1password.1password",
+        "com.agilebits.onepassword4",
+        "com.apple.keychainaccess",
+        "com.apple.Terminal",
+    ]
+
     enum UserDefaultsKey {
         static let selectedModelID = "selectedModelID"
         static let language = "language"

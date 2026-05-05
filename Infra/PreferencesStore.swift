@@ -19,6 +19,12 @@ final class PreferencesStore {
 
     init() {
         registerAccessibilityObserver()
+        seedSecurityExclusions()
+    }
+
+    private func seedSecurityExclusions() {
+        guard UserDefaults.standard.stringArray(forKey: Constants.UserDefaultsKey.excludedBundleIDs) == nil else { return }
+        UserDefaults.standard.set(Array(Constants.securityExcludedBundleIDs), forKey: Constants.UserDefaultsKey.excludedBundleIDs)
     }
 
     var selectedModelID: String {

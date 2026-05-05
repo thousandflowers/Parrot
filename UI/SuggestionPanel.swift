@@ -164,6 +164,13 @@ final class SuggestionPanelController {
 
         Task {
             do {
+                if let bundleID = await AccessibilityBridge.shared.frontAppBundleID(),
+                   PreferencesStore.shared.isExcluded(bundleID: bundleID) {
+                    await MainActor.run {
+                        self.showError(.accessibilityPermissionDenied)
+                    }
+                    return
+                }
                 try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText)
                 self.close()
             } catch {

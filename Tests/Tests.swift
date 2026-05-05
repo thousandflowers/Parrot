@@ -122,3 +122,28 @@ final class ResultCacheTests: XCTestCase {
         XCTAssertNil(retrieved)
     }
 }
+
+final class SecurityExclusionTests: XCTestCase {
+    func testSecurityExcludedBundleIDs_areNotEmpty() {
+        XCTAssertFalse(Constants.securityExcludedBundleIDs.isEmpty)
+    }
+
+    func testSecurityExcludedBundleIDs_containsKeyApps() {
+        XCTAssertTrue(Constants.securityExcludedBundleIDs.contains("com.1password.1password"))
+        XCTAssertTrue(Constants.securityExcludedBundleIDs.contains("com.apple.keychainaccess"))
+    }
+
+    func testIsExcluded_sensitiveApps_returnTrue() async {
+        let excluded = await MainActor.run {
+            PreferencesStore.shared.isExcluded(bundleID: "com.1password.1password")
+        }
+        XCTAssertTrue(excluded)
+    }
+
+    func testIsExcluded_normalApp_returnsFalse() async {
+        let excluded = await MainActor.run {
+            PreferencesStore.shared.isExcluded(bundleID: "com.apple.Safari")
+        }
+        XCTAssertFalse(excluded)
+    }
+}
