@@ -96,7 +96,7 @@ struct PromptEngine {
         Corrected:
         <TEXT>\(corrected)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
 
-        Output only the corrected text; no notes. Do not include <TEXT>/<CUSTOM> tags.
+        Output only your explanation. Do not include <TEXT>/<CUSTOM> tags.
         """
     }
 

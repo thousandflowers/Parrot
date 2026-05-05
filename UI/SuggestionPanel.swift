@@ -164,13 +164,6 @@ final class SuggestionPanelController {
 
         Task {
             do {
-                if let bundleID = await AccessibilityBridge.shared.frontAppBundleID(),
-                   PreferencesStore.shared.isExcluded(bundleID: bundleID) {
-                    await MainActor.run {
-                        self.showError(.accessibilityPermissionDenied)
-                    }
-                    return
-                }
                 try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText)
                 self.close()
             } catch {
@@ -184,16 +177,12 @@ final class SuggestionPanelController {
 
         Task {
             do {
-                let engine = PromptEngine(language: PreferencesStore.shared.language)
-                let prompt = engine.buildExplainPrompt(original: result.originalText, corrected: result.correctedText, customInstruction: nil)
-
-                let explainResult = try await RequestQueue.shared.enqueue(
-                    text: prompt,
-                    type: .explain,
-                    priority: .manual
+                let service = LLMServiceFactory.make()
+                let explanation = try await service.explain(
+                    original: result.originalText,
+                    corrected: result.correctedText
                 )
-
-                guard let explanation = explainResult.explanation, !explanation.isEmpty else { return }
+                guard !explanation.isEmpty else { return }
 
                 let alert = NSAlert()
                 alert.messageText = "Spiegazione"

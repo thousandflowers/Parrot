@@ -109,6 +109,7 @@ struct GeneralTab: View {
                     set: { prefs.autoCheckEnabled = $0 }
                 ))
                 Text("Cmd+Shift+E — Controlla selezione").font(.caption).foregroundColor(.secondary)
+                Text("Cmd+Shift+T — Controlla fluidità").font(.caption).foregroundColor(.secondary)
                 Text("Cmd+Shift+F — Apri editor").font(.caption).foregroundColor(.secondary)
             }
         }

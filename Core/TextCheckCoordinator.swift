@@ -62,6 +62,8 @@ struct TextCheckCoordinator: Sendable {
                 }
 
                 let bundleID = await AccessibilityBridge.shared.frontAppBundleID()
+                let excluded = await MainActor.run { PreferencesStore.shared.isExcluded(bundleID: bundleID ?? "") }
+                guard !excluded else { return }
                 let resolved = await MainActor.run {
                     let prefs = PreferencesStore.shared
                     return RuleResolver.resolve(

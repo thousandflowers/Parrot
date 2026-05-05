@@ -29,7 +29,7 @@ final class OllamaService: LLMService, Sendable {
 
         let corrected = try await performOpenAIRequest(
             body: chatBody(model: model, prompt: prompt, temperature: 0.1),
-            url: URL(string: "\(ollamaBaseURL)/chat/completions")!,
+            url: URL(string: "\(ollamaBaseURL)/v1/chat/completions")!,
             apiKey: nil
         )
         return CorrectionResult(original: text, corrected: corrected.isEmpty ? text : corrected,
@@ -43,7 +43,7 @@ final class OllamaService: LLMService, Sendable {
 
         let corrected = try await performOpenAIRequest(
             body: chatBody(model: model, prompt: prompt, temperature: 0.3),
-            url: URL(string: "\(ollamaBaseURL)/chat/completions")!,
+            url: URL(string: "\(ollamaBaseURL)/v1/chat/completions")!,
             apiKey: nil
         )
         return CorrectionResult(original: text, corrected: corrected.isEmpty ? text : corrected,
@@ -57,7 +57,7 @@ final class OllamaService: LLMService, Sendable {
 
         return try await performOpenAIRequest(
             body: chatBody(model: model, prompt: prompt, systemPrompt: nil, temperature: 0.3, maxTokens: 512),
-            url: URL(string: "\(ollamaBaseURL)/chat/completions")!,
+            url: URL(string: "\(ollamaBaseURL)/v1/chat/completions")!,
             apiKey: nil
         )
     }
