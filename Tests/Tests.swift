@@ -3,11 +3,12 @@ import XCTest
 
 final class PromptEngineTests: XCTestCase {
     func testBuildGrammarPrompt_containsUserText() {
-        let engine = PromptEngine(language: "en", style: "formal")
+        let engine = PromptEngine(language: "en", style: "formale")
         let prompt = engine.buildGrammarPrompt(for: "This is a test")
         XCTAssertTrue(prompt.contains("This is a test"))
         XCTAssertTrue(prompt.contains("<TEXT>"))
         XCTAssertTrue(prompt.contains("</TEXT>"))
+        XCTAssertTrue(prompt.contains("Use formal, professional tone."))
         XCTAssertTrue(prompt.contains("Output only the corrected text; no notes. Do not include <TEXT>/<CUSTOM> tags."))
     }
 

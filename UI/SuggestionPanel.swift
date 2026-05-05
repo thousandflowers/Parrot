@@ -141,23 +141,25 @@ final class SuggestionPanelController {
     }
 
     private func requestExplanation() {
-        guard let result = currentResult else { return }
+        guard let current = currentResult else { return }
 
         Task {
             do {
                 let service = LLMServiceFactory.make()
-                let explanation = try await withTimeout(seconds: 30) { continuation in
-                    Task {
-                        do {
-                            let result = try await service.explain(
-                                original: result.originalText,
-                                corrected: result.correctedText
-                            )
-                            continuation.resume(returning: result)
-                        } catch {
-                            continuation.resume(throwing: error)
-                        }
+                let explanation = try await withThrowingTaskGroup(of: String.self) { group in
+                    group.addTask {
+                        try await service.explain(
+                            original: current.originalText,
+                            corrected: current.correctedText
+                        )
                     }
+                    group.addTask {
+                        try await Task.sleep(for: .seconds(30))
+                        throw CorrectionError.serverTimeout
+                    }
+                    guard let result = try await group.next() else { throw CorrectionError.serverTimeout }
+                    group.cancelAll()
+                    return result
                 }
                 guard !explanation.isEmpty else { return }
 

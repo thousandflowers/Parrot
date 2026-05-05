@@ -112,7 +112,7 @@ actor RequestQueue {
     }
 }
 
-final class ContinuationBox<T>: @unchecked Sendable {
+private final class ContinuationBox<T>: @unchecked Sendable {
     var continuation: CheckedContinuation<T, Error>?
     let lock = NSLock()
     func resume(throwing error: Error) {
