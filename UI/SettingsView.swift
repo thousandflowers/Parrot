@@ -5,19 +5,19 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
-            GeneralTab()
+            GeneralTab(prefs: prefs)
                 .tabItem { Label("Generale", systemImage: "gearshape") }
 
-            ModelsTab()
+            ModelsTab(prefs: prefs)
                 .tabItem { Label("Modelli", systemImage: "brain") }
 
-            PromptTab()
+            PromptTab(prefs: prefs)
                 .tabItem { Label("Prompt", systemImage: "text.quote") }
 
-            AppRulesTab()
+            AppRulesTab(prefs: prefs)
                 .tabItem { Label("Regole App", systemImage: "apps.iphone") }
 
-            ExclusionsTab()
+            ExclusionsTab(prefs: prefs)
                 .tabItem { Label("Esclusioni", systemImage: "eye.slash") }
 
             AdvancedTab()
@@ -28,15 +28,12 @@ struct SettingsView: View {
 }
 
 struct GeneralTab: View {
-    @State private var prefs = PreferencesStore.shared
+    @Bindable var prefs: PreferencesStore
 
     var body: some View {
         Form {
             Section("Motore") {
-                Picker("Servizio", selection: Binding(
-                    get: { prefs.serviceType },
-                    set: { prefs.serviceType = $0 }
-                )) {
+                Picker("Servizio", selection: $prefs.serviceType) {
                     Text("Stub (test)").tag(ServiceType.stub)
                     Text("Locale (llama.cpp)").tag(ServiceType.local)
                     Text("Remoto (OpenAI)").tag(ServiceType.remote)
@@ -45,44 +42,23 @@ struct GeneralTab: View {
                 }
 
                 if prefs.serviceType == .remote {
-                    TextField("Base URL", text: Binding(
-                        get: { prefs.openAIBaseURL },
-                        set: { prefs.openAIBaseURL = $0 }
-                    ))
-                    TextField("Modello", text: Binding(
-                        get: { prefs.openAIModel },
-                        set: { prefs.openAIModel = $0 }
-                    ))
+                    TextField("Base URL", text: $prefs.openAIBaseURL)
+                    TextField("Modello", text: $prefs.openAIModel)
                 }
 
                 if prefs.serviceType == .ollama {
-                    TextField("URL Ollama", text: Binding(
-                        get: { prefs.ollamaBaseURL },
-                        set: { prefs.ollamaBaseURL = $0 }
-                    ))
-                    TextField("Modello", text: Binding(
-                        get: { prefs.ollamaModel },
-                        set: { prefs.ollamaModel = $0 }
-                    ))
+                    TextField("URL Ollama", text: $prefs.ollamaBaseURL)
+                    TextField("Modello", text: $prefs.ollamaModel)
                 }
 
                 if prefs.serviceType == .openRouter {
-                    SecureField("API Key OpenRouter", text: Binding(
-                        get: { prefs.openRouterAPIKey },
-                        set: { prefs.openRouterAPIKey = $0 }
-                    ))
-                    TextField("Modello (es. openai/gpt-4o-mini)", text: Binding(
-                        get: { prefs.openRouterModel },
-                        set: { prefs.openRouterModel = $0 }
-                    ))
+                    SecureField("API Key OpenRouter", text: $prefs.openRouterAPIKey)
+                    TextField("Modello (es. openai/gpt-4o-mini)", text: $prefs.openRouterModel)
                 }
             }
 
             Section("Lingua") {
-                Picker("Lingua", selection: Binding(
-                    get: { prefs.language },
-                    set: { prefs.language = $0 }
-                )) {
+                Picker("Lingua", selection: $prefs.language) {
                     Text("Italiano").tag("it")
                     Text("English (US)").tag("en-US")
                     Text("English (UK)").tag("en-GB")
@@ -92,10 +68,7 @@ struct GeneralTab: View {
                     Text("中文").tag("zh")
                 }
 
-                Picker("Stile", selection: Binding(
-                    get: { prefs.style },
-                    set: { prefs.style = $0 }
-                )) {
+                Picker("Stile", selection: $prefs.style) {
                     Text("Equilibrato").tag("equilibrato")
                     Text("Formale").tag("formale")
                     Text("Informale").tag("informale")
@@ -104,10 +77,7 @@ struct GeneralTab: View {
             }
 
             Section("Scorciatoie") {
-                Toggle("Controllo automatico", isOn: Binding(
-                    get: { prefs.autoCheckEnabled },
-                    set: { prefs.autoCheckEnabled = $0 }
-                ))
+                Toggle("Controllo automatico", isOn: $prefs.autoCheckEnabled)
                 Text("Cmd+Shift+E — Controlla selezione").font(.caption).foregroundColor(.secondary)
                 Text("Cmd+Shift+T — Controlla fluidità").font(.caption).foregroundColor(.secondary)
                 Text("Cmd+Shift+F — Apri editor").font(.caption).foregroundColor(.secondary)
@@ -119,15 +89,12 @@ struct GeneralTab: View {
 }
 
 struct ModelsTab: View {
-    @State private var prefs = PreferencesStore.shared
+    @Bindable var prefs: PreferencesStore
 
     var body: some View {
         Form {
             Section("Modello Locale") {
-                TextField("ID Modello", text: Binding(
-                    get: { prefs.selectedModelID },
-                    set: { prefs.selectedModelID = $0 }
-                ))
+                TextField("ID Modello", text: $prefs.selectedModelID)
                 Text("Esempio: qwen2.5-1.5b-instruct-q4_k_m")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -139,7 +106,7 @@ struct ModelsTab: View {
 }
 
 struct PromptTab: View {
-    @State private var prefs = PreferencesStore.shared
+    @Bindable var prefs: PreferencesStore
     @State private var newPromptName = ""
     @State private var newPromptTemplate = ""
 
@@ -191,7 +158,7 @@ struct AdvancedTab: View {
 }
 
 struct AppRulesTab: View {
-    @State private var prefs = PreferencesStore.shared
+    @Bindable var prefs: PreferencesStore
     @State private var newBundleID = ""
     @State private var newDisplayName = ""
 
@@ -246,7 +213,7 @@ struct AppRulesTab: View {
 }
 
 struct ExclusionsTab: View {
-    @State private var prefs = PreferencesStore.shared
+    @Bindable var prefs: PreferencesStore
 
     var body: some View {
         VStack {

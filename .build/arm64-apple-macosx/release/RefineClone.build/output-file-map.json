@@ -1,0 +1,211 @@
+{
+  "": {
+    "dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RefineClone.d",
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RefineClone.o",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/primary.swiftdeps"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Accessibility/AXBridgeProtocol.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AXBridgeProtocol.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AXBridgeProtocol~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AXBridgeProtocol.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AXBridgeProtocol.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Accessibility/AccessibilityBridge.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AccessibilityBridge.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AccessibilityBridge~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AccessibilityBridge.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AccessibilityBridge.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Accessibility/AppDetector.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AppDetector.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AppDetector~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AppDetector.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AppDetector.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/App/AppDelegate.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AppDelegate.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AppDelegate~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AppDelegate.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AppDelegate.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/App/Constants.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/Constants.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/Constants~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/Constants.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/Constants.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/AppRule.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AppRule.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AppRule~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AppRule.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/AppRule.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/CancellationToken.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/CancellationToken.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/CancellationToken~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/CancellationToken.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/CancellationToken.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/CorrectionResult.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/CorrectionResult.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/CorrectionResult~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/CorrectionResult.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/CorrectionResult.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/GGUFVersionCheck.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/GGUFVersionCheck.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/GGUFVersionCheck~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/GGUFVersionCheck.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/GGUFVersionCheck.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/LLMService.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LLMService.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LLMService~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LLMService.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LLMService.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/LLMServiceExtension.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LLMServiceExtension.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LLMServiceExtension~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LLMServiceExtension.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LLMServiceExtension.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/LLMServiceFactory.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LLMServiceFactory.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LLMServiceFactory~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LLMServiceFactory.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LLMServiceFactory.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/LocalLLMService.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LocalLLMService.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LocalLLMService~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LocalLLMService.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/LocalLLMService.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/OllamaService.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/OllamaService.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/OllamaService~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/OllamaService.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/OllamaService.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/OpenRouterService.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/OpenRouterService.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/OpenRouterService~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/OpenRouterService.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/OpenRouterService.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/PromptEngine.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/PromptEngine.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/PromptEngine~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/PromptEngine.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/PromptEngine.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/RemoteLLMService.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RemoteLLMService.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RemoteLLMService~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RemoteLLMService.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RemoteLLMService.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/RequestQueue.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RequestQueue.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RequestQueue~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RequestQueue.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RequestQueue.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/RuleResolver.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RuleResolver.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RuleResolver~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RuleResolver.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RuleResolver.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/StubLLMService.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/StubLLMService.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/StubLLMService~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/StubLLMService.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/StubLLMService.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Core/TextCheckCoordinator.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/TextCheckCoordinator.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/TextCheckCoordinator~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/TextCheckCoordinator.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/TextCheckCoordinator.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Infra/KeychainService.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/KeychainService.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/KeychainService~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/KeychainService.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/KeychainService.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Infra/ModelManager.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ModelManager.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ModelManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ModelManager.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ModelManager.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Infra/PreferencesStore.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/PreferencesStore.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/PreferencesStore~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/PreferencesStore.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/PreferencesStore.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Infra/ResultCache.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ResultCache.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ResultCache~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ResultCache.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ResultCache.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Infra/ServerHealthMonitor.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ServerHealthMonitor.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ServerHealthMonitor~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ServerHealthMonitor.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ServerHealthMonitor.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Infra/ServerManager.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ServerManager.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ServerManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ServerManager.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/ServerManager.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/RefineCloneApp.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RefineCloneApp.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RefineCloneApp~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RefineCloneApp.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/RefineCloneApp.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/Shortcuts/GlobalHotkeyManager.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/GlobalHotkeyManager.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/GlobalHotkeyManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/GlobalHotkeyManager.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/GlobalHotkeyManager.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/UI/FloatingEditor.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/FloatingEditor.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/FloatingEditor~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/FloatingEditor.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/FloatingEditor.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/UI/MenuBarView.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/MenuBarView.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/MenuBarView~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/MenuBarView.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/MenuBarView.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/UI/SettingsView.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/SettingsView.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/SettingsView~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/SettingsView.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/SettingsView.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/UI/SuggestionPanel.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/SuggestionPanel.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/SuggestionPanel~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/SuggestionPanel.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/SuggestionPanel.dia"
+  },
+  "/Users/eugeniozamengopontrelli/RefineClone/UI/SuggestionView.swift": {
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/SuggestionView.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/SuggestionView~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/SuggestionView.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/release/RefineClone.build/SuggestionView.dia"
+  }
+}

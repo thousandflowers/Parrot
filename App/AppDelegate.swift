@@ -14,7 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        // Graceful shutdown: stop llama-server (SIGTERM first, SIGKILL after 5s)
+        UserDefaults.standard.synchronize()
         let semaphore = DispatchSemaphore(value: 0)
         Task {
             await ServerManager.shared.stop()

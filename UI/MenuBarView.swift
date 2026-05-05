@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MenuBarView: View {
-    private let preferences = PreferencesStore.shared
+    @State private var prefs = PreferencesStore.shared
     @State private var isAutoCheckEnabled = false
 
     var body: some View {
@@ -20,7 +20,7 @@ struct MenuBarView: View {
             Divider()
 
             Group {
-                if preferences.isAccessibilityEnabled {
+                if prefs.isAccessibilityEnabled {
                     HStack {
                         Image(systemName: "checkmark.circle")
                             .foregroundColor(.green)
@@ -41,11 +41,11 @@ struct MenuBarView: View {
                 HStack {
                     Image(systemName: "cpu")
                         .frame(width: 16)
-                    Text("Motore: \(preferences.serviceType.rawValue)")
+                    Text("Motore: \(prefs.serviceType.rawValue)")
                         .font(.caption)
                 }
 
-                let model = preferences.selectedModelID
+                let model = prefs.selectedModelID
                 if !model.isEmpty {
                     HStack {
                         Image(systemName: "brain")
@@ -105,10 +105,10 @@ struct MenuBarView: View {
         }
         .frame(width: 250)
         .onChange(of: isAutoCheckEnabled) { _, newValue in
-            preferences.autoCheckEnabled = newValue
+            prefs.autoCheckEnabled = newValue
         }
         .onAppear {
-            isAutoCheckEnabled = preferences.autoCheckEnabled
+            isAutoCheckEnabled = prefs.autoCheckEnabled
         }
     }
 

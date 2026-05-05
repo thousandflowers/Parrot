@@ -10,8 +10,9 @@ struct RefineCloneApp: App {
         }
         .menuBarExtraStyle(.menu)
 
-        Settings {
+        Window("Preferenze", id: "settings") {
             SettingsView()
         }
+        .windowResizability(.contentSize)
     }
 }
