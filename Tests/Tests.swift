@@ -95,10 +95,9 @@ final class CorrectionResultTests: XCTestCase {
         XCTAssertNotNil(ops)
     }
 
-    func testComputeDiff_sameText_returnsEmpty() {
+    func testComputeDiff_sameText_returnsNil() {
         let ops = CorrectionResult.computeDiff(original: "hello", corrected: "hello")
-        XCTAssertNotNil(ops)
-        XCTAssertTrue(ops?.isEmpty ?? false)
+        XCTAssertNil(ops)
     }
 }
 

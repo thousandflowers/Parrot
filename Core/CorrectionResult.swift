@@ -16,8 +16,6 @@ struct CorrectionResult: Identifiable, Codable, Sendable {
         enum OpType: String, Codable {
             case insert
             case delete
-            case replace
-            case keep
         }
         let type: OpType
         let offset: Int
@@ -47,22 +45,20 @@ struct CorrectionResult: Identifiable, Codable, Sendable {
     }
 
     static func computeDiff(original: String, corrected: String) -> [DiffOp]? {
-        guard original != corrected else { return [] }
+        guard original != corrected else { return nil }
 
         let origWords = original.split(separator: " ", omittingEmptySubsequences: false)
         let corrWords = corrected.split(separator: " ", omittingEmptySubsequences: false)
 
         let diff = corrWords.difference(from: origWords)
-        if diff.isEmpty { return [] }
+        guard !diff.isEmpty else { return nil }
 
         var ops: [DiffOp] = []
-        var offset = 0
 
         for change in diff {
             switch change {
             case .insert(let wordOffset, let word, _):
                 ops.append(DiffOp(type: .insert, offset: wordOffset, length: word.count, replacement: String(word)))
-                offset += word.count
             case .remove(let wordOffset, let word, _):
                 ops.append(DiffOp(type: .delete, offset: wordOffset, length: word.count, replacement: nil))
             }

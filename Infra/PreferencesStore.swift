@@ -27,6 +27,8 @@ final class PreferencesStore {
         UserDefaults.standard.set(Array(Constants.securityExcludedBundleIDs), forKey: Constants.UserDefaultsKey.excludedBundleIDs)
     }
 
+    // MARK: - Language & Style
+
     var selectedModelID: String {
         get { UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID) ?? "" }
         set { UserDefaults.standard.set(newValue, forKey: Constants.UserDefaultsKey.selectedModelID) }
@@ -42,6 +44,8 @@ final class PreferencesStore {
         set { UserDefaults.standard.set(newValue, forKey: Constants.UserDefaultsKey.style) }
     }
 
+    // MARK: - Service Configuration
+
     var serviceType: ServiceType {
         get {
             guard let raw = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.serviceType),
@@ -51,6 +55,8 @@ final class PreferencesStore {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: Constants.UserDefaultsKey.serviceType) }
     }
 
+
+    // MARK: - Fluency
 
     var autoCheckEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.autoCheckEnabled) }
@@ -71,6 +77,8 @@ final class PreferencesStore {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: Constants.UserDefaultsKey.fluencyServiceType) }
     }
 
+    // MARK: - OpenAI / Remote
+
     var openAIBaseURL: String {
         get { UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openAIBaseURL) ?? "https://api.openai.com/v1" }
         set { UserDefaults.standard.set(newValue, forKey: Constants.UserDefaultsKey.openAIBaseURL) }
@@ -80,6 +88,8 @@ final class PreferencesStore {
         get { UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openAIModel) ?? "gpt-4o-mini" }
         set { UserDefaults.standard.set(newValue, forKey: Constants.UserDefaultsKey.openAIModel) }
     }
+
+    // MARK: - Ollama / OpenRouter
 
     var ollamaBaseURL: String {
         get { UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.ollamaBaseURL) ?? "http://localhost:11434" }
@@ -108,6 +118,8 @@ final class PreferencesStore {
     }
 
 
+    // MARK: - Custom Prompts
+
     var customPrompts: [CustomPrompt] {
         get {
             let currentData = UserDefaults.standard.data(forKey: Constants.UserDefaultsKey.customPrompts)
@@ -132,6 +144,8 @@ final class PreferencesStore {
         }
     }
 
+    // MARK: - App Rules
+
     var appRules: [AppRule] {
         get {
             let currentData = UserDefaults.standard.data(forKey: Constants.UserDefaultsKey.appRules)
@@ -155,6 +169,8 @@ final class PreferencesStore {
             UserDefaults.standard.set(data, forKey: Constants.UserDefaultsKey.appRules)
         }
     }
+
+    // MARK: - Accessibility & Exclusions
 
     var isAccessibilityEnabled: Bool {
         if let cached = _cachedAccessibility { return cached }
@@ -205,6 +221,8 @@ final class PreferencesStore {
         let lang = Locale.current.language.languageCode?.identifier ?? "en"
         return lang
     }
+
+    // MARK: - Mutations
 
     func addCustomPrompt(_ prompt: CustomPrompt) {
         var prompts = customPrompts

@@ -38,8 +38,6 @@ enum CorrectionError: Error, LocalizedError, Sendable {
     case invalidAPIKey
     case rateLimited
     case outputParsingFailed(raw: String)
-    case outputTooLong
-    case userCancelled
 
     var errorDescription: String? {
         switch self {
@@ -47,6 +45,8 @@ enum CorrectionError: Error, LocalizedError, Sendable {
             return "Accessibilita non abilitata. Vai in Preferenze di Sistema > Privacy e sicurezza > Accessibilita."
         case .noTextSelected:
             return "Nessun testo selezionato. Seleziona del testo e riprova."
+        case .textExtractionFailed(let appName):
+            return "Impossibile leggere il testo da \(appName)."
         case .serverNotRunning:
             return "Il motore AI e offline. Riavvio in corso..."
         case .outOfMemory:

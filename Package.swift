@@ -34,6 +34,7 @@ let package = Package(
                 "Core/TextCheckCoordinator.swift",
                 "Accessibility/AXBridgeProtocol.swift",
                 "Accessibility/AccessibilityBridge.swift",
+                "Accessibility/AppDetector.swift",
                 "Shortcuts/GlobalHotkeyManager.swift",
                 "UI/FloatingEditor.swift",
                 "UI/MenuBarView.swift",

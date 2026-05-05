@@ -125,10 +125,9 @@ struct PromptEngine {
             return buildFluencyPrompt(for: text, customInstruction: customInstruction)
         case .explain:
             fatalError("Use buildExplainPrompt(original:corrected:) directly — buildPrompt does not support explain")
-        case .custom(_, let template):
-            var result = template
-                .replacingOccurrences(of: "{{TEXT}}", with: text)
-                .replacingOccurrences(of: "{{LANGUAGE}}", with: language)
+        case .custom(let name, let template):
+            let customObj = CustomPrompt(id: UUID(), name: name, template: template)
+            var result = customObj.buildPrompt(for: text, language: language)
             if let instruction = customInstruction {
                 result += "\n<CUSTOM>\(instruction)</CUSTOM>"
             }

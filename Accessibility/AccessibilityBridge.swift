@@ -4,8 +4,6 @@ actor AccessibilityBridge {
     static let shared = AccessibilityBridge()
 
     private(set) var lastSelectionBounds: CGRect = .zero
-    private var cachedBundleID: String?
-    private var cachedBundleIDTimestamp: Date = .distantPast
 
     func fetchSelectedText() async throws -> String {
         guard AXIsProcessTrusted() else {
@@ -22,7 +20,7 @@ actor AccessibilityBridge {
         )
 
         guard appResult == .success, let frontApp = frontAppRef else {
-            throw CorrectionError.textExtractionFailed(appName: appName(from: frontAppRef))
+            throw CorrectionError.textExtractionFailed(appName: await AppDetector.shared.frontAppName(from: frontAppRef))
         }
         let frontAppAX = frontApp as! AXUIElement
 
@@ -133,56 +131,25 @@ actor AccessibilityBridge {
         keyDown?.post(tap: CGEventTapLocation.cghidEventTap)
         keyUp?.post(tap: CGEventTapLocation.cghidEventTap)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) {
-            pasteboard.clearContents()
-            pasteboard.writeObjects(originalItems)
+        if !originalItems.isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) {
+                pasteboard.clearContents()
+                pasteboard.writeObjects(originalItems)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(600)) {
+                if pasteboard.string(forType: .string) == correctedText {
+                    pasteboard.clearContents()
+                    pasteboard.writeObjects(originalItems)
+                }
+            }
         }
     }
 
     func frontAppBundleID() async -> String? {
-        if -cachedBundleIDTimestamp.timeIntervalSinceNow < 1, let cached = cachedBundleID {
-            return cached
-        }
-
-        let systemAX = AXUIElementCreateSystemWide()
-
-        var frontAppRef: CFTypeRef?
-        let result = AXUIElementCopyAttributeValue(
-            systemAX,
-            kAXFocusedApplicationAttribute as CFString,
-            &frontAppRef
-        )
-
-        if result == .success, let app = frontAppRef {
-            var bundleIDRef: CFTypeRef?
-            let bundleResult = AXUIElementCopyAttributeValue(
-                app as! AXUIElement,
-                "AXBundleIdentifier" as CFString,
-                &bundleIDRef
-            )
-            if bundleResult == .success, let id = bundleIDRef as? String {
-                cachedBundleID = id
-                cachedBundleIDTimestamp = Date()
-                return id
-            }
-        }
-
-        let fallback = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        cachedBundleID = fallback
-        cachedBundleIDTimestamp = Date()
-        return fallback
+        await AppDetector.shared.frontAppBundleID()
     }
 
     // MARK: - Private Helpers
-
-    private func appName(from ref: CFTypeRef?) -> String {
-        guard let element = ref else { return "unknown" }
-        let axElement = element as! AXUIElement
-        var name: CFTypeRef?
-        let result = AXUIElementCopyAttributeValue(axElement, kAXTitleAttribute as CFString, &name)
-        guard result == .success, let appName = name as? String else { return "unknown" }
-        return appName
-    }
 
     private func updateBounds(axElement: AXUIElement) async {
         var rangeRef: CFTypeRef?

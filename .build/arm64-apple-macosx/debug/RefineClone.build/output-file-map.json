@@ -16,6 +16,13 @@
     "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AccessibilityBridge.swiftdeps",
     "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AccessibilityBridge.dia"
   },
+  "/Users/eugeniozamengopontrelli/RefineClone/Accessibility/AppDetector.swift": {
+    "dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppDetector.d",
+    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppDetector.swift.o",
+    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppDetector~partial.swiftmodule",
+    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppDetector.swiftdeps",
+    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppDetector.dia"
+  },
   "/Users/eugeniozamengopontrelli/RefineClone/App/AppDelegate.swift": {
     "dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppDelegate.d",
     "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppDelegate.swift.o",

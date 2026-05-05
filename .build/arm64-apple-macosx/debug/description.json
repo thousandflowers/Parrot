@@ -36,6 +36,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/eugeniozamengopontrelli/RefineClone/Accessibility/AppDetector.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/eugeniozamengopontrelli/RefineClone/App/AppDelegate.swift"
         },
         {
@@ -173,6 +177,7 @@
       "objects" : [
         "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AXBridgeProtocol.swift.o",
         "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AccessibilityBridge.swift.o",
+        "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppDetector.swift.o",
         "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppDelegate.swift.o",
         "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/Constants.swift.o",
         "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppRule.swift.o",
@@ -263,6 +268,10 @@
         {
           "kind" : "file",
           "name" : "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AccessibilityBridge.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppDetector.swift.o"
         },
         {
           "kind" : "file",
@@ -397,6 +406,7 @@
       "sources" : [
         "/Users/eugeniozamengopontrelli/RefineClone/Accessibility/AXBridgeProtocol.swift",
         "/Users/eugeniozamengopontrelli/RefineClone/Accessibility/AccessibilityBridge.swift",
+        "/Users/eugeniozamengopontrelli/RefineClone/Accessibility/AppDetector.swift",
         "/Users/eugeniozamengopontrelli/RefineClone/App/AppDelegate.swift",
         "/Users/eugeniozamengopontrelli/RefineClone/App/Constants.swift",
         "/Users/eugeniozamengopontrelli/RefineClone/Core/AppRule.swift",
@@ -635,6 +645,7 @@
       "-c",
       "/Users/eugeniozamengopontrelli/RefineClone/Accessibility/AXBridgeProtocol.swift",
       "/Users/eugeniozamengopontrelli/RefineClone/Accessibility/AccessibilityBridge.swift",
+      "/Users/eugeniozamengopontrelli/RefineClone/Accessibility/AppDetector.swift",
       "/Users/eugeniozamengopontrelli/RefineClone/App/AppDelegate.swift",
       "/Users/eugeniozamengopontrelli/RefineClone/App/Constants.swift",
       "/Users/eugeniozamengopontrelli/RefineClone/Core/AppRule.swift",
@@ -903,6 +914,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/eugeniozamengopontrelli/RefineClone/Accessibility/AppDetector.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/eugeniozamengopontrelli/RefineClone/App/AppDelegate.swift"
         },
         {
@@ -1046,6 +1061,10 @@
         {
           "kind" : "file",
           "name" : "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppDelegate.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppDetector.swift.o"
         },
         {
           "kind" : "file",
@@ -1202,6 +1221,10 @@
         {
           "kind" : "file",
           "name" : "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppDelegate.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppDetector.swift.o"
         },
         {
           "kind" : "file",
