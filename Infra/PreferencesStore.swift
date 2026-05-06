@@ -20,6 +20,19 @@ final class PreferencesStore {
     init() {
         registerAccessibilityObserver()
         seedSecurityExclusions()
+        seedDefaults()
+    }
+
+    private func seedDefaults() {
+        if UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.serviceType) == nil {
+            UserDefaults.standard.set(ServiceType.stub.rawValue, forKey: Constants.UserDefaultsKey.serviceType)
+        }
+        if UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.fluencyServiceType) == nil {
+            UserDefaults.standard.set(ServiceType.stub.rawValue, forKey: Constants.UserDefaultsKey.fluencyServiceType)
+        }
+        if UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.language) == nil {
+            UserDefaults.standard.set("it", forKey: Constants.UserDefaultsKey.language)
+        }
     }
 
     private func seedSecurityExclusions() {
