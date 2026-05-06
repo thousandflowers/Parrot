@@ -48,16 +48,27 @@ struct FloatingEditorView: View {
     @State private var correctedText: String = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var checkMode: CheckMode = .grammar
+
+    enum CheckMode: String, CaseIterable {
+        case grammar = "Grammatica"
+        case fluency = "Fluidità"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Inserisci o incolla il testo da correggere")
-                    .font(.headline)
+                Picker("", selection: $checkMode) {
+                    ForEach(CheckMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 200)
                 Spacer()
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.vertical, 8)
 
             Divider()
 
@@ -147,14 +158,21 @@ struct FloatingEditorView: View {
                     )
                 }
 
-                let result = try await RequestQueue.shared.enqueue(
-                    text: inputText,
-                    type: .grammar,
-                    priority: .floatingEditor,
-                    overrideServiceType: resolved.serviceType,
-                    overrideCustomPrompt: resolved.prompt
-                )
-                self.correctedText = result.correctedText
+                if checkMode == .fluency {
+                    let fluencyType = resolved.serviceType ?? LLMServiceFactory.resolveFluencyServiceType()
+                    let service = LLMServiceFactory.make(with: fluencyType)
+                    let result = try await service.correctFluency(text: inputText)
+                    self.correctedText = result.correctedText
+                } else {
+                    let result = try await RequestQueue.shared.enqueue(
+                        text: inputText,
+                        type: .grammar,
+                        priority: .floatingEditor,
+                        overrideServiceType: resolved.serviceType,
+                        overrideCustomPrompt: resolved.prompt
+                    )
+                    self.correctedText = result.correctedText
+                }
                 self.isLoading = false
             } catch {
                 self.errorMessage = "Errore: \(error.localizedDescription)"

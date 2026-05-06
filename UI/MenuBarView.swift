@@ -65,6 +65,26 @@ struct MenuBarView: View {
                 Toggle("Controllo Automatico", isOn: $isAutoCheckEnabled)
                     .padding(.horizontal, 12)
 
+                Button(action: { checkGrammar() }) {
+                    HStack {
+                        Image(systemName: "text.badge.checkmark")
+                        Text("Controlla Grammatica (Cmd+Shift+E)")
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+
+                Button(action: { checkFluency() }) {
+                    HStack {
+                        Image(systemName: "text.badge.star")
+                        Text("Controlla Fluidità (Cmd+Shift+T)")
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+
                 Button(action: { openEditor() }) {
                     HStack {
                         Image(systemName: "text.cursor")
@@ -110,6 +130,14 @@ struct MenuBarView: View {
         .onAppear {
             isAutoCheckEnabled = prefs.autoCheckEnabled
         }
+    }
+
+    private func checkGrammar() {
+        TextCheckCoordinator.shared.checkSelectedText()
+    }
+
+    private func checkFluency() {
+        TextCheckCoordinator.shared.checkFluency()
     }
 
     private func openEditor() {
