@@ -11,6 +11,7 @@ struct GGUFVersionCheck: Sendable {
         defer { try? handle.close() }
 
         guard let data = try? handle.read(upToCount: 4096),
+              data.count >= 4,
               let magic = String(data: data.subdata(in: 0..<4), encoding: .utf8) else {
             return false
         }
@@ -28,6 +29,11 @@ struct GGUFVersionCheck: Sendable {
             return nil
         }
         // GGUF version is a u32 little-endian at offset 4-7
-        return Int(data.subdata(in: 4..<8).withUnsafeBytes { $0.load(as: UInt32.self).littleEndian })
+        var version: UInt32 = 0
+        data.subdata(in: 4..<8).withUnsafeBytes { raw in
+            guard raw.count >= 4 else { return }
+            version = UInt32(littleEndian: raw.loadUnaligned(as: UInt32.self))
+        }
+        return Int(version)
     }
 }

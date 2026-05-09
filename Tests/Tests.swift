@@ -147,3 +147,140 @@ final class SecurityExclusionTests: XCTestCase {
         XCTAssertFalse(excluded)
     }
 }
+
+final class MockAXBridgeTests: XCTestCase {
+    func testFetchSelectedText_returnsMockText() async throws {
+        let mock = MockAXBridge()
+        await mock.setMockText("test text")
+        let text = try await mock.fetchSelectedText()
+        XCTAssertEqual(text, "test text")
+    }
+
+    func testFetchSelectedText_whenShouldThrow_throws() async {
+        let mock = MockAXBridge()
+        await mock.setShouldThrow(CorrectionError.noTextSelected)
+        do {
+            _ = try await mock.fetchSelectedText()
+            XCTFail("Expected error")
+        } catch let error as CorrectionError {
+            XCTAssertEqual(error.errorDescription, CorrectionError.noTextSelected.errorDescription)
+        } catch {
+            XCTFail("Unexpected error type: \(error)")
+        }
+    }
+
+    func testReplaceSelectedText_storesText() async throws {
+        let mock = MockAXBridge()
+        try await mock.replaceSelectedText(with: "replaced")
+        let text = try await mock.fetchSelectedText()
+        XCTAssertEqual(text, "replaced")
+    }
+
+    func testLastSelectionBounds_defaultValue() async {
+        let mock = MockAXBridge()
+        let bounds = await mock.lastSelectionBounds
+        XCTAssertEqual(bounds, .zero)
+    }
+}
+
+final class RuleResolverTests: XCTestCase {
+    func testResolve_matchingRule_returnsPromptAndServiceType() {
+        let customPrompt = CustomPrompt(id: UUID(), name: "Test", template: "{{TEXT}}")
+        let rule = AppRule(bundleID: "com.test.app", displayName: "Test", promptID: customPrompt.id, serviceType: .remote)
+        let (serviceType, prompt) = RuleResolver.resolve(
+            appBundleID: "com.test.app",
+            customPrompts: [customPrompt],
+            appRules: [rule]
+        )
+        XCTAssertEqual(prompt?.id, customPrompt.id)
+        XCTAssertEqual(serviceType, .remote)
+    }
+
+    func testResolve_disabledRule_returnsNil() {
+        let rule = AppRule(bundleID: "com.test.app", displayName: "Test", isEnabled: false)
+        let (serviceType, prompt) = RuleResolver.resolve(
+            appBundleID: "com.test.app",
+            customPrompts: [],
+            appRules: [rule]
+        )
+        XCTAssertNil(serviceType)
+        XCTAssertNil(prompt)
+    }
+
+    func testResolve_noMatchingRule_returnsNil() {
+        let (serviceType, prompt) = RuleResolver.resolve(
+            appBundleID: "com.unknown.app",
+            customPrompts: [],
+            appRules: []
+        )
+        XCTAssertNil(serviceType)
+        XCTAssertNil(prompt)
+    }
+
+    func testResolve_nilBundleID_returnsNil() {
+        let rule = AppRule(bundleID: "com.test.app", displayName: "Test")
+        let (serviceType, prompt) = RuleResolver.resolve(
+            appBundleID: nil,
+            customPrompts: [],
+            appRules: [rule]
+        )
+        XCTAssertNil(serviceType)
+        XCTAssertNil(prompt)
+    }
+}
+
+final class LLMServiceFactoryTests: XCTestCase {
+    func testMake_stub_returnsStubLLMService() {
+        let service = LLMServiceFactory.make(with: .stub)
+        XCTAssertTrue(service is StubLLMService)
+    }
+
+    func testMake_local_returnsLocalLLMService() {
+        let service = LLMServiceFactory.make(with: .local)
+        XCTAssertTrue(service is LocalLLMService)
+    }
+
+    func testMake_remote_returnsRemoteLLMService() {
+        let service = LLMServiceFactory.make(with: .remote)
+        XCTAssertTrue(service is RemoteLLMService)
+    }
+
+    func testMake_ollama_returnsOllamaService() {
+        let service = LLMServiceFactory.make(with: .ollama)
+        XCTAssertTrue(service is OllamaService)
+    }
+
+    func testMake_openRouter_returnsOpenRouterService() {
+        let service = LLMServiceFactory.make(with: .openRouter)
+        XCTAssertTrue(service is OpenRouterService)
+    }
+}
+
+final class GGUFVersionCheckTests: XCTestCase {
+    func testIsCompatible_invalidPath_returnsFalse() {
+        XCTAssertFalse(GGUFVersionCheck.isCompatible(filePath: "/nonexistent/file.gguf"))
+    }
+}
+
+final class CorrectionErrorTests: XCTestCase {
+    func testAllErrors_haveUserFacingDescription() {
+        let errors: [CorrectionError] = [
+            .accessibilityPermissionDenied,
+            .noTextSelected,
+            .textExtractionFailed(appName: "Test"),
+            .serverNotRunning,
+            .serverTimeout,
+            .modelNotLoaded,
+            .modelDownloadFailed(url: URL(string: "https://example.com/model.gguf")!),
+            .modelCorrupted(expectedSHA: "abc123"),
+            .outOfMemory,
+            .networkUnavailable,
+            .invalidAPIKey,
+            .rateLimited,
+            .outputParsingFailed(raw: "raw")
+        ]
+        for error in errors {
+            XCTAssertNotNil(error.errorDescription, "\(error) missing errorDescription")
+        }
+    }
+}

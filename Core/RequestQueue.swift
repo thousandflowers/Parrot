@@ -11,7 +11,7 @@ actor RequestQueue {
         let text: String
         let promptType: PromptType
         let priority: Priority
-        let continuation: CheckedContinuation<CorrectionResult, Error>
+        let box: ContinuationBox<CorrectionResult>
         let deadline: Date
         let overrideServiceType: ServiceType?
         let overrideCustomPrompt: CustomPrompt?
@@ -32,19 +32,38 @@ actor RequestQueue {
         overrideServiceType: ServiceType? = nil,
         overrideCustomPrompt: CustomPrompt? = nil
     ) async throws -> CorrectionResult {
-        try await withTimeout(seconds: 60) { [self] continuation in
-            let request = LLMRequest(
-                text: text,
-                promptType: type,
-                priority: priority,
-                continuation: continuation,
-                deadline: Date().addingTimeInterval(60),
-                overrideServiceType: overrideServiceType,
-                overrideCustomPrompt: overrideCustomPrompt
-            )
-            self.queue.append(request)
-            self.queue.sort { $0.priority > $1.priority }
-            Task { await self.processQueue() }
+        let box = ContinuationBox<CorrectionResult>()
+        let timeoutTask = Task {
+            do {
+                try await Task.sleep(for: .seconds(60))
+                box.resume(throwing: CorrectionError.serverTimeout)
+            } catch {
+                // Timeout task cancelled, body already completed
+            }
+        }
+        defer { timeoutTask.cancel() }
+
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                box.lock.lock(); box.continuation = continuation; box.lock.unlock()
+                let request = LLMRequest(
+                    text: text,
+                    promptType: type,
+                    priority: priority,
+                    box: box,
+                    deadline: Date().addingTimeInterval(60),
+                    overrideServiceType: overrideServiceType,
+                    overrideCustomPrompt: overrideCustomPrompt
+                )
+                if let insertAt = self.queue.firstIndex(where: { $0.priority < priority }) {
+                    self.queue.insert(request, at: insertAt)
+                } else {
+                    self.queue.append(request)
+                }
+                Task { await self.processQueue() }
+            }
+        } onCancel: {
+            box.resume(throwing: CancellationError())
         }
     }
 
@@ -53,29 +72,29 @@ actor RequestQueue {
 
         if Date() > request.deadline {
             queue.removeFirst()
-            request.continuation.resume(throwing: CorrectionError.serverTimeout)
+            request.box.resume(throwing: CorrectionError.serverTimeout)
             Task { await processQueue() }
             return
         }
 
         isProcessing = true
+        defer { isProcessing = false }
         queue.removeFirst()
 
         do {
             let service: LLMService
-            let serviceTypeLabel: String
+            let serviceType: ServiceType
             if let overrideType = request.overrideServiceType {
                 service = LLMServiceFactory.make(with: overrideType)
-                serviceTypeLabel = overrideType.rawValue
+                serviceType = overrideType
             } else {
                 service = LLMServiceFactory.make()
-                serviceTypeLabel = "default"
+                serviceType = LLMServiceFactory.resolveDefaultServiceType()
             }
+            let modelID = resolveModelID(for: serviceType)
 
-            // Check cache before calling LLM — use result modelID for consistency
-            if let cached = await ResultCache.shared.get(for: request.text, modelID: serviceTypeLabel) {
-                request.continuation.resume(returning: cached)
-                isProcessing = false
+            if let cached = await ResultCache.shared.get(for: request.text, modelID: modelID) {
+                request.box.resume(returning: cached)
                 Task { await processQueue() }
                 return
             }
@@ -88,63 +107,89 @@ actor RequestQueue {
             }
 
             let result = try await service.correct(text: request.text, promptType: promptType)
-            guard Date() <= request.deadline else {
-                request.continuation.resume(throwing: CorrectionError.serverTimeout)
-                isProcessing = false
-                Task { await processQueue() }
-                return
-            }
-            await ResultCache.shared.set(result, for: request.text, modelID: serviceTypeLabel)
-            request.continuation.resume(returning: result)
+            await ResultCache.shared.set(result, for: request.text, modelID: modelID)
+            request.box.resume(returning: result)
         } catch {
             guard Date() <= request.deadline else {
-                request.continuation.resume(throwing: CorrectionError.serverTimeout)
-                isProcessing = false
+                request.box.resume(throwing: CorrectionError.serverTimeout)
                 Task { await processQueue() }
                 return
             }
-            request.continuation.resume(throwing: error)
+            request.box.resume(throwing: error)
         }
 
-        // defer would be cleaner, but actors prevent it. Always reset after.
-        isProcessing = false
         Task { await processQueue() }
+    }
+
+    private nonisolated func resolveModelID(for serviceType: ServiceType) -> String {
+        switch serviceType {
+        case .stub:
+            return "stub-v1"
+        case .local:
+            let id = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID)
+            return id?.replacingOccurrences(of: ".gguf", with: "") ?? "local-qwen"
+        case .remote:
+            return UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openAIModel) ?? "gpt-4o-mini"
+        case .ollama:
+            return UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.ollamaModel) ?? "llama3.2"
+        case .openRouter:
+            return UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openRouterModel) ?? "openai/gpt-4o-mini"
+        }
     }
 }
 
-private final class ContinuationBox<T>: @unchecked Sendable {
+final class ContinuationBox<T>: @unchecked Sendable {
     var continuation: CheckedContinuation<T, Error>?
+    private var _resumed = false
     let lock = NSLock()
     func resume(throwing error: Error) {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
+        guard !_resumed else { return }
+        _resumed = true
         continuation?.resume(throwing: error)
+        continuation = nil
+    }
+    func resume(returning value: T) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !_resumed else { return }
+        _resumed = true
+        continuation?.resume(returning: value)
         continuation = nil
     }
 }
 
 func withTimeout<T>(
     seconds: TimeInterval,
-    body: @escaping (CheckedContinuation<T, Error>) -> Void
+    operation: @escaping @Sendable () async throws -> T
 ) async throws -> T {
     let box = ContinuationBox<T>()
+    var operationTask: Task<Void, Never>?
+    let timeoutTask = Task {
+        do {
+            try await Task.sleep(for: .seconds(seconds))
+            operationTask?.cancel()
+            box.resume(throwing: CorrectionError.serverTimeout)
+        } catch {
+            // Timeout task cancelled, body already completed
+        }
+    }
+    defer { timeoutTask.cancel() }
 
-    return try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask {
-            try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { continuation in
-                    box.lock.lock(); box.continuation = continuation; box.lock.unlock()
-                    body(continuation)
+    return try await withTaskCancellationHandler {
+        try await withCheckedThrowingContinuation { continuation in
+            box.lock.lock(); box.continuation = continuation; box.lock.unlock()
+            operationTask = Task {
+                do {
+                    let result = try await operation()
+                    box.resume(returning: result)
+                } catch {
+                    box.resume(throwing: error)
                 }
-            } onCancel: {
-                box.resume(throwing: CancellationError())
             }
         }
-        group.addTask {
-            try await Task.sleep(for: .seconds(seconds))
-            throw CorrectionError.serverTimeout
-        }
-        guard let result = try await group.next() else { throw CorrectionError.serverTimeout }
-        group.cancelAll()
-        return result
+    } onCancel: {
+        box.resume(throwing: CancellationError())
     }
 }

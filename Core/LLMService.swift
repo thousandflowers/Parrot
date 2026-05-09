@@ -65,8 +65,8 @@ enum CorrectionError: Error, LocalizedError, Sendable {
             return "API Key non valida. Verifica le impostazioni."
         case .rateLimited:
             return "Troppe richieste. Attendi qualche secondo."
-        case .outputParsingFailed:
-            return "Risposta AI non valida. Riprova."
+        case .outputParsingFailed(let raw):
+            return "Risposta AI non valida (\(raw.prefix(30))...). Riprova."
         }
     }
 }
@@ -75,6 +75,6 @@ protocol LLMService: AnyObject, Sendable {
     func correct(text: String, promptType: PromptType) async throws -> CorrectionResult
     func correctFluency(text: String) async throws -> CorrectionResult
     func explain(original: String, corrected: String) async throws -> String
-    func streamCorrect(text: String, promptType: PromptType) -> AsyncStream<String>
+    func streamCorrect(text: String, promptType: PromptType) -> AsyncThrowingStream<String, Error>
     func handleOpenAIHTTPStatus(_ statusCode: Int, data: Data) throws
 }

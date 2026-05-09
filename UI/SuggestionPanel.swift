@@ -16,8 +16,17 @@ final class SuggestionPanelController {
 
     private var panel: NSPanel?
     private var currentResult: CorrectionResult?
+    private var explanationTask: Task<Void, Never>?
 
     private init() {}
+
+    private func clampToScreen(_ origin: NSPoint, size: NSSize) -> NSPoint {
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return origin }
+        let frame = screen.visibleFrame
+        let clampedX = min(max(origin.x, frame.minX), frame.maxX - size.width)
+        let clampedY = min(max(origin.y, frame.minY), frame.maxY - size.height)
+        return NSPoint(x: clampedX, y: clampedY)
+    }
 
     func show(result: CorrectionResult) {
         self.currentResult = result
@@ -36,7 +45,9 @@ final class SuggestionPanelController {
         }
 
         let mouseLoc = NSEvent.mouseLocation
-        panel?.setFrameOrigin(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20))
+        let panelSize = panel?.frame.size ?? NSSize(width: 400, height: 220)
+        let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: panelSize)
+        panel?.setFrameOrigin(origin)
         panel?.orderFrontRegardless()
     }
 
@@ -57,21 +68,27 @@ final class SuggestionPanelController {
         }
 
         let mouseLoc = NSEvent.mouseLocation
-        panel?.setFrameOrigin(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20))
+        let panelSize = panel?.frame.size ?? NSSize(width: 400, height: 220)
+        let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: panelSize)
+        panel?.setFrameOrigin(origin)
         panel?.orderFrontRegardless()
     }
 
     func showLoading() {
-        panel?.orderOut(nil)  // Close old panel before creating new one
+        panel?.orderOut(nil)
         let panel = createPanel(loading: true)
         self.panel = panel
 
         let mouseLoc = NSEvent.mouseLocation
-        panel.setFrameOrigin(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20))
+        let panelSize = panel.frame.size
+        let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: panelSize)
+        panel.setFrameOrigin(origin)
         panel.orderFrontRegardless()
     }
 
     func showError(_ error: CorrectionError) {
+        panel?.orderOut(nil)
+        panel = nil
         let panel = createPanel(loading: false)
         self.panel = panel
 
@@ -85,7 +102,9 @@ final class SuggestionPanelController {
         panel.contentView = hostingView
 
         let mouseLoc = NSEvent.mouseLocation
-        panel.setFrameOrigin(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20))
+        let panelSize = panel.frame.size
+        let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: panelSize)
+        panel.setFrameOrigin(origin)
         panel.orderFrontRegardless()
     }
 
@@ -130,7 +149,8 @@ final class SuggestionPanelController {
     private func applyCorrection() {
         guard let result = currentResult else { return }
 
-        Task {
+        Task { [weak self] in
+            guard let self else { return }
             do {
                 try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText)
                 self.close()
@@ -142,31 +162,23 @@ final class SuggestionPanelController {
 
     private func requestExplanation() {
         guard let current = currentResult else { return }
+        explanationTask?.cancel()
 
-        Task {
+        explanationTask = Task { [weak self] in
+            guard let self else { return }
             do {
-                let service = LLMServiceFactory.make()
-                let explanation = try await withThrowingTaskGroup(of: String.self) { group in
-                    group.addTask {
-                        try await service.explain(
-                            original: current.originalText,
-                            corrected: current.correctedText
-                        )
-                    }
-                    group.addTask {
-                        try await Task.sleep(for: .seconds(30))
-                        throw CorrectionError.serverTimeout
-                    }
-                    guard let result = try await group.next() else { throw CorrectionError.serverTimeout }
-                    group.cancelAll()
-                    return result
+                let result = try await withTimeout(seconds: 30) {
+                    try await LLMServiceFactory.make().explain(
+                        original: current.originalText,
+                        corrected: current.correctedText
+                    )
                 }
-                guard !explanation.isEmpty else { return }
+                guard !result.isEmpty, let panel = self.panel else { return }
 
                 let alert = NSAlert()
                 alert.messageText = "Spiegazione"
-                alert.informativeText = explanation
-                alert.runModal()
+                alert.informativeText = result
+                alert.beginSheetModal(for: panel) { _ in }
             } catch {
                 self.showError(error as? CorrectionError ?? .serverTimeout)
             }
@@ -174,6 +186,7 @@ final class SuggestionPanelController {
     }
 
     func close() {
+        explanationTask?.cancel()
         panel?.orderOut(nil)
         panel = nil
     }

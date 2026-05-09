@@ -15,6 +15,7 @@ final class PreferencesStore {
 
     // Cache per isAccessibilityEnabled (osservato via notifica)
     private var _cachedAccessibility: Bool?
+    private var _cachedAccessibilityTimestamp: Date = .distantPast
     private var _accessibilityObserverRegistered = false
 
     init() {
@@ -25,14 +26,29 @@ final class PreferencesStore {
 
     private func seedDefaults() {
         if UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.serviceType) == nil {
-            UserDefaults.standard.set(ServiceType.stub.rawValue, forKey: Constants.UserDefaultsKey.serviceType)
+            let hasModel = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID)?.isEmpty == false
+                || !downloadedModels().isEmpty
+            UserDefaults.standard.set(hasModel ? ServiceType.local.rawValue : ServiceType.stub.rawValue,
+                                       forKey: Constants.UserDefaultsKey.serviceType)
         }
         if UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.fluencyServiceType) == nil {
-            UserDefaults.standard.set(ServiceType.stub.rawValue, forKey: Constants.UserDefaultsKey.fluencyServiceType)
+            let hasModel = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID)?.isEmpty == false
+                || !downloadedModels().isEmpty
+            UserDefaults.standard.set(hasModel ? ServiceType.local.rawValue : ServiceType.stub.rawValue,
+                                       forKey: Constants.UserDefaultsKey.fluencyServiceType)
         }
         if UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.language) == nil {
             UserDefaults.standard.set("it", forKey: Constants.UserDefaultsKey.language)
         }
+    }
+
+    private func downloadedModels() -> [String] {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("RefineClone/Models")
+        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: dir.path(percentEncoded: false)) else {
+            return []
+        }
+        return contents.filter { $0.hasSuffix(".gguf") }
     }
 
     private func seedSecurityExclusions() {
@@ -150,7 +166,10 @@ final class PreferencesStore {
             return prompts
         }
         set {
-            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            guard let data = try? JSONEncoder().encode(newValue) else {
+                print("PreferencesStore: failed to encode customPrompts")
+                return
+            }
             _cachedPrompts = newValue
             _cachedPromptsData = data
             UserDefaults.standard.set(data, forKey: Constants.UserDefaultsKey.customPrompts)
@@ -176,7 +195,10 @@ final class PreferencesStore {
             return rules
         }
         set {
-            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            guard let data = try? JSONEncoder().encode(newValue) else {
+                print("PreferencesStore: failed to encode appRules")
+                return
+            }
             _cachedAppRules = newValue
             _cachedAppRulesData = data
             UserDefaults.standard.set(data, forKey: Constants.UserDefaultsKey.appRules)
@@ -186,9 +208,13 @@ final class PreferencesStore {
     // MARK: - Accessibility & Exclusions
 
     var isAccessibilityEnabled: Bool {
-        if let cached = _cachedAccessibility { return cached }
+        if let cached = _cachedAccessibility,
+           Date().timeIntervalSince(_cachedAccessibilityTimestamp) < 3 {
+            return cached
+        }
         let value = AXIsProcessTrusted()
         _cachedAccessibility = value
+        _cachedAccessibilityTimestamp = Date()
         return value
     }
 
@@ -226,7 +252,9 @@ final class PreferencesStore {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?._cachedAccessibility = nil // Invalida cache
+            Task { @MainActor [weak self] in
+                self?._cachedAccessibility = nil
+            }
         }
     }
 

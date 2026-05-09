@@ -5,7 +5,7 @@ struct RuleResolver {
         appBundleID: String?,
         customPrompts: [CustomPrompt],
         appRules: [AppRule]
-    ) -> (prompt: CustomPrompt?, serviceType: ServiceType?) {
+    ) -> (serviceType: ServiceType?, prompt: CustomPrompt?) {
         guard let bundleID = appBundleID,
               let rule = appRules.first(where: { $0.bundleID == bundleID && $0.isEnabled })
         else {
@@ -17,6 +17,6 @@ struct RuleResolver {
         } else {
             prompt = nil
         }
-        return (prompt, rule.serviceType)
+        return (rule.serviceType, prompt)
     }
 }

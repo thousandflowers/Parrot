@@ -49,6 +49,7 @@ struct FloatingEditorView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var checkMode: CheckMode = .grammar
+    @State private var checkTask: Task<Void, Never>?
 
     enum CheckMode: String, CaseIterable {
         case grammar = "Grammatica"
@@ -124,7 +125,9 @@ struct FloatingEditorView: View {
 
                 Button("Copia") {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(correctedText, forType: .string)
+                    let item = NSPasteboardItem()
+                    item.setString(correctedText, forType: .string)
+                    NSPasteboard.general.writeObjects([item])
                 }
                 .disabled(correctedText.isEmpty)
             }
@@ -137,6 +140,9 @@ struct FloatingEditorView: View {
             }
         }
         .frame(minWidth: 500, minHeight: 300)
+        .onDisappear {
+            checkTask?.cancel()
+        }
     }
 
     private func checkText() {
@@ -145,8 +151,9 @@ struct FloatingEditorView: View {
         isLoading = true
         errorMessage = nil
         correctedText = ""
+        checkTask?.cancel()
 
-        Task {
+        let task = Task {
             do {
                 let bundleID = await AccessibilityBridge.shared.frontAppBundleID()
                 let resolved = await MainActor.run {
@@ -160,8 +167,14 @@ struct FloatingEditorView: View {
 
                 if checkMode == .fluency {
                     let fluencyType = resolved.serviceType ?? LLMServiceFactory.resolveFluencyServiceType()
-                    let service = LLMServiceFactory.make(with: fluencyType)
-                    let result = try await service.correctFluency(text: inputText)
+                    let result = try await RequestQueue.shared.enqueue(
+                        text: inputText,
+                        type: .fluency,
+                        priority: .floatingEditor,
+                        overrideServiceType: fluencyType,
+                        overrideCustomPrompt: resolved.prompt
+                    )
+                    guard !Task.isCancelled else { return }
                     self.correctedText = result.correctedText
                 } else {
                     let result = try await RequestQueue.shared.enqueue(
@@ -171,13 +184,16 @@ struct FloatingEditorView: View {
                         overrideServiceType: resolved.serviceType,
                         overrideCustomPrompt: resolved.prompt
                     )
+                    guard !Task.isCancelled else { return }
                     self.correctedText = result.correctedText
                 }
                 self.isLoading = false
             } catch {
+                guard !Task.isCancelled else { return }
                 self.errorMessage = "Errore: \(error.localizedDescription)"
                 self.isLoading = false
             }
         }
+        checkTask = task
     }
 }

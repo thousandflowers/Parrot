@@ -9,6 +9,7 @@ final class GlobalHotkeyManager {
     private var hotKeyRefs: [EventHotKeyRef] = []
     private var actions: [UInt32: () -> Void] = [:]
     private var nextID: UInt32 = 1
+    private(set) var failedShortcuts: [String] = []
 
     func registerHotkeys() {
         let eventSpec = EventTypeSpec(
@@ -82,10 +83,28 @@ final class GlobalHotkeyManager {
             &hotKeyRef
         )
 
-        guard status == noErr, let ref = hotKeyRef else { return }
+        guard status == noErr, let ref = hotKeyRef else {
+            let label = shortcutLabel(keyCode: keyCode, modifiers: modifiers)
+            failedShortcuts.append(label)
+            return
+        }
 
         hotKeyRefs.append(ref)
         actions[id.id] = action
+    }
+
+    private func shortcutLabel(keyCode: UInt32, modifiers: UInt32) -> String {
+        var parts: [String] = []
+        if modifiers & UInt32(cmdKey) != 0 { parts.append("Cmd") }
+        if modifiers & UInt32(shiftKey) != 0 { parts.append("Shift") }
+        let keyMap: [UInt32: String] = [
+            UInt32(kVK_ANSI_E): "E",
+            UInt32(kVK_ANSI_T): "T",
+            UInt32(kVK_ANSI_F): "F"
+        ]
+        if let key = keyMap[keyCode] { parts.append(key) }
+        else { parts.append("Key\(keyCode)") }
+        return parts.joined(separator: "+")
     }
 
     deinit {
@@ -96,7 +115,3 @@ final class GlobalHotkeyManager {
     }
 }
 
-extension Notification.Name {
-    static let checkTextEmptyNotification = Notification.Name("checkTextEmptyNotification")
-    static let checkTextErrorNotification = Notification.Name("checkTextErrorNotification")
-}

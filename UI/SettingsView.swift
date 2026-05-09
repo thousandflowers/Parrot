@@ -29,6 +29,7 @@ struct SettingsView: View {
 
 struct GeneralTab: View {
     @Bindable var prefs: PreferencesStore
+    @State private var serverIsRunning = false
 
     var body: some View {
         Form {
@@ -52,7 +53,7 @@ struct GeneralTab: View {
                 }
 
                 if prefs.serviceType == .openRouter {
-                    SecureField("API Key OpenRouter", text: $prefs.openRouterAPIKey)
+                    OpenRouterKeyField(prefs: prefs)
                     TextField("Modello (es. openai/gpt-4o-mini)", text: $prefs.openRouterModel)
                 }
             }
@@ -79,17 +80,41 @@ struct GeneralTab: View {
             Section("Scorciatoie") {
                 Toggle("Controllo automatico", isOn: $prefs.autoCheckEnabled)
                 Text("Cmd+Shift+E — Controlla selezione").font(.caption).foregroundColor(.secondary)
-                Text("Cmd+Shift+T — Controlla fluidità").font(.caption).foregroundColor(.secondary)
+                Text("Cmd+Shift+T — Controlla fluidita").font(.caption).foregroundColor(.secondary)
                 Text("Cmd+Shift+F — Apri editor").font(.caption).foregroundColor(.secondary)
+            }
+
+            Section("Stato Server") {
+                HStack {
+                    Circle()
+                        .fill(serverIsRunning ? Color.green : Color.red)
+                        .frame(width: 8, height: 8)
+                    Text(serverIsRunning ? "llama-server: attivo" : "llama-server: fermo")
+                        .font(.caption)
+                }
             }
         }
         .formStyle(.grouped)
         .padding()
+        .task {
+            serverIsRunning = await ServerManager.shared.currentPort > 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { break }
+                serverIsRunning = await ServerManager.shared.currentPort > 0
+            }
+        }
     }
 }
 
 struct ModelsTab: View {
     @Bindable var prefs: PreferencesStore
+    @State private var downloadProgress: Double = 0
+    @State private var isDownloading = false
+    @State private var downloadError: String?
+    @State private var recommended: ModelRecommendation?
+    @State private var serverIsRunning = false
+    @State private var downloadTask: Task<Void, Never>?
 
     var body: some View {
         Form {
@@ -99,9 +124,83 @@ struct ModelsTab: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+
+            Section("Modello Raccomandato") {
+                if let rec = recommended {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(rec.name).font(.headline)
+                        Text(rec.reason).font(.caption).foregroundColor(.secondary)
+                        Text("RAM richiesta: ~\(rec.ramRequired) GB").font(.caption)
+
+                        if let warning = rec.warning {
+                            Text(warning).font(.caption).foregroundColor(.orange)
+                        }
+
+                        if isDownloading {
+                            ProgressView(value: downloadProgress)
+                            Text("\(Int(downloadProgress * 100))%")
+                                .font(.caption)
+                        } else {
+                            Button("Scarica Modello") {
+                                downloadRecommended(rec)
+                            }
+                            .disabled(isDownloading)
+                        }
+                    }
+                }
+
+                if let error = downloadError {
+                    Text(error).foregroundColor(.red).font(.caption)
+                }
+
+                HStack {
+                    Circle()
+                        .fill(serverIsRunning ? Color.green : Color.red)
+                        .frame(width: 8, height: 8)
+                    Text(serverIsRunning ? "Server attivo" : "Server fermo")
+                        .font(.caption)
+                }
+            }
         }
         .formStyle(.grouped)
         .padding()
+        .task {
+            recommended = await ModelManager.shared.recommendedDefaultModel()
+            serverIsRunning = await ServerManager.shared.currentPort > 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { break }
+                serverIsRunning = await ServerManager.shared.currentPort > 0
+            }
+        }
+        .onDisappear {
+            downloadTask?.cancel()
+        }
+    }
+
+    private func downloadRecommended(_ rec: ModelRecommendation) {
+        isDownloading = true
+        downloadProgress = 0
+        downloadError = nil
+        downloadTask?.cancel()
+        downloadTask = Task {
+            do {
+                let destinationURL = try await ModelManager.shared.downloadModel(from: rec.url)
+                guard !Task.isCancelled else { return }
+                let modelID = destinationURL.deletingPathExtension().lastPathComponent
+                await MainActor.run {
+                    prefs.selectedModelID = modelID
+                    prefs.serviceType = .local
+                    isDownloading = false
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    downloadError = error.localizedDescription
+                    isDownloading = false
+                }
+            }
+        }
     }
 }
 
@@ -253,5 +352,27 @@ struct ExclusionsTab: View {
             }
             .padding()
         }
+    }
+}
+
+private struct OpenRouterKeyField: View {
+    let prefs: PreferencesStore
+    @State private var localKey: String = ""
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        SecureField("API Key OpenRouter", text: $localKey)
+            .focused($isFocused)
+            .onAppear {
+                localKey = prefs.openRouterAPIKey
+            }
+            .onChange(of: isFocused) { _, focused in
+                if !focused {
+                    prefs.openRouterAPIKey = localKey
+                }
+            }
+            .onSubmit {
+                prefs.openRouterAPIKey = localKey
+            }
     }
 }

@@ -19,33 +19,31 @@ final class KeychainService: Sendable {
 
         let service = "\(Constants.bundleID).apikey.\(provider)"
 
-        // Prova update prima (preserva item esistente in caso di fallimento)
-        let updateQuery: [String: Any] = [
+        let addQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: "default"
-        ]
-        let updateAttributes: [String: Any] = [
+            kSecAttrAccount as String: "default",
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
-        let updateStatus = SecItemUpdate(updateQuery as CFDictionary, updateAttributes as CFDictionary)
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
 
-        if updateStatus == errSecItemNotFound {
-            // Item non esiste — crealo nuovo
-            let addQuery: [String: Any] = [
+        if addStatus == errSecDuplicateItem {
+            let updateQuery: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: service,
-                kSecAttrAccount as String: "default",
+                kSecAttrAccount as String: "default"
+            ]
+            let updateAttributes: [String: Any] = [
                 kSecValueData as String: data,
                 kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
             ]
-            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-            guard addStatus == errSecSuccess else {
-                throw KeychainError.invalidStatus(addStatus)
+            let updateStatus = SecItemUpdate(updateQuery as CFDictionary, updateAttributes as CFDictionary)
+            guard updateStatus == errSecSuccess else {
+                throw KeychainError.invalidStatus(updateStatus)
             }
-        } else if updateStatus != errSecSuccess {
-            throw KeychainError.invalidStatus(updateStatus)
+        } else if addStatus != errSecSuccess {
+            throw KeychainError.invalidStatus(addStatus)
         }
     }
 
@@ -94,7 +92,7 @@ final class KeychainService: Sendable {
     }
 
     func update(key: String, for provider: String) throws {
-        // save() internally uses SecItemUpdate first, then SecItemAdd on fallback.
+        // save() tries SecItemAdd first; on duplicate, uses SecItemUpdate.
         // No need for explicit delete — avoids non-atomic delete-then-save race.
         try save(key: key, for: provider)
     }

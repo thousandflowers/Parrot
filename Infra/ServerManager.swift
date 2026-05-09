@@ -1,71 +1,108 @@
 import Foundation
 import Darwin
+import Metal
 
 actor ServerManager: Sendable {
     static let shared = ServerManager()
 
     private var process: Process?
+    private var startupTask: Task<Void, Error>?
     var currentPort: Int = 0
 
-    func start(modelPath: String) async throws {
-        currentPort = try allocatePort()
-
-        guard let serverURL = Bundle.main.url(forAuxiliaryExecutable: "llama-server") else {
-            currentPort = 0
-            throw CorrectionError.serverNotRunning
+    func ensureRunning(modelPath: String) async throws -> Int {
+        if let existingTask = startupTask {
+            try await existingTask.value
+            return currentPort
         }
+        if currentPort > 0 { return currentPort }
 
-        let process = Process()
-        process.executableURL = serverURL
-        process.arguments = [
-            "-m", modelPath,
-            "--host", "127.0.0.1",
-            "--port", "\(currentPort)",
-            "-c", "4096",
-            "--threads", "\(max(2, ProcessInfo.processInfo.processorCount / 2))",
-            "--n-gpu-layers", gpuLayers(),  // Auto-detect based on available RAM
-            "--flash-attn"
-        ]
-
+        let task = Task { try await start(modelPath: modelPath) }
+        startupTask = task
         do {
-            try process.run()
+            try await task.value
+            startupTask = nil
+            return currentPort
         } catch {
+            startupTask = nil
+            throw error
+        }
+    }
+
+    func start(modelPath: String) async throws {
+        guard process == nil else { return }
+        for attempt in 0..<3 {
+            currentPort = try allocatePort()
+
+            guard let serverURL = Bundle.main.url(forAuxiliaryExecutable: "llama-server") else {
+                currentPort = 0
+                throw CorrectionError.serverNotRunning
+            }
+
+            let process = Process()
+            process.executableURL = serverURL
+            process.arguments = [
+                "-m", modelPath,
+                "--host", "127.0.0.1",
+                "--port", "\(currentPort)",
+                "-c", "4096",
+                "--threads", "\(max(2, ProcessInfo.processInfo.processorCount / 2))",
+                "--n-gpu-layers", gpuLayers(),
+                "--flash-attn"
+            ]
+
+            do {
+                try process.run()
+            } catch {
+                currentPort = 0
+                if attempt < 2 { continue }
+                throw CorrectionError.serverNotRunning
+            }
+            self.process = process
+
+            for healthAttempt in 0..<20 {
+                if await checkServerHealth() { return }
+                let delayMs = min(2000, 250 * Int(pow(2.0, Double(healthAttempt))))
+                try await Task.sleep(for: .milliseconds(delayMs))
+            }
+
+            process.terminate()
+            self.process = nil
             currentPort = 0
-            throw CorrectionError.serverNotRunning
-        }
-        self.process = process
-
-        for _ in 0..<30 {
-            if await checkServerHealth() { return }
-            try await Task.sleep(for: .milliseconds(500))
         }
 
-        process.terminate()
-        self.process = nil
-        currentPort = 0
         throw CorrectionError.serverTimeout
     }
 
     func stop() async {
+        await ServerHealthMonitor.shared.stopMonitoring()
         guard let process = process else { return }
+        let pid = process.processIdentifier
         process.terminate()
 
         let deadline = Date().addingTimeInterval(5)
-        while process.isRunning && Date() < deadline {
+        while _isProcessRunning(pid) && Date() < deadline {
             try? await Task.sleep(for: .milliseconds(100))
         }
 
-        if process.isRunning {
-            kill(pid_t(process.processIdentifier), SIGKILL)
+        if _isProcessRunning(pid) {
+            kill(pid_t(pid), SIGKILL)
+            waitpid(pid_t(pid), nil, 0)
         }
         self.process = nil
         currentPort = 0
     }
 
-    /// Allocates a kernel-assigned port via bind(0) — no TOCTOU race.
+    nonisolated func forceKill() {
+        Task { await stop() }
+    }
+
+    /// Allocates a kernel-assigned port via bind(0). Sets SO_REUSEADDR to minimise TIME_WAIT conflicts.
     private func allocatePort() throws -> Int {
         let sock = socket(AF_INET, SOCK_STREAM, 0)
         guard sock >= 0 else { throw CorrectionError.serverNotRunning }
+
+        var reuse: Int32 = 1
+        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
 
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)
@@ -93,22 +130,38 @@ actor ServerManager: Sendable {
         return port
     }
 
-    /// Auto-detect GPU layers: 999 on 16GB+, 20 on 8-15GB, 0 on <8GB
+    /// Auto-detect GPU layers: 999 on 16GB+, 20 on 8-15GB, 0 on <8GB or no Metal GPU
     private func gpuLayers() -> String {
+        guard MTLCreateSystemDefaultDevice() != nil else { return "0" }
         let ramGB = ProcessInfo.processInfo.physicalMemory / (1024 * 1024 * 1024)
         if ramGB >= 16 { return "999" }
         if ramGB >= 8  { return "20" }
         return "0"
     }
 
-private func checkServerHealth() async -> Bool {
+    private func checkServerHealth() async -> Bool {
         guard currentPort > 0 else { return false }
-        let url = URL(string: "http://127.0.0.1:\(currentPort)/health")!
+        guard let url = URL(string: "http://127.0.0.1:\(currentPort)/health") else {
+            return false
+        }
         do {
             let (_, response) = try await URLSession.shared.data(from: url)
             return (response as? HTTPURLResponse)?.statusCode == 200
         } catch {
             return false
         }
+    }
+
+    private func _isProcessRunning(_ pid: Int32) -> Bool {
+        for _ in 0..<3 {
+            var status: Int32 = 0
+            let result = waitpid(pid, &status, WNOHANG)
+            if result == 0 { return true }
+            if result == pid { return false }
+            if result == -1 && errno == ECHILD { return false }
+            if result == -1 && errno == EINTR { continue }
+            return kill(pid, 0) == 0
+        }
+        return kill(pid, 0) == 0
     }
 }

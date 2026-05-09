@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:RefineClone}",
+            "name": "Debug RefineClone",
+            "target": "RefineClone",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug RefineClone"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:RefineClone}",
+            "name": "Release RefineClone",
+            "target": "RefineClone",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release RefineClone"
+        }
+    ]
+}

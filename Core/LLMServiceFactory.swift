@@ -2,7 +2,11 @@ import Foundation
 
 struct LLMServiceFactory {
     static func make() -> LLMService {
-        make(with: resolveServiceType(for: Constants.UserDefaultsKey.serviceType))
+        make(with: resolveDefaultServiceType())
+    }
+
+    static func resolveDefaultServiceType() -> ServiceType {
+        resolveServiceType(for: Constants.UserDefaultsKey.serviceType)
     }
 
     static func make(with serviceType: ServiceType) -> LLMService {

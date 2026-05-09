@@ -1,10 +1,31 @@
 import Foundation
 
+private final class PendingState: @unchecked Sendable {
+    let lock = NSLock()
+    var task: Task<Void, Never>?
+}
+
 struct TextCheckCoordinator: Sendable {
     static let shared = TextCheckCoordinator()
 
+    private let pendingState = PendingState()
+
     func checkSelectedText() {
         performCheck { text, resolved in
+            try await RequestQueue.shared.enqueue(
+                text: text,
+                type: .grammar,
+                priority: .manual,
+                overrideServiceType: resolved.serviceType,
+                overrideCustomPrompt: resolved.prompt
+            )
+        } onSuccess: { result in
+            SuggestionPanelController.shared.show(result: result)
+        }
+    }
+
+    func checkSelectedText(fromPID pid: pid_t) {
+        performCheck(frontAppPID: pid) { text, resolved in
             try await RequestQueue.shared.enqueue(
                 text: text,
                 type: .grammar,
@@ -21,8 +42,29 @@ struct TextCheckCoordinator: Sendable {
         guard UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.isFluencyCheckingEnabled) else { return }
         performCheck { text, resolved in
             let serviceType = resolved.serviceType ?? LLMServiceFactory.resolveFluencyServiceType()
-            let service = LLMServiceFactory.make(with: serviceType)
-            return try await service.correctFluency(text: text)
+            return try await RequestQueue.shared.enqueue(
+                text: text,
+                type: .fluency,
+                priority: .manual,
+                overrideServiceType: serviceType,
+                overrideCustomPrompt: resolved.prompt
+            )
+        } onSuccess: { result in
+            SuggestionPanelController.shared.showFluency(result: result)
+        }
+    }
+
+    func checkFluency(fromPID pid: pid_t) {
+        guard UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.isFluencyCheckingEnabled) else { return }
+        performCheck(frontAppPID: pid) { text, resolved in
+            let serviceType = resolved.serviceType ?? LLMServiceFactory.resolveFluencyServiceType()
+            return try await RequestQueue.shared.enqueue(
+                text: text,
+                type: .fluency,
+                priority: .manual,
+                overrideServiceType: serviceType,
+                overrideCustomPrompt: resolved.prompt
+            )
         } onSuccess: { result in
             SuggestionPanelController.shared.showFluency(result: result)
         }
@@ -35,18 +77,26 @@ struct TextCheckCoordinator: Sendable {
     }
 
     private func performCheck(
+        frontAppPID: pid_t? = nil,
         action: @escaping @Sendable (String, (serviceType: ServiceType?, prompt: CustomPrompt?)) async throws -> CorrectionResult,
         onSuccess: @escaping @MainActor (CorrectionResult) -> Void
     ) {
-        Task {
+        let task = Task {
             do {
-                let text = try await AccessibilityBridge.shared.fetchSelectedText()
+                let text: String
+                let bundleID: String?
+                if let pid = frontAppPID {
+                    text = try await AccessibilityBridge.shared.fetchSelectedText(fromPID: pid)
+                    bundleID = await AppDetector.shared.frontAppBundleID(forPID: pid)
+                } else {
+                    text = try await AccessibilityBridge.shared.fetchSelectedText()
+                    bundleID = await AccessibilityBridge.shared.frontAppBundleID()
+                }
                 guard !text.isEmpty else {
                     await MainActor.run { SuggestionPanelController.shared.showError(.noTextSelected) }
                     return
                 }
 
-                let bundleID = await AccessibilityBridge.shared.frontAppBundleID()
                 if let id = bundleID {
                     let excluded = await MainActor.run { PreferencesStore.shared.isExcluded(bundleID: id) }
                     guard !excluded else { return }
@@ -68,6 +118,10 @@ struct TextCheckCoordinator: Sendable {
             } catch {
                 await MainActor.run { SuggestionPanelController.shared.showError(.outputParsingFailed(raw: error.localizedDescription)) }
             }
+        }
+        pendingState.lock.withLock {
+            pendingState.task?.cancel()
+            pendingState.task = task
         }
     }
 }

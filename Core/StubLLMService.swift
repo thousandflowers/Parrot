@@ -1,6 +1,6 @@
 import Foundation
 
-final class StubLLMService: LLMService, @unchecked Sendable {
+final class StubLLMService: LLMService, Sendable {
     static let shared = StubLLMService()
 
     func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
@@ -49,15 +49,18 @@ final class StubLLMService: LLMService, @unchecked Sendable {
         return "Spiegazione stub: analisi grammaticale completata."
     }
 
-    func streamCorrect(text: String, promptType: PromptType) -> AsyncStream<String> {
-        AsyncStream { continuation in
-            Task {
+    func streamCorrect(text: String, promptType: PromptType) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
                 let words = text.components(separatedBy: " ")
                 for (i, word) in words.enumerated() {
                     continuation.yield(word + (i < words.count - 1 ? " " : ""))
                     try? await Task.sleep(for: .milliseconds(30))
                 }
                 continuation.finish()
+            }
+            continuation.onTermination = { _ in
+                task.cancel()
             }
         }
     }

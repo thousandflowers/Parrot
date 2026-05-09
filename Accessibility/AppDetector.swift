@@ -6,6 +6,22 @@ actor AppDetector {
     private var cachedBundleID: String?
     private var cachedBundleIDTimestamp: Date = .distantPast
 
+    func frontAppBundleID(forPID pid: pid_t) async -> String? {
+        let appElement = AXUIElementCreateApplication(pid)
+
+        var bundleIDRef: CFTypeRef?
+        let bundleResult = AXUIElementCopyAttributeValue(
+            appElement,
+            "AXBundleIdentifier" as CFString,
+            &bundleIDRef
+        )
+        if bundleResult == .success, let id = bundleIDRef as? String {
+            return id
+        }
+
+        return await MainActor.run { NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
+    }
+
     func frontAppBundleID() async -> String? {
         if Date().timeIntervalSince(cachedBundleIDTimestamp) < 1, let cached = cachedBundleID {
             return cached
@@ -20,16 +36,20 @@ actor AppDetector {
             &frontAppRef
         )
 
-        guard result == .success, let app = frontAppRef else {
-            let fallback = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        guard result == .success,
+              let app = frontAppRef,
+              CFGetTypeID(app) == AXUIElementGetTypeID() else {
+            let fallback = await MainActor.run { NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
             cachedBundleID = fallback
             cachedBundleIDTimestamp = Date()
             return fallback
         }
 
+        let appElement = app as! AXUIElement
+
         var bundleIDRef: CFTypeRef?
         let bundleResult = AXUIElementCopyAttributeValue(
-            app as! AXUIElement,
+            appElement,
             "AXBundleIdentifier" as CFString,
             &bundleIDRef
         )
@@ -46,10 +66,11 @@ actor AppDetector {
     }
 
     func frontAppName(from ref: CFTypeRef?) -> String {
-        guard let element = ref else { return "unknown" }
+        guard let element = ref, CFGetTypeID(element) == AXUIElementGetTypeID() else { return "unknown" }
+        let axElement = element as! AXUIElement
         var name: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(
-            element as! AXUIElement,
+            axElement,
             kAXTitleAttribute as CFString,
             &name
         )

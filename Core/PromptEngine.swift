@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 enum LanguageFamily: String {
     case latin
@@ -130,17 +131,18 @@ struct PromptEngine {
         case .fluency:
             return buildFluencyPrompt(for: text, customInstruction: customInstruction)
         case .explain:
-            assertionFailure("Use buildExplainPrompt(original:corrected:) directly — buildPrompt does not support explain")
+            os_log(.debug, "buildPrompt called with .explain — use buildExplainPrompt(original:corrected:) directly")
             return """
             Explain any errors in the following text.
-            
-            <TEXT>\(text)</TEXT>
-            
+
+            <TEXT>\(text)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
+
             Output only your explanation. Do not include <TEXT>/<CUSTOM> tags.
             """
-        case .custom(let name, let template):
-            let customObj = CustomPrompt(id: UUID(), name: name, template: template)
-            var result = customObj.buildPrompt(for: text, language: language)
+        case .custom(_, let template):
+            var result = template
+                .replacingOccurrences(of: "{{TEXT}}", with: text)
+                .replacingOccurrences(of: "{{LANGUAGE}}", with: language)
             if let instruction = customInstruction {
                 result += "\n<CUSTOM>\(instruction)</CUSTOM>"
             }

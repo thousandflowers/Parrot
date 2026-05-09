@@ -80,7 +80,7 @@ struct SuggestionView: View {
         switch state {
         case .loading:         return "Analizzando..."
         case .suggestion:      return "Suggerimento"
-        case .fluencySuggestion: return "Fluidita"
+        case .fluencySuggestion: return "Fluidità"
         case .noErrors:        return "Nessun errore"
         case .error:           return "Errore"
         case .textTooLong:     return "Testo troppo lungo"
@@ -125,7 +125,7 @@ struct SuggestionView: View {
         case .textTooLong(let length, let maxLength):
             VStack(spacing: 12) {
                 VStack(spacing: 4) {
-                    Text("Il testo e troppo lungo (\(length) caratteri)")
+                    Text("Il testo è troppo lungo (\(length) caratteri)")
                     Text("Massimo: \(maxLength) caratteri")
                 }
                 .foregroundColor(.secondary)

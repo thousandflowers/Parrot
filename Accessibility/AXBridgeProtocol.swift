@@ -1,6 +1,6 @@
 import Cocoa
 
-protocol AXBridgeProtocol: Actor, Sendable {
+protocol AXBridgeProtocol: Sendable {
     func fetchSelectedText() async throws -> String
     func replaceSelectedText(with text: String) async throws
     var lastSelectionBounds: CGRect { get async }
@@ -8,16 +8,19 @@ protocol AXBridgeProtocol: Actor, Sendable {
 
 actor MockAXBridge: AXBridgeProtocol {
     private(set) var lastSelectionBounds: CGRect = .zero
-    var mockText: String = ""
-    var shouldThrow: Error?
+    private var mockText: String = ""
+    private var mockShouldThrow: Error?
+
+    func setMockText(_ text: String) { mockText = text }
+    func setShouldThrow(_ error: Error?) { mockShouldThrow = error }
 
     func fetchSelectedText() async throws -> String {
-        if let error = shouldThrow { throw error }
+        if let error = mockShouldThrow { throw error }
         return mockText
     }
 
     func replaceSelectedText(with text: String) async throws {
-        if let error = shouldThrow { throw error }
-        lastSelectionBounds = .zero
+        if let error = mockShouldThrow { throw error }
+        mockText = text
     }
 }

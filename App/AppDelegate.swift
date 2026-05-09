@@ -3,6 +3,7 @@ import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyManager: GlobalHotkeyManager?
+    private var frontAppObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -11,17 +12,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         hotkeyManager = GlobalHotkeyManager()
         hotkeyManager?.registerHotkeys()
+        warnFailedShortcuts()
+
+        observeFrontmostAppChanges()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        UserDefaults.standard.synchronize()
-        let semaphore = DispatchSemaphore(value: 0)
+        if let observer = frontAppObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            frontAppObserver = nil
+        }
+
+        ProcessInfo.processInfo.disableSuddenTermination()
+
+        let stopped = DispatchGroup()
+        stopped.enter()
         Task {
             await ServerManager.shared.stop()
-            semaphore.signal()
+            await ServerHealthMonitor.shared.stopMonitoring()
+            stopped.leave()
         }
-        // macOS grants ~5 seconds before forcing termination
-        _ = semaphore.wait(timeout: .now() + 5)
+        _ = stopped.wait(timeout: .now() + 5)
+
+        ProcessInfo.processInfo.enableSuddenTermination()
     }
 
     private func checkAccessibilityPermissions() {
@@ -39,5 +52,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
             }
         }
+    }
+
+    private func observeFrontmostAppChanges() {
+        frontAppObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { notification in
+            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+            AccessibilityBridge.lastKnownFrontAppPID = app.processIdentifier
+        }
+    }
+
+    @MainActor
+    private func warnFailedShortcuts() {
+        guard let failed = hotkeyManager?.failedShortcuts, !failed.isEmpty else { return }
+        let list = failed.joined(separator: ", ")
+        let alert = NSAlert()
+        alert.messageText = "Scorciatoie non disponibili"
+        alert.informativeText = "Le seguenti scorciatoie sono gia in uso da un'altra applicazione:\n\(list)\n\nPer modificarle apri le Preferenze di RefineClone."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 }

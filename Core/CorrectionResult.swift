@@ -53,14 +53,24 @@ struct CorrectionResult: Identifiable, Codable, Sendable {
         let diff = corrWords.difference(from: origWords)
         guard !diff.isEmpty else { return nil }
 
+        var charOffsets: [Int] = []
+        var scanner = original.startIndex
+        for word in origWords {
+            charOffsets.append(original.distance(from: original.startIndex, to: scanner))
+            let wordEnd = original.index(scanner, offsetBy: word.count)
+            scanner = wordEnd < original.endIndex ? original.index(after: wordEnd) : original.endIndex
+        }
+
         var ops: [DiffOp] = []
 
         for change in diff {
             switch change {
             case .insert(let wordOffset, let word, _):
-                ops.append(DiffOp(type: .insert, offset: wordOffset, length: word.count, replacement: String(word)))
+                let charOffset = wordOffset < charOffsets.count ? charOffsets[wordOffset] : charOffsets.last ?? 0
+                ops.append(DiffOp(type: .insert, offset: charOffset, length: word.count, replacement: String(word)))
             case .remove(let wordOffset, let word, _):
-                ops.append(DiffOp(type: .delete, offset: wordOffset, length: word.count, replacement: nil))
+                let charOffset = wordOffset < charOffsets.count ? charOffsets[wordOffset] : charOffsets.last ?? 0
+                ops.append(DiffOp(type: .delete, offset: charOffset, length: word.count, replacement: nil))
             }
         }
 
