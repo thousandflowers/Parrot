@@ -92,7 +92,13 @@ actor ServerManager: Sendable {
 
         let deadline = Date().addingTimeInterval(5)
         while _isProcessRunning(pid) && Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(100))
+            do {
+                try await Task.sleep(for: .milliseconds(100))
+            } catch is CancellationError {
+                break
+            } catch {
+                break
+            }
         }
 
         if _isProcessRunning(pid) {

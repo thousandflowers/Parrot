@@ -155,7 +155,7 @@ actor ModelManager: Sendable {
               let fileSize = attrs[.size] as? Int, fileSize > 10_000_000,
               GGUFVersionCheck.isCompatible(filePath: destination.path(percentEncoded: false)) else {
             try? FileManager.default.removeItem(at: destination)
-            throw CorrectionError.modelCorrupted(expectedSHA: "invalid-gguf")
+            throw CorrectionError.modelCorrupted(expectedSHA: "file-validation-failed")
         }
 
         return destination

@@ -108,7 +108,7 @@ struct SuggestionView: View {
                 Image(systemName: "checkmark.circle")
                     .font(.largeTitle)
                     .foregroundColor(.green)
-                Text("Il testo e gia corretto!")
+                Text("Il testo è già corretto!")
                     .foregroundColor(.secondary)
             }
             .frame(height: 80)

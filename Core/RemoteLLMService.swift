@@ -14,7 +14,8 @@ final class RemoteLLMService: LLMService, Sendable {
     }
 
     private func chatURL() throws -> URL {
-        guard let url = URL(string: "\(openAIBaseURL)/chat/completions") else {
+        let base = openAIBaseURL.hasSuffix("/") ? String(openAIBaseURL.dropLast()) : openAIBaseURL
+        guard let url = URL(string: "\(base)/chat/completions") else {
             throw CorrectionError.networkUnavailable
         }
         return url

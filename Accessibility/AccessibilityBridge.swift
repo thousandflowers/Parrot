@@ -191,12 +191,14 @@ actor AccessibilityBridge {
             pasteboard.writeObjects([item])
 
             let source = CGEventSource(stateID: .hidSystemState)
-            let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: true)
-            let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: false)
-            keyDown?.flags = CGEventFlags.maskCommand
-            keyUp?.flags = CGEventFlags.maskCommand
-            keyDown?.post(tap: CGEventTapLocation.cghidEventTap)
-            keyUp?.post(tap: CGEventTapLocation.cghidEventTap)
+            guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: true),
+                  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: false) else {
+                return
+            }
+            keyDown.flags = CGEventFlags.maskCommand
+            keyUp.flags = CGEventFlags.maskCommand
+            keyDown.post(tap: CGEventTapLocation.cghidEventTap)
+            keyUp.post(tap: CGEventTapLocation.cghidEventTap)
 
             if !originalItems.isEmpty {
                 let restoreCount = pasteboard.changeCount

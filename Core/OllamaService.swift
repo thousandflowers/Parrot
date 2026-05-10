@@ -14,7 +14,8 @@ final class OllamaService: LLMService, Sendable {
     }
 
     private func chatURL() throws -> URL {
-        guard let url = URL(string: "\(ollamaBaseURL)/v1/chat/completions") else {
+        let base = ollamaBaseURL.hasSuffix("/") ? String(ollamaBaseURL.dropLast()) : ollamaBaseURL
+        guard let url = URL(string: "\(base)/v1/chat/completions") else {
             throw CorrectionError.networkUnavailable
         }
         return url
