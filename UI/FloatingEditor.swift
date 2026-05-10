@@ -153,7 +153,7 @@ struct FloatingEditorView: View {
         correctedText = ""
         checkTask?.cancel()
 
-        let task = Task {
+        let task = Task { @MainActor in
             do {
                 let bundleID = await AccessibilityBridge.shared.frontAppBundleID()
                 let resolved = await MainActor.run {

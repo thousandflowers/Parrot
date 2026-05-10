@@ -180,7 +180,6 @@ actor AccessibilityBridge {
 
         await MainActor.run {
             let pasteboard = NSPasteboard.general
-            let originalChangeCount = pasteboard.changeCount
             var originalItems: [NSPasteboardItem] = []
             if let items = pasteboard.pasteboardItems {
                 originalItems = items
@@ -200,7 +199,7 @@ actor AccessibilityBridge {
             keyUp?.post(tap: CGEventTapLocation.cghidEventTap)
 
             if !originalItems.isEmpty {
-                let expectedChangeCount = originalChangeCount + 1
+                let restoreCount = pasteboard.changeCount
                 let pasteboardData: [(String, Data)] = originalItems.compactMap { item in
                     let types = item.types
                     guard !types.isEmpty,
@@ -210,7 +209,7 @@ actor AccessibilityBridge {
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(800)) {
                     let pb = NSPasteboard.general
-                    guard pb.changeCount == expectedChangeCount else { return }
+                    guard pb.changeCount == restoreCount else { return }
                     pb.clearContents()
                     for (rawType, data) in pasteboardData {
                         let item = NSPasteboardItem()
