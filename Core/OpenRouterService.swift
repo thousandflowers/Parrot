@@ -70,7 +70,8 @@ final class OpenRouterService: LLMService, Sendable {
     func correctFluency(text: String) async throws -> CorrectionResult {
         let engine = PromptEngine(language: language)
         let prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
-        guard let apiKey = try? KeychainService.shared.load(for: "openrouter"), !apiKey.isEmpty else {
+        let apiKey = openRouterAPIKey()
+        guard !apiKey.isEmpty else {
             throw CorrectionError.invalidAPIKey
         }
         let model = openRouterModel
@@ -89,7 +90,8 @@ final class OpenRouterService: LLMService, Sendable {
     func explain(original: String, corrected: String) async throws -> String {
         let engine = PromptEngine(language: language)
         let prompt = engine.buildExplainPrompt(original: original, corrected: corrected, customInstruction: nil)
-        guard let apiKey = try? KeychainService.shared.load(for: "openrouter"), !apiKey.isEmpty else {
+        let apiKey = openRouterAPIKey()
+        guard !apiKey.isEmpty else {
             throw CorrectionError.invalidAPIKey
         }
 
@@ -107,7 +109,8 @@ final class OpenRouterService: LLMService, Sendable {
                 do {
                     let engine = PromptEngine(language: language)
                     let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-                    guard let apiKey = try? KeychainService.shared.load(for: "openrouter"), !apiKey.isEmpty else {
+                    let apiKey = openRouterAPIKey()
+        guard !apiKey.isEmpty else {
                         throw CorrectionError.invalidAPIKey
                     }
 

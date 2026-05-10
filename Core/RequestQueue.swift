@@ -46,6 +46,7 @@ actor RequestQueue {
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 box.lock.lock(); box.continuation = continuation; box.lock.unlock()
+                guard !box.isResumed else { return }
                 let request = LLMRequest(
                     text: text,
                     promptType: type,
@@ -145,6 +146,13 @@ final class ContinuationBox<T>: @unchecked Sendable {
     var continuation: CheckedContinuation<T, Error>?
     private var _resumed = false
     let lock = NSLock()
+
+    var isResumed: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return _resumed
+    }
+
     func resume(throwing error: Error) {
         let cont: CheckedContinuation<T, Error>?
         lock.lock()
@@ -187,6 +195,7 @@ func withTimeout<T>(
     return try await withTaskCancellationHandler {
         try await withCheckedThrowingContinuation { continuation in
             box.lock.lock(); box.continuation = continuation; box.lock.unlock()
+            guard !box.isResumed else { return }
             operationTask = Task {
                 do {
                     let result = try await operation()

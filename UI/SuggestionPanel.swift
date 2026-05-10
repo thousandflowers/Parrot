@@ -25,7 +25,7 @@ final class SuggestionPanelController {
         let frame = screen.visibleFrame
         let clampedX = max(frame.minX, min(frame.maxX - size.width, origin.x))
         let clampedY = max(frame.minY, min(frame.maxY - size.height, origin.y))
-        return NSPoint(x: max(frame.minX, clampedX), y: max(frame.minY, clampedY))
+        return NSPoint(x: clampedX, y: clampedY)
     }
 
     func show(result: CorrectionResult) {

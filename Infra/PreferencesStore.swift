@@ -25,15 +25,13 @@ final class PreferencesStore {
     }
 
     private func seedDefaults() {
+        let hasModel = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID)?.isEmpty == false
+            || !downloadedModels().isEmpty
         if UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.serviceType) == nil {
-            let hasModel = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID)?.isEmpty == false
-                || !downloadedModels().isEmpty
             UserDefaults.standard.set(hasModel ? ServiceType.local.rawValue : ServiceType.stub.rawValue,
                                        forKey: Constants.UserDefaultsKey.serviceType)
         }
         if UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.fluencyServiceType) == nil {
-            let hasModel = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID)?.isEmpty == false
-                || !downloadedModels().isEmpty
             UserDefaults.standard.set(hasModel ? ServiceType.local.rawValue : ServiceType.stub.rawValue,
                                        forKey: Constants.UserDefaultsKey.fluencyServiceType)
         }

@@ -18,17 +18,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let replyLock = NSLock()
+        nonisolated(unsafe) var didReply = false
+        let replyOnce: @Sendable () -> Void = {
+            replyLock.lock()
+            defer { replyLock.unlock() }
+            guard !didReply else { return }
+            didReply = true
+            DispatchQueue.main.async {
+                NSApp.reply(toApplicationShouldTerminate: true)
+            }
+        }
         let timeoutTask = Task {
             try? await Task.sleep(for: .seconds(10))
-            await MainActor.run { NSApp.reply(toApplicationShouldTerminate: true) }
+            replyOnce()
         }
         Task {
             await ServerManager.shared.stop()
             await ServerHealthMonitor.shared.stopMonitoring()
             timeoutTask.cancel()
-            await MainActor.run {
-                NSApp.reply(toApplicationShouldTerminate: true)
-            }
+            replyOnce()
         }
         return .terminateLater
     }
