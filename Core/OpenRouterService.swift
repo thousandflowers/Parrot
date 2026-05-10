@@ -10,8 +10,16 @@ final class OpenRouterService: LLMService, Sendable {
     nonisolated private var openRouterModel: String {
         UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openRouterModel) ?? "openai/gpt-4o-mini"
     }
-    nonisolated private var openRouterAPIKey: String {
-        (try? KeychainService.shared.load(for: "openrouter")) ?? ""
+    private nonisolated(unsafe) var cachedAPIKey: String?
+    private nonisolated(unsafe) var lastAPIKeyTime: Date = .distantPast
+    private func openRouterAPIKey() -> String {
+        let now = Date()
+        if let cached = cachedAPIKey, now.timeIntervalSince(lastAPIKeyTime) < 60 {
+            return cached
+        }
+        cachedAPIKey = (try? KeychainService.shared.load(for: "openrouter")) ?? ""
+        lastAPIKeyTime = now
+        return cachedAPIKey ?? ""
     }
 
     private func chatURL() throws -> URL {
@@ -34,7 +42,8 @@ final class OpenRouterService: LLMService, Sendable {
     func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
         let engine = PromptEngine(language: language)
         let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-        guard let apiKey = try? KeychainService.shared.load(for: "openrouter"), !apiKey.isEmpty else {
+        let apiKey = openRouterAPIKey()
+        guard !apiKey.isEmpty else {
             throw CorrectionError.invalidAPIKey
         }
         let model = openRouterModel

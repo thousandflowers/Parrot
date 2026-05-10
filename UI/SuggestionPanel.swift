@@ -173,7 +173,11 @@ final class SuggestionPanelController {
                         corrected: current.correctedText
                     )
                 }
-                guard !Task.isCancelled, !result.isEmpty, let panel = self.panel else { return }
+                guard !Task.isCancelled, let panel = self.panel else { return }
+                guard !result.isEmpty else {
+                    self.showError(.outputParsingFailed(raw: "empty explanation"))
+                    return
+                }
 
                 let alert = NSAlert()
                 alert.messageText = "Spiegazione"

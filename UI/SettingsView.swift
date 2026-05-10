@@ -368,13 +368,8 @@ private struct OpenRouterKeyField: View {
             .onAppear {
                 localKey = prefs.openRouterAPIKey
             }
-            .onChange(of: isFocused) { _, focused in
-                if !focused {
-                    prefs.openRouterAPIKey = localKey
-                }
-            }
-            .onSubmit {
-                prefs.openRouterAPIKey = localKey
+            .onChange(of: localKey) { _, newValue in
+                prefs.openRouterAPIKey = newValue
             }
     }
 }

@@ -154,6 +154,7 @@ struct FloatingEditorView: View {
         checkTask?.cancel()
 
         let task = Task { @MainActor in
+            defer { self.isLoading = false }
             do {
                 let bundleID = await AccessibilityBridge.shared.frontAppBundleID()
                 let resolved = await MainActor.run {

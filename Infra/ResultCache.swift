@@ -17,10 +17,8 @@ actor ResultCache: Sendable {
         let byteSize: Int
     }
 
-    /// Generates a fixed-size hash key from text, preventing memory waste from long text keys.
     private func key(for text: String) -> String {
-        guard let data = text.data(using: .utf8) else { return text }
-        return SHA256.hash(data: data).compactMap { String(format: "%02x", $0) }.joined()
+        String(text.hashValue)
     }
 
     func get(for text: String, modelID: String) -> CorrectionResult? {

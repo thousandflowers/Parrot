@@ -31,8 +31,9 @@ actor ModelManager: Sendable {
 
     nonisolated var currentModelPath: String? {
         let id = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID) ?? ""
-        if !id.isEmpty {
-            let path = modelsDir.appendingPathComponent("\(id).gguf").path(percentEncoded: false)
+        let cleanID = id.hasSuffix(".gguf") ? String(id.dropLast(5)) : id
+        if !cleanID.isEmpty {
+            let path = modelsDir.appendingPathComponent("\(cleanID).gguf").path(percentEncoded: false)
             if FileManager.default.fileExists(atPath: path) {
                 return path
             }
@@ -91,9 +92,9 @@ actor ModelManager: Sendable {
     }
 
     private func mirrorURL(for url: URL) -> URL? {
-        guard let host = url.host, host.contains("huggingface.co") else { return nil }
+        guard let host = url.host, host.contains(Constants.huggingFaceHost) else { return nil }
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        components?.host = "hf-mirror.com"
+        components?.host = Constants.huggingFaceMirrorHost
         return components?.url
     }
 

@@ -7,8 +7,17 @@ enum Constants {
     static let cacheTTL: TimeInterval = 3600
     static let cacheMaxEntries = 100
     static let maxRetries = 3
-    static let huggingFaceMirror = "https://hf-mirror.com"
-    static let huggingFaceMain = "https://huggingface.co"
+    static let huggingFaceHost = "huggingface.co"
+    static let huggingFaceMirrorHost = "hf-mirror.com"
+    static let grammarTemperature: Double = 0.1
+    static let fluencyTemperature: Double = 0.3
+    static let defaultConfidence: Double = 0.9
+    static let explainMaxTokens = 512
+    static let defaultMaxTokens = 1024
+    static let defaultContextSize = 4096
+    static let serverHealthAttempts = 20
+    static let queueTimeout: TimeInterval = 60
+    static let cacheMaxMemoryBytes = 10 * 1024 * 1024
 
     static let securityExcludedBundleIDs: Set<String> = [
         "com.1password.1password",

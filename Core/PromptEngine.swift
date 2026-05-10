@@ -75,7 +75,14 @@ struct PromptEngine {
     }
 
     private func escapeForPrompt(_ text: String) -> String {
-        text.replacingOccurrences(of: "</TEXT>", with: "<\\/TEXT>")
+        var escaped = text
+        if escaped.contains("</TEXT>") {
+            escaped = escaped.replacingOccurrences(of: "</TEXT>", with: "<\\/TEXT>")
+        }
+        if escaped.contains("</CUSTOM>") {
+            escaped = escaped.replacingOccurrences(of: "</CUSTOM>", with: "<\\/CUSTOM>")
+        }
+        return escaped
     }
 
     func buildGrammarPrompt(for text: String, customInstruction: String? = nil) -> String {

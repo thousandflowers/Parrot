@@ -200,12 +200,10 @@ actor AccessibilityBridge {
 
             if !originalItems.isEmpty {
                 let restoreCount = pasteboard.changeCount
-                let pasteboardData: [(String, Data)] = originalItems.compactMap { item in
-                    let types = item.types
-                    guard !types.isEmpty,
-                          let type = types.first,
-                          let data = item.data(forType: type) else { return nil }
-                    return (type.rawValue, data)
+                let pasteboardData: [(String, Data)] = originalItems.flatMap { item in
+                    item.types.compactMap { type in
+                        item.data(forType: type).map { (type.rawValue, $0) }
+                    }
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(800)) {
                     let pb = NSPasteboard.general

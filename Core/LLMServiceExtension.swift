@@ -12,7 +12,7 @@ extension LLMService {
         } catch is CorrectionError {
             throw CorrectionError.outputParsingFailed(raw: String(data: data, encoding: .utf8) ?? "nil")
         } catch {
-            throw CorrectionError.outputParsingFailed(raw: error.localizedDescription)
+            throw CorrectionError.outputParsingFailed(raw: String(data: data, encoding: .utf8) ?? error.localizedDescription)
         }
         guard let choices = json["choices"] as? [[String: Any]],
               let first = choices.first,
