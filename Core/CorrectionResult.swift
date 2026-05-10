@@ -62,15 +62,20 @@ struct CorrectionResult: Identifiable, Codable, Sendable {
         }
 
         var ops: [DiffOp] = []
+        var origIdx = 0
 
         for change in diff {
             switch change {
-            case .insert(let wordOffset, let word, _):
-                let charOffset = wordOffset < charOffsets.count ? charOffsets[wordOffset] : charOffsets.last ?? 0
-                ops.append(DiffOp(type: .insert, offset: charOffset, length: word.count, replacement: String(word)))
             case .remove(let wordOffset, let word, _):
-                let charOffset = wordOffset < charOffsets.count ? charOffsets[wordOffset] : charOffsets.last ?? 0
+                while origIdx < wordOffset && origIdx < charOffsets.count {
+                    origIdx += 1
+                }
+                let charOffset = origIdx < charOffsets.count ? charOffsets[origIdx] : charOffsets.last ?? 0
                 ops.append(DiffOp(type: .delete, offset: charOffset, length: word.count, replacement: nil))
+                origIdx += 1
+            case .insert(_, let word, _):
+                let charOffset = origIdx < charOffsets.count ? charOffsets[origIdx] : charOffsets.last ?? 0
+                ops.append(DiffOp(type: .insert, offset: charOffset, length: word.count, replacement: String(word)))
             }
         }
 

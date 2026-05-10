@@ -18,9 +18,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let timeoutTask = Task {
+            try? await Task.sleep(for: .seconds(10))
+            await MainActor.run { NSApp.reply(toApplicationShouldTerminate: true) }
+        }
         Task {
             await ServerManager.shared.stop()
             await ServerHealthMonitor.shared.stopMonitoring()
+            timeoutTask.cancel()
             await MainActor.run {
                 NSApp.reply(toApplicationShouldTerminate: true)
             }

@@ -54,9 +54,11 @@ final class StubLLMService: LLMService, Sendable {
             let task = Task {
                 let words = text.components(separatedBy: " ")
                 for (i, word) in words.enumerated() {
+                    guard !Task.isCancelled else { return }
                     continuation.yield(word + (i < words.count - 1 ? " " : ""))
                     try? await Task.sleep(for: .milliseconds(30))
                 }
+                guard !Task.isCancelled else { return }
                 continuation.finish()
             }
             continuation.onTermination = { _ in

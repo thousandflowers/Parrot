@@ -131,26 +131,28 @@ actor AccessibilityBridge {
         let systemAX = AXUIElementCreateSystemWide()
 
         var frontAppRef: CFTypeRef?
-        AXUIElementCopyAttributeValue(
+        let appResult = AXUIElementCopyAttributeValue(
             systemAX,
             kAXFocusedApplicationAttribute as CFString,
             &frontAppRef
         )
 
-        guard let frontApp = frontAppRef,
+        guard appResult == .success,
+              let frontApp = frontAppRef,
               CFGetTypeID(frontApp) == AXUIElementGetTypeID() else {
             throw CorrectionError.noTextSelected
         }
         let frontAppAX = frontApp as! AXUIElement
 
         var focusedRef: CFTypeRef?
-        AXUIElementCopyAttributeValue(
+        let focusResult = AXUIElementCopyAttributeValue(
             frontAppAX,
             kAXFocusedUIElementAttribute as CFString,
             &focusedRef
         )
 
-        guard let focusedElement = focusedRef,
+        guard focusResult == .success,
+              let focusedElement = focusedRef,
               CFGetTypeID(focusedElement) == AXUIElementGetTypeID() else {
             throw CorrectionError.noTextSelected
         }
