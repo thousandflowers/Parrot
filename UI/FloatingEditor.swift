@@ -152,9 +152,10 @@ struct FloatingEditorView: View {
         errorMessage = nil
         correctedText = ""
         checkTask?.cancel()
-
-        let task = Task { @MainActor in
-            defer { self.isLoading = false }
+        checkTask = Task { @MainActor in
+            defer {
+                if !Task.isCancelled { self.isLoading = false }
+            }
             do {
                 let bundleID = await AccessibilityBridge.shared.frontAppBundleID()
                 let resolved = await MainActor.run {
@@ -188,13 +189,10 @@ struct FloatingEditorView: View {
                     guard !Task.isCancelled else { return }
                     self.correctedText = result.correctedText
                 }
-                self.isLoading = false
             } catch {
                 guard !Task.isCancelled else { return }
                 self.errorMessage = "Errore: \(error.localizedDescription)"
-                self.isLoading = false
             }
         }
-        checkTask = task
     }
 }

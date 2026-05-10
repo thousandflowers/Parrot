@@ -23,9 +23,9 @@ final class SuggestionPanelController {
     private func clampToScreen(_ origin: NSPoint, size: NSSize) -> NSPoint {
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return origin }
         let frame = screen.visibleFrame
-        let clampedX = min(max(origin.x, frame.minX), frame.maxX - size.width)
-        let clampedY = min(max(origin.y, frame.minY), frame.maxY - size.height)
-        return NSPoint(x: clampedX, y: clampedY)
+        let clampedX = max(frame.minX, min(frame.maxX - size.width, origin.x))
+        let clampedY = max(frame.minY, min(frame.maxY - size.height, origin.y))
+        return NSPoint(x: max(frame.minX, clampedX), y: max(frame.minY, clampedY))
     }
 
     func show(result: CorrectionResult) {

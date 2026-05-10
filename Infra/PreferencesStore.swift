@@ -134,9 +134,17 @@ final class PreferencesStore {
         get { (try? KeychainService.shared.load(for: "openrouter")) ?? "" }
         set {
             if newValue.isEmpty {
-                try? KeychainService.shared.delete(for: "openrouter")
+                do {
+                    try KeychainService.shared.delete(for: "openrouter")
+                } catch {
+                    print("PreferencesStore: failed to delete OpenRouter key: \(error)")
+                }
             } else {
-                try? KeychainService.shared.save(key: newValue, for: "openrouter")
+                do {
+                    try KeychainService.shared.save(key: newValue, for: "openrouter")
+                } catch {
+                    print("PreferencesStore: failed to save OpenRouter key: \(error)")
+                }
             }
         }
     }

@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 
 actor ResultCache: Sendable {
     static let shared = ResultCache()
@@ -18,7 +17,7 @@ actor ResultCache: Sendable {
     }
 
     private func key(for text: String) -> String {
-        String(text.hashValue)
+        text
     }
 
     func get(for text: String, modelID: String) -> CorrectionResult? {
