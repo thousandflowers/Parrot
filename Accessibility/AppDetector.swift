@@ -59,7 +59,7 @@ actor AppDetector {
             return id
         }
 
-        let fallback = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let fallback = await MainActor.run { NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
         cachedBundleID = fallback
         cachedBundleIDTimestamp = Date()
         return fallback

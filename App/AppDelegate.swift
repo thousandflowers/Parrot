@@ -17,24 +17,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         observeFrontmostAppChanges()
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        Task {
+            await ServerManager.shared.stop()
+            await ServerHealthMonitor.shared.stopMonitoring()
+            await MainActor.run {
+                NSApp.reply(toApplicationShouldTerminate: true)
+            }
+        }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         if let observer = frontAppObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
             frontAppObserver = nil
         }
-
-        ProcessInfo.processInfo.disableSuddenTermination()
-
-        let stopped = DispatchGroup()
-        stopped.enter()
-        Task {
-            await ServerManager.shared.stop()
-            await ServerHealthMonitor.shared.stopMonitoring()
-            stopped.leave()
-        }
-        _ = stopped.wait(timeout: .now() + 5)
-
-        ProcessInfo.processInfo.enableSuddenTermination()
     }
 
     private func checkAccessibilityPermissions() {

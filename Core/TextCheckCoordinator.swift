@@ -81,47 +81,54 @@ struct TextCheckCoordinator: Sendable {
         action: @escaping @Sendable (String, (serviceType: ServiceType?, prompt: CustomPrompt?)) async throws -> CorrectionResult,
         onSuccess: @escaping @MainActor (CorrectionResult) -> Void
     ) {
-        let task = Task {
-            do {
-                let text: String
-                let bundleID: String?
-                if let pid = frontAppPID {
-                    text = try await AccessibilityBridge.shared.fetchSelectedText(fromPID: pid)
-                    bundleID = await AppDetector.shared.frontAppBundleID(forPID: pid)
-                } else {
-                    text = try await AccessibilityBridge.shared.fetchSelectedText()
-                    bundleID = await AccessibilityBridge.shared.frontAppBundleID()
-                }
-                guard !text.isEmpty else {
-                    await MainActor.run { SuggestionPanelController.shared.showError(.noTextSelected) }
-                    return
-                }
-
-                if let id = bundleID {
-                    let excluded = await MainActor.run { PreferencesStore.shared.isExcluded(bundleID: id) }
-                    guard !excluded else { return }
-                }
-
-                let resolved = await MainActor.run {
-                    let prefs = PreferencesStore.shared
-                    return RuleResolver.resolve(
-                        appBundleID: bundleID,
-                        customPrompts: prefs.customPrompts,
-                        appRules: prefs.appRules
-                    )
-                }
-
-                let result = try await action(text, resolved)
-                await MainActor.run { onSuccess(result) }
-            } catch let error as CorrectionError {
-                await MainActor.run { SuggestionPanelController.shared.showError(error) }
-            } catch {
-                await MainActor.run { SuggestionPanelController.shared.showError(.outputParsingFailed(raw: error.localizedDescription)) }
-            }
-        }
         pendingState.lock.withLock {
             pendingState.task?.cancel()
-            pendingState.task = task
+            pendingState.task = Task {
+                do {
+                    try Task.checkCancellation()
+                    let text: String
+                    let bundleID: String?
+                    if let pid = frontAppPID {
+                        text = try await AccessibilityBridge.shared.fetchSelectedText(fromPID: pid)
+                        bundleID = await AppDetector.shared.frontAppBundleID(forPID: pid)
+                    } else {
+                        text = try await AccessibilityBridge.shared.fetchSelectedText()
+                        bundleID = await AccessibilityBridge.shared.frontAppBundleID()
+                    }
+                    try Task.checkCancellation()
+                    guard !text.isEmpty else {
+                        await MainActor.run { SuggestionPanelController.shared.showError(.noTextSelected) }
+                        return
+                    }
+
+                    if let id = bundleID {
+                        let excluded = await MainActor.run { PreferencesStore.shared.isExcluded(bundleID: id) }
+                        guard !excluded else { return }
+                    }
+
+                    let resolved = await MainActor.run {
+                        let prefs = PreferencesStore.shared
+                        return RuleResolver.resolve(
+                            appBundleID: bundleID,
+                            customPrompts: prefs.customPrompts,
+                            appRules: prefs.appRules
+                        )
+                    }
+
+                    try Task.checkCancellation()
+                    let result = try await action(text, resolved)
+                    try Task.checkCancellation()
+                    await MainActor.run { onSuccess(result) }
+                } catch is CancellationError {
+                    // swallow — task was cancelled
+                } catch let error as CorrectionError {
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run { SuggestionPanelController.shared.showError(error) }
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run { SuggestionPanelController.shared.showError(.outputParsingFailed(raw: error.localizedDescription)) }
+                }
+            }
         }
     }
 }

@@ -94,9 +94,10 @@ actor LocalLLMService: @preconcurrency LLMService {
                         continuation.yield(fullText)
                     }
                     if fullText.isEmpty {
-                        continuation.yield(text)
+                        continuation.finish(throwing: CorrectionError.outputParsingFailed(raw: "empty"))
+                    } else {
+                        continuation.finish()
                     }
-                    continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
                 }

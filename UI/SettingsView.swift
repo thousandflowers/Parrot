@@ -219,8 +219,9 @@ struct PromptTab: View {
                     }
                 }
                 .onDelete { indexSet in
-                    for idx in indexSet {
-                        prefs.deleteCustomPrompt(prefs.customPrompts[idx])
+                    let toDelete = indexSet.map { prefs.customPrompts[$0] }
+                    for prompt in toDelete {
+                        prefs.deleteCustomPrompt(prompt)
                     }
                 }
             }
@@ -286,8 +287,9 @@ struct AppRulesTab: View {
                     .padding(.vertical, 2)
                 }
                 .onDelete { indexSet in
-                    for idx in indexSet {
-                        prefs.deleteAppRule(prefs.appRules[idx])
+                    let toDelete = indexSet.map { prefs.appRules[$0] }
+                    for rule in toDelete {
+                        prefs.deleteAppRule(rule)
                     }
                 }
             }
@@ -327,8 +329,8 @@ struct ExclusionsTab: View {
                     }
                 }
                 .onDelete { indexSet in
-                    for idx in indexSet {
-                        let id = Array(prefs.excludedBundleIDs).sorted()[idx]
+                    let toDelete = indexSet.map { Array(prefs.excludedBundleIDs).sorted()[$0] }
+                    for id in toDelete {
                         prefs.removeExclusion(id)
                     }
                 }

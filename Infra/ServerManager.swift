@@ -59,15 +59,22 @@ actor ServerManager: Sendable {
             }
             self.process = process
 
-            for healthAttempt in 0..<20 {
-                if await checkServerHealth() { return }
-                let delayMs = min(2000, 250 * Int(pow(2.0, Double(healthAttempt))))
-                try await Task.sleep(for: .milliseconds(delayMs))
-            }
+            do {
+                for healthAttempt in 0..<20 {
+                    if await checkServerHealth() { return }
+                    let delayMs = min(2000, 250 * Int(pow(2.0, Double(healthAttempt))))
+                    try await Task.sleep(for: .milliseconds(delayMs))
+                }
 
-            process.terminate()
-            self.process = nil
-            currentPort = 0
+                process.terminate()
+                self.process = nil
+                currentPort = 0
+            } catch {
+                process.terminate()
+                self.process = nil
+                currentPort = 0
+                throw error
+            }
         }
 
         throw CorrectionError.serverTimeout
@@ -75,7 +82,11 @@ actor ServerManager: Sendable {
 
     func stop() async {
         await ServerHealthMonitor.shared.stopMonitoring()
-        guard let process = process else { return }
+        guard let process = process, process.isRunning else {
+            self.process = nil
+            currentPort = 0
+            return
+        }
         let pid = process.processIdentifier
         process.terminate()
 

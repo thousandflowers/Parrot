@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 actor ServerHealthMonitor: Sendable {
     static let shared = ServerHealthMonitor()
@@ -38,7 +39,9 @@ actor ServerHealthMonitor: Sendable {
                 consecutiveFailures = 0
                 return
             }
-        } catch {}
+        } catch {
+            os_log(.debug, "Health check failed: %{public}@", error.localizedDescription)
+        }
 
         consecutiveFailures += 1
         guard consecutiveFailures <= 3 else {
@@ -49,7 +52,6 @@ actor ServerHealthMonitor: Sendable {
     }
 
     private func restartServer() async {
-        stopMonitoring()
         await ServerManager.shared.stop()
         if let modelPath = ModelManager.shared.currentModelPath {
             do {

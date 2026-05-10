@@ -69,16 +69,16 @@ actor RequestQueue {
 
     private func processQueue() async {
         guard !isProcessing, let request = queue.first else { return }
+        isProcessing = true
 
         if Date() > request.deadline {
             queue.removeFirst()
+            isProcessing = false
             request.box.resume(throwing: CorrectionError.serverTimeout)
             Task { await processQueue() }
             return
         }
 
-        isProcessing = true
-        defer { isProcessing = false }
         queue.removeFirst()
 
         do {
@@ -94,6 +94,7 @@ actor RequestQueue {
             let modelID = resolveModelID(for: serviceType)
 
             if let cached = await ResultCache.shared.get(for: request.text, modelID: modelID) {
+                isProcessing = false
                 request.box.resume(returning: cached)
                 Task { await processQueue() }
                 return
@@ -108,8 +109,10 @@ actor RequestQueue {
 
             let result = try await service.correct(text: request.text, promptType: promptType)
             await ResultCache.shared.set(result, for: request.text, modelID: modelID)
+            isProcessing = false
             request.box.resume(returning: result)
         } catch {
+            isProcessing = false
             guard Date() <= request.deadline else {
                 request.box.resume(throwing: CorrectionError.serverTimeout)
                 Task { await processQueue() }
@@ -143,20 +146,24 @@ final class ContinuationBox<T>: @unchecked Sendable {
     private var _resumed = false
     let lock = NSLock()
     func resume(throwing error: Error) {
+        let cont: CheckedContinuation<T, Error>?
         lock.lock()
-        defer { lock.unlock() }
-        guard !_resumed else { return }
+        guard !_resumed else { lock.unlock(); return }
         _resumed = true
-        continuation?.resume(throwing: error)
+        cont = continuation
         continuation = nil
+        lock.unlock()
+        cont?.resume(throwing: error)
     }
     func resume(returning value: T) {
+        let cont: CheckedContinuation<T, Error>?
         lock.lock()
-        defer { lock.unlock() }
-        guard !_resumed else { return }
+        guard !_resumed else { lock.unlock(); return }
         _resumed = true
-        continuation?.resume(returning: value)
+        cont = continuation
         continuation = nil
+        lock.unlock()
+        cont?.resume(returning: value)
     }
 }
 
@@ -175,7 +182,7 @@ func withTimeout<T>(
             // Timeout task cancelled, body already completed
         }
     }
-    defer { timeoutTask.cancel() }
+    defer { timeoutTask.cancel(); operationTask?.cancel() }
 
     return try await withTaskCancellationHandler {
         try await withCheckedThrowingContinuation { continuation in

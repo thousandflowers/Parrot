@@ -74,16 +74,21 @@ struct PromptEngine {
         }
     }
 
+    private func escapeForPrompt(_ text: String) -> String {
+        text.replacingOccurrences(of: "</TEXT>", with: "<\\/TEXT>")
+    }
+
     func buildGrammarPrompt(for text: String, customInstruction: String? = nil) -> String {
         let extra = grammarFamilyInstruction
         let styleLine = styleInstruction
+        let safeText = escapeForPrompt(text)
         var header = "Fix only grammar/spelling for correctness; no style/fluency edits."
         if !extra.isEmpty { header += "\n\(extra)" }
         if !styleLine.isEmpty { header += "\n\(styleLine)" }
         return """
         \(header)
 
-        <TEXT>\(text)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
+        <TEXT>\(safeText)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
 
         Output only the corrected text; no notes. Do not include <TEXT>/<CUSTOM> tags.
         """
@@ -91,12 +96,13 @@ struct PromptEngine {
 
     func buildFluencyPrompt(for text: String, customInstruction: String? = nil) -> String {
         let styleLine = styleInstruction
+        let safeText = escapeForPrompt(text)
         var header = "Improve fluency and naturalness only; do not fix grammar already correct."
         if !styleLine.isEmpty { header += "\n\(styleLine)" }
         return """
         \(header)
 
-        <TEXT>\(text)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
+        <TEXT>\(safeText)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
 
         Output only the corrected text; no notes. Do not include <TEXT>/<CUSTOM> tags.
         """
@@ -104,6 +110,8 @@ struct PromptEngine {
 
     func buildExplainPrompt(original: String, corrected: String, customInstruction: String? = nil) -> String {
         let styleLine = styleInstruction
+        let safeOriginal = escapeForPrompt(original)
+        let safeCorrected = escapeForPrompt(corrected)
         var header = "Explain the grammar, spelling, or style errors in the original text."
         header += "\nBe educational but concise."
         header += "\nExplain in \(language)."
@@ -112,9 +120,9 @@ struct PromptEngine {
         \(header)
 
         Original:
-        <TEXT>\(original)</TEXT>
+        <TEXT>\(safeOriginal)</TEXT>
         Corrected:
-        <TEXT>\(corrected)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
+        <TEXT>\(safeCorrected)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
 
         Output only your explanation. Do not include <TEXT>/<CUSTOM> tags.
         """
@@ -131,11 +139,12 @@ struct PromptEngine {
         case .fluency:
             return buildFluencyPrompt(for: text, customInstruction: customInstruction)
         case .explain:
+            let safeText = escapeForPrompt(text)
             os_log(.debug, "buildPrompt called with .explain — use buildExplainPrompt(original:corrected:) directly")
             return """
             Explain any errors in the following text.
 
-            <TEXT>\(text)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
+            <TEXT>\(safeText)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
 
             Output only your explanation. Do not include <TEXT>/<CUSTOM> tags.
             """

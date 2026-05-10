@@ -48,6 +48,7 @@ extension LLMService {
         }
 
         var lastError: Error?
+        // maxRetries controls total attempts (retries = maxRetries - 1)
         for attempt in 0..<Constants.maxRetries {
             do {
                 let (data, response) = try await URLSession.shared.data(for: request)
@@ -141,6 +142,7 @@ extension LLMService {
                     }
                     try handleOpenAIHTTPStatus(httpResponse.statusCode, data: Data())
 
+                    var skippedChunks = 0
                     for try await line in bytes.lines {
                         guard line.hasPrefix("data: ") else { continue }
                         let jsonStr = String(line.dropFirst(6))
@@ -155,6 +157,7 @@ extension LLMService {
                               let delta = first["delta"] as? [String: Any],
                               let content = delta["content"] as? String else {
                             if !jsonStr.isEmpty && jsonStr != "[DONE]" {
+                                skippedChunks += 1
                                 os_log(.debug, "Stream: unparseable chunk: %{public}@", jsonStr.prefix(80) as NSString)
                             }
                             continue
