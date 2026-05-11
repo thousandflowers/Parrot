@@ -56,7 +56,11 @@ extension LLMService {
                     throw CorrectionError.networkUnavailable
                 }
                 try handleOpenAIHTTPStatus(httpResponse.statusCode, data: data)
-                return try parseResponse(data: data)
+                let result = try parseResponse(data: data)
+                guard !result.isEmpty else {
+                    throw CorrectionError.outputParsingFailed(raw: "empty")
+                }
+                return result
             } catch is CancellationError {
                 throw CancellationError()
             } catch let error as CorrectionError {
@@ -101,9 +105,42 @@ extension LLMService {
     func handleOpenAIHTTPStatus(_ statusCode: Int, data: Data) throws {
         switch statusCode {
         case 200: return
+        case 401, 403: throw CorrectionError.invalidAPIKey
+        case 429: throw CorrectionError.rateLimited
         case 500, 502, 503: throw CorrectionError.serverTimeout
         default: throw CorrectionError.outputParsingFailed(raw: "HTTP \(statusCode)")
         }
+    }
+
+    nonisolated var resolvedLanguage: String {
+        UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.language) ?? "it"
+    }
+
+    func performCorrection(
+        text: String,
+        promptType: PromptType,
+        model: String,
+        url: URL,
+        apiKey: String?,
+        extraHeaders: [String: String] = [:]
+    ) async throws -> CorrectionResult {
+        let engine = PromptEngine(language: resolvedLanguage)
+        let prompt: String
+        let temperature: Double
+        switch promptType {
+        case .fluency:
+            prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
+            temperature = Constants.fluencyTemperature
+        default:
+            prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
+            temperature = Constants.grammarTemperature
+        }
+        let corrected = try await performOpenAIRequest(
+            body: chatBody(model: model, prompt: prompt, temperature: temperature),
+            url: url, apiKey: apiKey, extraHeaders: extraHeaders
+        )
+        return CorrectionResult(original: text, corrected: corrected,
+            modelID: model, confidence: Constants.defaultConfidence, promptType: promptType.label)
     }
 
     func chatBody(model: String, prompt: String,

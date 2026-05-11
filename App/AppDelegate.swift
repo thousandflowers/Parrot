@@ -15,6 +15,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         warnFailedShortcuts()
 
         observeFrontmostAppChanges()
+
+        if UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.autoCheckEnabled) {
+            Task { await RealtimeMonitor.shared.start() }
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -34,6 +38,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             replyOnce()
         }
         Task {
+            await RealtimeMonitor.shared.stop()
             await ServerManager.shared.stop()
             await ServerHealthMonitor.shared.stopMonitoring()
             timeoutTask.cancel()
@@ -79,6 +84,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
             AccessibilityBridge.lastKnownFrontAppPID = app.processIdentifier
+            Task { await RealtimeMonitor.shared.frontAppChanged() }
         }
     }
 

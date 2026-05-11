@@ -4,9 +4,6 @@ import os
 final class RemoteLLMService: LLMService, Sendable {
     static let shared = RemoteLLMService()
 
-    nonisolated private var language: String {
-        UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.language) ?? "it"
-    }
     nonisolated private var openAIBaseURL: String {
         UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openAIBaseURL) ?? "https://api.openai.com/v1"
     }
@@ -22,16 +19,6 @@ final class RemoteLLMService: LLMService, Sendable {
         return url
     }
 
-    func handleOpenAIHTTPStatus(_ statusCode: Int, data: Data) throws {
-        switch statusCode {
-        case 200: return
-        case 401, 403: throw CorrectionError.invalidAPIKey
-        case 429: throw CorrectionError.rateLimited
-        case 500, 502, 503: throw CorrectionError.serverTimeout
-        default: throw CorrectionError.outputParsingFailed(raw: "HTTP \(statusCode)")
-        }
-    }
-
     private func loadAPIKey() throws -> String {
         do {
             return try KeychainService.shared.load(for: "openai")
@@ -45,45 +32,21 @@ final class RemoteLLMService: LLMService, Sendable {
     }
 
     func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
-        let engine = PromptEngine(language: language)
-        let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
         let apiKey = try loadAPIKey()
-        guard !apiKey.isEmpty else {
-            throw CorrectionError.invalidAPIKey
-        }
-        let model = openAIModel
-
-        let corrected = try await performOpenAIRequest(
-            body: chatBody(model: model, prompt: prompt, temperature: Constants.grammarTemperature),
-            url: try chatURL(),
-            apiKey: apiKey
-        )
-        guard !corrected.isEmpty else { throw CorrectionError.outputParsingFailed(raw: "empty") }
-        return CorrectionResult(original: text, corrected: corrected,
-                               modelID: model, confidence: Constants.defaultConfidence, promptType: promptType.label)
+        guard !apiKey.isEmpty else { throw CorrectionError.invalidAPIKey }
+        return try await performCorrection(text: text, promptType: promptType,
+            model: openAIModel, url: try chatURL(), apiKey: apiKey)
     }
 
     func correctFluency(text: String) async throws -> CorrectionResult {
-        let engine = PromptEngine(language: language)
-        let prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
         let apiKey = try loadAPIKey()
-        guard !apiKey.isEmpty else {
-            throw CorrectionError.invalidAPIKey
-        }
-        let model = openAIModel
-
-        let corrected = try await performOpenAIRequest(
-            body: chatBody(model: model, prompt: prompt, temperature: Constants.fluencyTemperature),
-            url: try chatURL(),
-            apiKey: apiKey
-        )
-        guard !corrected.isEmpty else { throw CorrectionError.outputParsingFailed(raw: "empty") }
-        return CorrectionResult(original: text, corrected: corrected,
-                               modelID: model, confidence: Constants.defaultConfidence, promptType: "fluency")
+        guard !apiKey.isEmpty else { throw CorrectionError.invalidAPIKey }
+        return try await performCorrection(text: text, promptType: .fluency,
+            model: openAIModel, url: try chatURL(), apiKey: apiKey)
     }
 
     func explain(original: String, corrected: String) async throws -> String {
-        let engine = PromptEngine(language: language)
+        let engine = PromptEngine(language: resolvedLanguage)
         let prompt = engine.buildExplainPrompt(original: original, corrected: corrected, customInstruction: nil)
         let apiKey = try loadAPIKey()
         guard !apiKey.isEmpty else {
@@ -101,7 +64,7 @@ final class RemoteLLMService: LLMService, Sendable {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let engine = PromptEngine(language: language)
+                    let engine = PromptEngine(language: resolvedLanguage)
                     let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
                     let apiKey = try loadAPIKey()
                     guard !apiKey.isEmpty else {

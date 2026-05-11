@@ -96,6 +96,18 @@ final class PreferencesStore {
         set { UserDefaults.standard.set(newValue, forKey: Constants.UserDefaultsKey.isFluencyCheckingEnabled) }
     }
 
+    var realtimeEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.realtimeEnabled) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Constants.UserDefaultsKey.realtimeEnabled)
+            if newValue {
+                Task { await RealtimeMonitor.shared.start() }
+            } else {
+                Task { await RealtimeMonitor.shared.stop() }
+            }
+        }
+    }
+
     var fluencyServiceType: ServiceType {
         get {
             guard let raw = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.fluencyServiceType),

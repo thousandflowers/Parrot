@@ -97,6 +97,8 @@ struct GeneralTab: View {
 
             Section("Scorciatoie") {
                 Toggle("Controllo automatico", isOn: $prefs.autoCheckEnabled)
+                Toggle("Controllo in tempo reale", isOn: $prefs.realtimeEnabled)
+                    .disabled(!prefs.autoCheckEnabled)
                 Text("Cmd+Shift+E — Controlla selezione").font(.caption).foregroundColor(.secondary)
                 Text("Cmd+Shift+T — Controlla fluidita").font(.caption).foregroundColor(.secondary)
                 Text("Cmd+Shift+F — Apri editor").font(.caption).foregroundColor(.secondary)

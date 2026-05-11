@@ -43,5 +43,6 @@ enum Constants {
         static let ollamaBaseURL = "ollamaBaseURL"
         static let ollamaModel = "ollamaModel"
         static let openRouterModel = "openRouterModel"
+        static let realtimeEnabled = "realtimeEnabled"
     }
 }

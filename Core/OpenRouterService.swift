@@ -5,9 +5,6 @@ final class OpenRouterService: LLMService, Sendable {
     static let shared = OpenRouterService()
     private let baseURLString = "https://openrouter.ai/api/v1/chat/completions"
 
-    nonisolated private var language: String {
-        UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.language) ?? "it"
-    }
     nonisolated private var openRouterModel: String {
         UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openRouterModel) ?? "openai/gpt-4o-mini"
     }
@@ -43,58 +40,24 @@ final class OpenRouterService: LLMService, Sendable {
         return url
     }
 
-    func handleOpenAIHTTPStatus(_ statusCode: Int, data: Data) throws {
-        switch statusCode {
-        case 200: return
-        case 401, 403: throw CorrectionError.invalidAPIKey
-        case 429: throw CorrectionError.rateLimited
-        case 500, 502, 503: throw CorrectionError.serverTimeout
-        default: throw CorrectionError.outputParsingFailed(raw: "HTTP \(statusCode)")
-        }
-    }
-
     func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
-        let engine = PromptEngine(language: language)
-        let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
         let apiKey = openRouterAPIKey()
-        guard !apiKey.isEmpty else {
-            throw CorrectionError.invalidAPIKey
-        }
-        let model = openRouterModel
-
-        let corrected = try await performOpenAIRequest(
-            body: chatBody(model: model, prompt: prompt, temperature: Constants.grammarTemperature),
-            url: try chatURL(),
-            apiKey: apiKey,
-            extraHeaders: ["HTTP-Referer": Constants.bundleID]
-        )
-        guard !corrected.isEmpty else { throw CorrectionError.outputParsingFailed(raw: "empty") }
-        return CorrectionResult(original: text, corrected: corrected,
-                               modelID: model, confidence: Constants.defaultConfidence, promptType: promptType.label)
+        guard !apiKey.isEmpty else { throw CorrectionError.invalidAPIKey }
+        return try await performCorrection(text: text, promptType: promptType,
+            model: openRouterModel, url: try chatURL(), apiKey: apiKey,
+            extraHeaders: ["HTTP-Referer": Constants.bundleID])
     }
 
     func correctFluency(text: String) async throws -> CorrectionResult {
-        let engine = PromptEngine(language: language)
-        let prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
         let apiKey = openRouterAPIKey()
-        guard !apiKey.isEmpty else {
-            throw CorrectionError.invalidAPIKey
-        }
-        let model = openRouterModel
-
-        let corrected = try await performOpenAIRequest(
-            body: chatBody(model: model, prompt: prompt, temperature: Constants.fluencyTemperature),
-            url: try chatURL(),
-            apiKey: apiKey,
-            extraHeaders: ["HTTP-Referer": Constants.bundleID]
-        )
-        guard !corrected.isEmpty else { throw CorrectionError.outputParsingFailed(raw: "empty") }
-        return CorrectionResult(original: text, corrected: corrected,
-                               modelID: model, confidence: Constants.defaultConfidence, promptType: "fluency")
+        guard !apiKey.isEmpty else { throw CorrectionError.invalidAPIKey }
+        return try await performCorrection(text: text, promptType: .fluency,
+            model: openRouterModel, url: try chatURL(), apiKey: apiKey,
+            extraHeaders: ["HTTP-Referer": Constants.bundleID])
     }
 
     func explain(original: String, corrected: String) async throws -> String {
-        let engine = PromptEngine(language: language)
+        let engine = PromptEngine(language: resolvedLanguage)
         let prompt = engine.buildExplainPrompt(original: original, corrected: corrected, customInstruction: nil)
         let apiKey = openRouterAPIKey()
         guard !apiKey.isEmpty else {
@@ -113,7 +76,7 @@ final class OpenRouterService: LLMService, Sendable {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let engine = PromptEngine(language: language)
+                    let engine = PromptEngine(language: resolvedLanguage)
                     let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
                     let apiKey = openRouterAPIKey()
                     guard !apiKey.isEmpty else {

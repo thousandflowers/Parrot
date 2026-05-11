@@ -37,9 +37,16 @@ struct SuggestionView: View {
     private var headerView: some View {
         HStack {
             headerIcon
-            Text(headerTitle)
-                .font(.headline)
-                .foregroundColor(.primary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(headerTitle)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                if let tone = toneLabel {
+                    Text(tone)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
             Spacer()
             Button(action: onDismiss) {
                 Image(systemName: "xmark.circle.fill")
@@ -49,6 +56,20 @@ struct SuggestionView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    private var toneLabel: String? {
+        guard let tone = result?.detectedTone, !tone.isEmpty else { return nil }
+        let display: String
+        switch tone {
+        case "formal": display = "Formale"
+        case "informal": display = "Informale"
+        case "neutral": display = "Neutrale"
+        case "academic": display = "Accademico"
+        case "technical": display = "Tecnico"
+        default: display = tone.capitalized
+        }
+        return "Tono rilevato: \(display)"
     }
 
     @ViewBuilder

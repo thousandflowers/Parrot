@@ -11,62 +11,42 @@ struct TextCheckCoordinator: Sendable {
     private let pendingState = PendingState()
 
     func checkSelectedText() {
-        performCheck { text, resolved in
-            try await RequestQueue.shared.enqueue(
-                text: text,
-                type: .grammar,
-                priority: .manual,
-                overrideServiceType: resolved.serviceType,
-                overrideCustomPrompt: resolved.prompt
-            )
-        } onSuccess: { result in
-            SuggestionPanelController.shared.show(result: result)
-        }
+        check(type: .grammar, show: { SuggestionPanelController.shared.show(result: $0) })
     }
 
     func checkSelectedText(fromPID pid: pid_t) {
-        performCheck(frontAppPID: pid) { text, resolved in
-            try await RequestQueue.shared.enqueue(
-                text: text,
-                type: .grammar,
-                priority: .manual,
-                overrideServiceType: resolved.serviceType,
-                overrideCustomPrompt: resolved.prompt
-            )
-        } onSuccess: { result in
-            SuggestionPanelController.shared.show(result: result)
-        }
+        check(type: .grammar, pid: pid, show: { SuggestionPanelController.shared.show(result: $0) })
     }
 
     func checkFluency() {
         guard UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.isFluencyCheckingEnabled) else { return }
-        performCheck { text, resolved in
-            let serviceType = resolved.serviceType ?? LLMServiceFactory.resolveFluencyServiceType()
-            return try await RequestQueue.shared.enqueue(
-                text: text,
-                type: .fluency,
-                priority: .manual,
-                overrideServiceType: serviceType,
-                overrideCustomPrompt: resolved.prompt
-            )
-        } onSuccess: { result in
-            SuggestionPanelController.shared.showFluency(result: result)
-        }
+        check(type: .fluency, overrideService: true, show: { SuggestionPanelController.shared.showFluency(result: $0) })
     }
 
     func checkFluency(fromPID pid: pid_t) {
         guard UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.isFluencyCheckingEnabled) else { return }
-        performCheck(frontAppPID: pid) { text, resolved in
-            let serviceType = resolved.serviceType ?? LLMServiceFactory.resolveFluencyServiceType()
+        check(type: .fluency, pid: pid, overrideService: true, show: { SuggestionPanelController.shared.showFluency(result: $0) })
+    }
+
+    private func check(
+        type: PromptType,
+        pid: pid_t? = nil,
+        overrideService: Bool = false,
+        show: @escaping @MainActor (CorrectionResult) -> Void
+    ) {
+        performCheck(frontAppPID: pid) { text, resolved, _, _ in
+            let serviceType: ServiceType?
+            if overrideService {
+                serviceType = resolved.serviceType ?? LLMServiceFactory.resolveFluencyServiceType()
+            } else {
+                serviceType = resolved.serviceType
+            }
             return try await RequestQueue.shared.enqueue(
-                text: text,
-                type: .fluency,
-                priority: .manual,
-                overrideServiceType: serviceType,
-                overrideCustomPrompt: resolved.prompt
+                text: text, type: type, priority: .manual,
+                overrideServiceType: serviceType, overrideCustomPrompt: resolved.prompt
             )
         } onSuccess: { result in
-            SuggestionPanelController.shared.showFluency(result: result)
+            show(result)
         }
     }
 
@@ -78,7 +58,7 @@ struct TextCheckCoordinator: Sendable {
 
     private func performCheck(
         frontAppPID: pid_t? = nil,
-        action: @escaping @Sendable (String, (serviceType: ServiceType?, prompt: CustomPrompt?)) async throws -> CorrectionResult,
+        action: @escaping @Sendable (String, (serviceType: ServiceType?, prompt: CustomPrompt?), CFRange?, DetectedTone?) async throws -> CorrectionResult,
         onSuccess: @escaping @MainActor (CorrectionResult) -> Void
     ) {
         pendingState.lock.withLock {
@@ -88,11 +68,25 @@ struct TextCheckCoordinator: Sendable {
                     try Task.checkCancellation()
                     let text: String
                     let bundleID: String?
+                    var replacementRange: CFRange? = nil
                     if let pid = frontAppPID {
-                        text = try await AccessibilityBridge.shared.fetchSelectedText(fromPID: pid)
+                        do {
+                            text = try await AccessibilityBridge.shared.fetchSelectedText(fromPID: pid)
+                        } catch CorrectionError.noTextSelected {
+                            let (fallbackText, range) = try await AccessibilityBridge.shared.fetchTextOrLineAtCursor(fromPID: pid)
+                            text = fallbackText
+                            replacementRange = range
+                        }
                         bundleID = await AppDetector.shared.frontAppBundleID(forPID: pid)
                     } else {
-                        text = try await AccessibilityBridge.shared.fetchSelectedText()
+                        do {
+                            text = try await AccessibilityBridge.shared.fetchSelectedText()
+                        } catch CorrectionError.noTextSelected {
+                            let pid = AccessibilityBridge.lastKnownFrontAppPID
+                            let (fallbackText, range) = try await AccessibilityBridge.shared.fetchTextOrLineAtCursor(fromPID: pid)
+                            text = fallbackText
+                            replacementRange = range
+                        }
                         bundleID = await AccessibilityBridge.shared.frontAppBundleID()
                     }
                     try Task.checkCancellation()
@@ -106,6 +100,9 @@ struct TextCheckCoordinator: Sendable {
                         guard !excluded else { return }
                     }
 
+                    let language = await MainActor.run { PreferencesStore.shared.language }
+                    let detectedTone = await ToneDetector.shared.detect(text: text, language: language)
+
                     let resolved = await MainActor.run {
                         let prefs = PreferencesStore.shared
                         return RuleResolver.resolve(
@@ -116,11 +113,23 @@ struct TextCheckCoordinator: Sendable {
                     }
 
                     try Task.checkCancellation()
-                    let result = try await action(text, resolved)
+                    let rawResult = try await action(text, resolved, replacementRange, detectedTone)
+                    let finalResult: CorrectionResult = {
+                        var r = CorrectionResult(
+                            original: rawResult.originalText,
+                            corrected: rawResult.correctedText,
+                            modelID: rawResult.modelID,
+                            explanation: rawResult.explanation,
+                            confidence: rawResult.confidence,
+                            customInstruction: rawResult.customInstruction,
+                            promptType: rawResult.promptType,
+                            detectedTone: detectedTone.rawValue)
+                        r.replacementRange = replacementRange
+                        return r
+                    }()
                     try Task.checkCancellation()
-                    await MainActor.run { onSuccess(result) }
+                    await MainActor.run { onSuccess(finalResult) }
                 } catch is CancellationError {
-                    // swallow — task was cancelled
                 } catch let error as CorrectionError {
                     guard !Task.isCancelled else { return }
                     await MainActor.run { SuggestionPanelController.shared.showError(error) }

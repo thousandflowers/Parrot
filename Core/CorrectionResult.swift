@@ -1,6 +1,6 @@
 import Foundation
 
-struct CorrectionResult: Identifiable, Codable, Sendable {
+struct CorrectionResult: Identifiable, Sendable, Codable {
     let id: UUID
     let originalText: String
     let correctedText: String
@@ -11,6 +11,15 @@ struct CorrectionResult: Identifiable, Codable, Sendable {
     let modelID: String
     let customInstruction: String?
     let promptType: String
+    let detectedTone: String?
+
+    @_documentation(visibility: internal)
+    var replacementRange: CFRange? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case id, originalText, correctedText, explanation, confidence
+        case diffOperations, timestamp, modelID, customInstruction, promptType, detectedTone
+    }
 
     struct DiffOp: Codable, Sendable {
         enum OpType: String, Codable {
@@ -30,7 +39,9 @@ struct CorrectionResult: Identifiable, Codable, Sendable {
         explanation: String? = nil,
         confidence: Double? = nil,
         customInstruction: String? = nil,
-        promptType: String = ""
+        promptType: String = "",
+        replacementRange: CFRange? = nil,
+        detectedTone: String? = nil
     ) {
         self.id = UUID()
         self.originalText = original
@@ -42,6 +53,8 @@ struct CorrectionResult: Identifiable, Codable, Sendable {
         self.modelID = modelID
         self.customInstruction = customInstruction
         self.promptType = promptType
+        self.replacementRange = replacementRange
+        self.detectedTone = detectedTone
     }
 
     static func computeDiff(original: String, corrected: String) -> [DiffOp]? {
