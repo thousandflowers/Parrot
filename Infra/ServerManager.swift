@@ -31,9 +31,11 @@ actor ServerManager: Sendable {
     func start(modelPath: String) async throws {
         guard process == nil else { return }
         for attempt in 0..<3 {
-            currentPort = try allocatePort()
+            let (port, probeSock) = try allocatePort()
+            currentPort = port
 
             guard let serverURL = Bundle.main.url(forAuxiliaryExecutable: "llama-server") else {
+                close(probeSock)
                 currentPort = 0
                 throw CorrectionError.serverNotRunning
             }
@@ -49,6 +51,8 @@ actor ServerManager: Sendable {
                 "--n-gpu-layers", gpuLayers(),
                 "--flash-attn"
             ]
+
+            close(probeSock)
 
             do {
                 try process.run()
@@ -113,8 +117,7 @@ actor ServerManager: Sendable {
         Task { await stop() }
     }
 
-    /// Allocates a kernel-assigned port via bind(0). Sets SO_REUSEADDR to minimise TIME_WAIT conflicts.
-    private func allocatePort() throws -> Int {
+    private func allocatePort() throws -> (port: Int, socket: Int32) {
         let sock = socket(AF_INET, SOCK_STREAM, 0)
         guard sock >= 0 else { throw CorrectionError.serverNotRunning }
 
@@ -124,7 +127,7 @@ actor ServerManager: Sendable {
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)
         addr.sin_port = 0
-        addr.sin_addr.s_addr = INADDR_LOOPBACK.bigEndian
+        addr.sin_addr.s_addr = INADDR_LOOPBACK
 
         let result = withUnsafePointer(to: &addr) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
@@ -143,8 +146,7 @@ actor ServerManager: Sendable {
         guard getResult == 0 else { close(sock); throw CorrectionError.serverNotRunning }
 
         let port = Int(UInt16(bigEndian: boundAddr.sin_port))
-        close(sock)
-        return port
+        return (port, sock)
     }
 
     /// Auto-detect GPU layers: 999 on 16GB+, 20 on 8-15GB, 0 on <8GB or no Metal GPU

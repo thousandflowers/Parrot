@@ -52,10 +52,6 @@
         },
         {
           "kind" : "file",
-          "name" : "/Users/eugeniozamengopontrelli/RefineClone/Core/CancellationToken.swift"
-        },
-        {
-          "kind" : "file",
           "name" : "/Users/eugeniozamengopontrelli/RefineClone/Core/CorrectionResult.swift"
         },
         {
@@ -181,7 +177,6 @@
         "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppDelegate.swift.o",
         "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/Constants.swift.o",
         "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppRule.swift.o",
-        "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/CancellationToken.swift.o",
         "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/CorrectionResult.swift.o",
         "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/GGUFVersionCheck.swift.o",
         "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/LLMService.swift.o",
@@ -284,10 +279,6 @@
         {
           "kind" : "file",
           "name" : "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppRule.swift.o"
-        },
-        {
-          "kind" : "file",
-          "name" : "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/CancellationToken.swift.o"
         },
         {
           "kind" : "file",
@@ -410,7 +401,6 @@
         "/Users/eugeniozamengopontrelli/RefineClone/App/AppDelegate.swift",
         "/Users/eugeniozamengopontrelli/RefineClone/App/Constants.swift",
         "/Users/eugeniozamengopontrelli/RefineClone/Core/AppRule.swift",
-        "/Users/eugeniozamengopontrelli/RefineClone/Core/CancellationToken.swift",
         "/Users/eugeniozamengopontrelli/RefineClone/Core/CorrectionResult.swift",
         "/Users/eugeniozamengopontrelli/RefineClone/Core/GGUFVersionCheck.swift",
         "/Users/eugeniozamengopontrelli/RefineClone/Core/LLMService.swift",
@@ -649,7 +639,6 @@
       "/Users/eugeniozamengopontrelli/RefineClone/App/AppDelegate.swift",
       "/Users/eugeniozamengopontrelli/RefineClone/App/Constants.swift",
       "/Users/eugeniozamengopontrelli/RefineClone/Core/AppRule.swift",
-      "/Users/eugeniozamengopontrelli/RefineClone/Core/CancellationToken.swift",
       "/Users/eugeniozamengopontrelli/RefineClone/Core/CorrectionResult.swift",
       "/Users/eugeniozamengopontrelli/RefineClone/Core/GGUFVersionCheck.swift",
       "/Users/eugeniozamengopontrelli/RefineClone/Core/LLMService.swift",
@@ -930,10 +919,6 @@
         },
         {
           "kind" : "file",
-          "name" : "/Users/eugeniozamengopontrelli/RefineClone/Core/CancellationToken.swift"
-        },
-        {
-          "kind" : "file",
           "name" : "/Users/eugeniozamengopontrelli/RefineClone/Core/CorrectionResult.swift"
         },
         {
@@ -1069,10 +1054,6 @@
         {
           "kind" : "file",
           "name" : "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppRule.swift.o"
-        },
-        {
-          "kind" : "file",
-          "name" : "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/CancellationToken.swift.o"
         },
         {
           "kind" : "file",
@@ -1229,10 +1210,6 @@
         {
           "kind" : "file",
           "name" : "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppRule.swift.o"
-        },
-        {
-          "kind" : "file",
-          "name" : "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/CancellationToken.swift.o"
         },
         {
           "kind" : "file",

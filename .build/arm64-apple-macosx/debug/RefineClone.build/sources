@@ -4,7 +4,6 @@
 /Users/eugeniozamengopontrelli/RefineClone/App/AppDelegate.swift
 /Users/eugeniozamengopontrelli/RefineClone/App/Constants.swift
 /Users/eugeniozamengopontrelli/RefineClone/Core/AppRule.swift
-/Users/eugeniozamengopontrelli/RefineClone/Core/CancellationToken.swift
 /Users/eugeniozamengopontrelli/RefineClone/Core/CorrectionResult.swift
 /Users/eugeniozamengopontrelli/RefineClone/Core/GGUFVersionCheck.swift
 /Users/eugeniozamengopontrelli/RefineClone/Core/LLMService.swift

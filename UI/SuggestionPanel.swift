@@ -149,8 +149,7 @@ final class SuggestionPanelController {
     private func applyCorrection() {
         guard let result = currentResult else { return }
 
-        Task { [weak self] in
-            guard let self else { return }
+        Task {
             do {
                 try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText)
                 self.close()

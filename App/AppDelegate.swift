@@ -43,10 +43,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        AccessibilityBridge.emergencyClipboardRestore()
         if let observer = frontAppObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
             frontAppObserver = nil
         }
+        PreferencesStore.shared.cleanup()
     }
 
     private func checkAccessibilityPermissions() {
@@ -61,7 +63,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             alert.addButton(withTitle: "Apri Preferenze")
             alert.addButton(withTitle: "OK")
             if alert.runModal() == .alertFirstButtonReturn {
-                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                    NSWorkspace.shared.open(url)
+                }
             }
         }
     }

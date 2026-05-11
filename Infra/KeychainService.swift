@@ -10,9 +10,12 @@ enum KeychainError: Error {
 
 final class KeychainService: Sendable {
     static let shared = KeychainService()
+    private let lock = NSLock()
     private init() {}
 
     func save(key: String, for provider: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
         guard let data = key.data(using: .utf8) else {
             throw KeychainError.encodingFailed
         }
@@ -48,6 +51,8 @@ final class KeychainService: Sendable {
     }
 
     func load(for provider: String) throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
         let service = "\(Constants.bundleID).apikey.\(provider)"
 
         let query: [String: Any] = [
@@ -77,6 +82,8 @@ final class KeychainService: Sendable {
     }
 
     func delete(for provider: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
         let service = "\(Constants.bundleID).apikey.\(provider)"
 
         let query: [String: Any] = [

@@ -33,6 +33,13 @@ actor LocalLLMService: @preconcurrency LLMService {
         return newPort
     }
 
+    private func localChatURL(port: Int) throws -> URL {
+        guard let url = URL(string: "http://127.0.0.1:\(port)/v1/chat/completions") else {
+            throw CorrectionError.serverNotRunning
+        }
+        return url
+    }
+
     func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
         let engine = PromptEngine(language: language)
         let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
@@ -40,7 +47,7 @@ actor LocalLLMService: @preconcurrency LLMService {
 
         let corrected = try await performOpenAIRequest(
             body: chatBody(model: modelName, prompt: prompt, temperature: 0.1),
-            url: URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!,
+            url: try localChatURL(port: port),
             apiKey: nil
         )
         guard !corrected.isEmpty else { throw CorrectionError.outputParsingFailed(raw: "empty") }
@@ -55,7 +62,7 @@ actor LocalLLMService: @preconcurrency LLMService {
 
         let corrected = try await performOpenAIRequest(
             body: chatBody(model: modelName, prompt: prompt, temperature: 0.3),
-            url: URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!,
+            url: try localChatURL(port: port),
             apiKey: nil
         )
         guard !corrected.isEmpty else { throw CorrectionError.outputParsingFailed(raw: "empty") }
@@ -70,7 +77,7 @@ actor LocalLLMService: @preconcurrency LLMService {
 
         return try await performOpenAIRequest(
             body: chatBody(model: modelName, prompt: prompt, systemPrompt: nil, temperature: 0.3, maxTokens: 512),
-            url: URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!,
+            url: try localChatURL(port: port),
             apiKey: nil
         )
     }
@@ -85,7 +92,7 @@ actor LocalLLMService: @preconcurrency LLMService {
 
                     let stream = performOpenAIStreamRequest(
                         body: chatBody(model: modelName, prompt: prompt, temperature: 0.1, stream: true),
-                        url: URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!,
+                        url: try localChatURL(port: port),
                         apiKey: nil
                     )
                     var fullText = ""
@@ -99,6 +106,7 @@ actor LocalLLMService: @preconcurrency LLMService {
                         continuation.finish()
                     }
                 } catch {
+                    guard !Task.isCancelled else { return }
                     continuation.finish(throwing: error)
                 }
             }

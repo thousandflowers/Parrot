@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 final class OpenRouterService: LLMService, Sendable {
     static let shared = OpenRouterService()
@@ -17,16 +18,19 @@ final class OpenRouterService: LLMService, Sendable {
     private func openRouterAPIKey() -> String {
         let now = Date()
         apiKeyLock.lock()
+        defer { apiKeyLock.unlock() }
         if let cached = _cachedAPIKey, now.timeIntervalSince(_lastAPIKeyTime) < 60 {
-            defer { apiKeyLock.unlock() }
             return cached
         }
-        apiKeyLock.unlock()
-        let key = (try? KeychainService.shared.load(for: "openrouter")) ?? ""
-        apiKeyLock.lock()
+        let key: String
+        do {
+            key = try KeychainService.shared.load(for: "openrouter")
+        } catch {
+            os_log(.debug, "Keychain load openrouter: %{public}@", error.localizedDescription)
+            key = ""
+        }
         _cachedAPIKey = key
         _lastAPIKeyTime = now
-        apiKeyLock.unlock()
         return key
     }
 
@@ -110,7 +114,7 @@ final class OpenRouterService: LLMService, Sendable {
                     let engine = PromptEngine(language: language)
                     let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
                     let apiKey = openRouterAPIKey()
-        guard !apiKey.isEmpty else {
+                    guard !apiKey.isEmpty else {
                         throw CorrectionError.invalidAPIKey
                     }
 
@@ -131,6 +135,7 @@ final class OpenRouterService: LLMService, Sendable {
                         continuation.finish()
                     }
                 } catch {
+                    guard !Task.isCancelled else { return }
                     continuation.finish(throwing: error)
                 }
             }

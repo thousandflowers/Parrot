@@ -18,6 +18,7 @@ enum Constants {
     static let serverHealthAttempts = 20
     static let queueTimeout: TimeInterval = 60
     static let cacheMaxMemoryBytes = 10 * 1024 * 1024
+    static let maxTextLength = 8000
 
     static let securityExcludedBundleIDs: Set<String> = [
         "com.1password.1password",

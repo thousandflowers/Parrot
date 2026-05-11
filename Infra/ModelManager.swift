@@ -1,5 +1,6 @@
 import Foundation
-
+import CryptoKit
+import os
 
 struct ModelRecommendation: Sendable {
     let id: String
@@ -25,7 +26,10 @@ actor ModelManager: Sendable {
     static let shared = ModelManager()
 
     private let modelsDir: URL = {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            os_log(.error, "Cannot locate Application Support directory")
+            return FileManager.default.temporaryDirectory.appendingPathComponent("RefineClone/Models")
+        }
         return appSupport.appendingPathComponent("RefineClone/Models")
     }()
 
@@ -135,7 +139,7 @@ actor ModelManager: Sendable {
         return destURL
     }
 
-    func downloadModel(from url: URL, progressHandler: ((Double) -> Void)? = nil) async throws -> URL {
+    func downloadModel(from url: URL, expectedSHA256: String? = nil, progressHandler: ((Double) -> Void)? = nil) async throws -> URL {
         try FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
 
         let tempURL = try await downloadFile(from: url, progressHandler: progressHandler)
@@ -149,30 +153,66 @@ actor ModelManager: Sendable {
         }
         try FileManager.default.moveItem(at: tempURL, to: destination)
 
-        // Basic integrity: verify file exists with reasonable size and correct GGUF header
-        guard FileManager.default.fileExists(atPath: destination.path(percentEncoded: false)),
-              let attrs = try? FileManager.default.attributesOfItem(atPath: destination.path(percentEncoded: false)),
-              let fileSize = attrs[.size] as? Int, fileSize > 10_000_000,
+        guard FileManager.default.fileExists(atPath: destination.path(percentEncoded: false)) else {
+            try? FileManager.default.removeItem(at: destination)
+            throw CorrectionError.modelCorrupted(expectedSHA: "file-validation-failed")
+        }
+        let fileSize: Int
+        do {
+            let attrs = try FileManager.default.attributesOfItem(atPath: destination.path(percentEncoded: false))
+            fileSize = (attrs[.size] as? Int) ?? 0
+        } catch {
+            os_log(.error, "ModelManager: cannot read file attributes: %{public}@", error.localizedDescription)
+            try? FileManager.default.removeItem(at: destination)
+            throw CorrectionError.modelCorrupted(expectedSHA: "file-validation-failed")
+        }
+        guard fileSize > 10_000_000,
               GGUFVersionCheck.isCompatible(filePath: destination.path(percentEncoded: false)) else {
             try? FileManager.default.removeItem(at: destination)
             throw CorrectionError.modelCorrupted(expectedSHA: "file-validation-failed")
         }
 
+        if let expected = expectedSHA256 {
+            guard verifySHA256(filePath: destination.path(percentEncoded: false), expectedSHA: expected) else {
+                try? FileManager.default.removeItem(at: destination)
+                throw CorrectionError.modelCorrupted(expectedSHA: String(expected.prefix(12)))
+            }
+        }
+
         return destination
+    }
+
+    private func verifySHA256(filePath: String, expectedSHA: String) -> Bool {
+        guard let handle = FileHandle(forReadingAtPath: filePath) else {
+            return false
+        }
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let chunk = try? handle.read(upToCount: 1_048_576) {
+            guard !chunk.isEmpty else { break }
+            hasher.update(data: chunk)
+        }
+        let computedHex = hasher.finalize().compactMap { String(format: "%02x", $0) }.joined()
+        return computedHex.lowercased() == expectedSHA.lowercased()
     }
 
 
 
-    func downloadModelWithProgress(from url: URL) -> AsyncThrowingStream<Double, Error> {
+    func downloadModelWithProgress(from url: URL, expectedSHA256: String? = nil) -> AsyncThrowingStream<Double, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    _ = try await downloadModel(from: url, progressHandler: { fraction in
-                        continuation.yield(fraction)
-                    })
+                    _ = try await downloadModel(
+                        from: url,
+                        expectedSHA256: expectedSHA256,
+                        progressHandler: { fraction in
+                            continuation.yield(fraction)
+                        }
+                    )
                     continuation.yield(1.0)
                     continuation.finish()
                 } catch {
+                    guard !Task.isCancelled else { return }
                     continuation.finish(throwing: error)
                 }
             }

@@ -1,5 +1,6 @@
 import Foundation
 import Cocoa
+import os
 
 @MainActor
 @Observable
@@ -135,13 +136,13 @@ final class PreferencesStore {
                 do {
                     try KeychainService.shared.delete(for: "openrouter")
                 } catch {
-                    print("PreferencesStore: failed to delete OpenRouter key: \(error)")
+                    os_log(.error, "PreferencesStore: failed to delete OpenRouter key: %{public}@", error.localizedDescription)
                 }
             } else {
                 do {
                     try KeychainService.shared.save(key: newValue, for: "openrouter")
                 } catch {
-                    print("PreferencesStore: failed to save OpenRouter key: \(error)")
+                    os_log(.error, "PreferencesStore: failed to save OpenRouter key: %{public}@", error.localizedDescription)
                 }
             }
         }
@@ -163,6 +164,9 @@ final class PreferencesStore {
             }
             guard let data = currentData,
                   let prompts = try? JSONDecoder().decode([CustomPrompt].self, from: data) else {
+                if currentData != nil {
+                    os_log(.error, "PreferencesStore: failed to decode customPrompts — resetting")
+                }
                 _cachedPrompts = []
                 _cachedPromptsData = nil
                 return []
@@ -173,7 +177,7 @@ final class PreferencesStore {
         }
         set {
             guard let data = try? JSONEncoder().encode(newValue) else {
-                print("PreferencesStore: failed to encode customPrompts")
+                os_log(.error, "PreferencesStore: failed to encode customPrompts — data not saved")
                 return
             }
             _cachedPrompts = newValue
@@ -192,6 +196,9 @@ final class PreferencesStore {
             }
             guard let data = currentData,
                   let rules = try? JSONDecoder().decode([AppRule].self, from: data) else {
+                if currentData != nil {
+                    os_log(.error, "PreferencesStore: failed to decode appRules — resetting")
+                }
                 _cachedAppRules = []
                 _cachedAppRulesData = nil
                 return []
@@ -202,7 +209,7 @@ final class PreferencesStore {
         }
         set {
             guard let data = try? JSONEncoder().encode(newValue) else {
-                print("PreferencesStore: failed to encode appRules")
+                os_log(.error, "PreferencesStore: failed to encode appRules — data not saved")
                 return
             }
             _cachedAppRules = newValue
@@ -262,6 +269,10 @@ final class PreferencesStore {
                 self?._cachedAccessibility = nil
             }
         }
+    }
+
+    func cleanup() {
+        DistributedNotificationCenter.default().removeObserver(self)
     }
 
     private func localeDefaultLanguage() -> String {

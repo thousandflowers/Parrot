@@ -38,6 +38,7 @@ enum CorrectionError: Error, LocalizedError, Sendable {
     case invalidAPIKey
     case rateLimited
     case outputParsingFailed(raw: String)
+    case textTooLong(length: Int, maxLength: Int)
 
     var errorDescription: String? {
         switch self {
@@ -67,6 +68,8 @@ enum CorrectionError: Error, LocalizedError, Sendable {
             return "Troppe richieste. Attendi qualche secondo."
         case .outputParsingFailed(let raw):
             return "Risposta AI non valida (\(raw.prefix(30))...). Riprova."
+        case .textTooLong(let length, let maxLength):
+            return "Testo troppo lungo (\(length) caratteri). Massimo: \(maxLength)."
         }
     }
 }

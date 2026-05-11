@@ -127,6 +127,8 @@ extension LLMService {
     ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
+                let session = URLSession(configuration: .default)
+                defer { session.invalidateAndCancel() }
                 do {
                     var streamBody = body
                     streamBody["stream"] = true
@@ -135,7 +137,7 @@ extension LLMService {
                         request.setValue(value, forHTTPHeaderField: key)
                     }
 
-                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    let (bytes, response) = try await session.bytes(for: request)
 
                     guard let httpResponse = response as? HTTPURLResponse else {
                         throw CorrectionError.networkUnavailable
@@ -158,7 +160,7 @@ extension LLMService {
                               let content = delta["content"] as? String else {
                             if !jsonStr.isEmpty && jsonStr != "[DONE]" {
                                 skippedChunks += 1
-                                os_log(.debug, "Stream: unparseable chunk: %{public}@", jsonStr.prefix(80) as NSString)
+                                os_log(.debug, "Stream: unparseable chunk (length: %d)", skippedChunks)
                             }
                             continue
                         }
@@ -166,6 +168,7 @@ extension LLMService {
                     }
                     continuation.finish()
                 } catch {
+                    guard !Task.isCancelled else { return }
                     continuation.finish(throwing: error)
                 }
             }

@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 final class RemoteLLMService: LLMService, Sendable {
     static let shared = RemoteLLMService()
@@ -31,10 +32,23 @@ final class RemoteLLMService: LLMService, Sendable {
         }
     }
 
+    private func loadAPIKey() throws -> String {
+        do {
+            return try KeychainService.shared.load(for: "openai")
+        } catch let error as KeychainError {
+            os_log(.debug, "Keychain load openai: %{public}@", error.localizedDescription)
+            throw CorrectionError.invalidAPIKey
+        } catch {
+            os_log(.debug, "Keychain unexpected: %{public}@", error.localizedDescription)
+            throw CorrectionError.invalidAPIKey
+        }
+    }
+
     func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
         let engine = PromptEngine(language: language)
         let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-        guard let apiKey = try? KeychainService.shared.load(for: "openai"), !apiKey.isEmpty else {
+        let apiKey = try loadAPIKey()
+        guard !apiKey.isEmpty else {
             throw CorrectionError.invalidAPIKey
         }
         let model = openAIModel
@@ -52,7 +66,8 @@ final class RemoteLLMService: LLMService, Sendable {
     func correctFluency(text: String) async throws -> CorrectionResult {
         let engine = PromptEngine(language: language)
         let prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
-        guard let apiKey = try? KeychainService.shared.load(for: "openai"), !apiKey.isEmpty else {
+        let apiKey = try loadAPIKey()
+        guard !apiKey.isEmpty else {
             throw CorrectionError.invalidAPIKey
         }
         let model = openAIModel
@@ -70,7 +85,8 @@ final class RemoteLLMService: LLMService, Sendable {
     func explain(original: String, corrected: String) async throws -> String {
         let engine = PromptEngine(language: language)
         let prompt = engine.buildExplainPrompt(original: original, corrected: corrected, customInstruction: nil)
-        guard let apiKey = try? KeychainService.shared.load(for: "openai"), !apiKey.isEmpty else {
+        let apiKey = try loadAPIKey()
+        guard !apiKey.isEmpty else {
             throw CorrectionError.invalidAPIKey
         }
 
@@ -87,7 +103,8 @@ final class RemoteLLMService: LLMService, Sendable {
                 do {
                     let engine = PromptEngine(language: language)
                     let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-                    guard let apiKey = try? KeychainService.shared.load(for: "openai"), !apiKey.isEmpty else {
+                    let apiKey = try loadAPIKey()
+                    guard !apiKey.isEmpty else {
                         throw CorrectionError.invalidAPIKey
                     }
                     let model = openAIModel
@@ -108,6 +125,7 @@ final class RemoteLLMService: LLMService, Sendable {
                         continuation.finish()
                     }
                 } catch {
+                    guard !Task.isCancelled else { return }
                     continuation.finish(throwing: error)
                 }
             }

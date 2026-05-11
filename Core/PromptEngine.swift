@@ -76,8 +76,14 @@ struct PromptEngine {
 
     private func escapeForPrompt(_ text: String) -> String {
         var escaped = text
+        if escaped.contains("<TEXT>") {
+            escaped = escaped.replacingOccurrences(of: "<TEXT>", with: "<\\TEXT>")
+        }
         if escaped.contains("</TEXT>") {
             escaped = escaped.replacingOccurrences(of: "</TEXT>", with: "<\\/TEXT>")
+        }
+        if escaped.contains("<CUSTOM>") {
+            escaped = escaped.replacingOccurrences(of: "<CUSTOM>", with: "<\\CUSTOM>")
         }
         if escaped.contains("</CUSTOM>") {
             escaped = escaped.replacingOccurrences(of: "</CUSTOM>", with: "<\\/CUSTOM>")

@@ -47,8 +47,8 @@ struct CorrectionResult: Identifiable, Codable, Sendable {
     static func computeDiff(original: String, corrected: String) -> [DiffOp]? {
         guard original != corrected else { return nil }
 
-        let origWords = original.split(separator: " ", omittingEmptySubsequences: false)
-        let corrWords = corrected.split(separator: " ", omittingEmptySubsequences: false)
+        let origWords = original.split(separator: " ", omittingEmptySubsequences: true)
+        let corrWords = corrected.split(separator: " ", omittingEmptySubsequences: true)
 
         let diff = corrWords.difference(from: origWords)
         guard !diff.isEmpty else { return nil }

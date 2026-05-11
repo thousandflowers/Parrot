@@ -44,13 +44,6 @@
     "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppRule.swiftdeps",
     "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/AppRule.dia"
   },
-  "/Users/eugeniozamengopontrelli/RefineClone/Core/CancellationToken.swift": {
-    "dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/CancellationToken.d",
-    "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/CancellationToken.swift.o",
-    "swiftmodule": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/CancellationToken~partial.swiftmodule",
-    "swift-dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/CancellationToken.swiftdeps",
-    "diagnostics": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/CancellationToken.dia"
-  },
   "/Users/eugeniozamengopontrelli/RefineClone/Core/CorrectionResult.swift": {
     "dependencies": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/CorrectionResult.d",
     "object": "/Users/eugeniozamengopontrelli/RefineClone/.build/arm64-apple-macosx/debug/RefineClone.build/CorrectionResult.swift.o",

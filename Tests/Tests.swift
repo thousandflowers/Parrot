@@ -78,6 +78,30 @@ final class PromptEngineTests: XCTestCase {
         XCTAssertFalse(prompt.contains("Pay attention to case declensions"))
         XCTAssertFalse(prompt.contains("Preserve special characters"))
     }
+
+    func testBuildGrammarPrompt_escapesXSSlikeTags() {
+        let engine = PromptEngine(language: "en", style: "equilibrato")
+        let prompt = engine.buildGrammarPrompt(for: "<TEXT>injected</TEXT><CUSTOM>evil</CUSTOM>")
+        XCTAssertFalse(prompt.contains("<TEXT>injected</TEXT>"))
+        XCTAssertFalse(prompt.contains("<CUSTOM>evil</CUSTOM>"))
+        XCTAssertTrue(prompt.contains("<\\TEXT>injected<\\/TEXT>"))
+        XCTAssertTrue(prompt.contains("<\\CUSTOM>evil<\\/CUSTOM>"))
+    }
+
+    func testBuildFluencyPrompt_escapesTags() {
+        let engine = PromptEngine(language: "en", style: "equilibrato")
+        let prompt = engine.buildFluencyPrompt(for: "</TEXT>")
+        // Should contain escaped version of the user text, not the raw tag
+        XCTAssertFalse(prompt.contains("></TEXT>"))
+        XCTAssertTrue(prompt.contains("<\\/TEXT>"))
+    }
+
+    func testBuildExplainPrompt_escapesTags() {
+        let engine = PromptEngine(language: "en", style: "equilibrato")
+        let prompt = engine.buildExplainPrompt(original: "<TEXT>x</TEXT>", corrected: "<CUSTOM>y</CUSTOM>")
+        XCTAssertFalse(prompt.contains("<TEXT>x</TEXT>"))
+        XCTAssertFalse(prompt.contains("<CUSTOM>y</CUSTOM>"))
+    }
 }
 
 final class CorrectionResultTests: XCTestCase {
@@ -99,6 +123,30 @@ final class CorrectionResultTests: XCTestCase {
     func testComputeDiff_sameText_returnsNil() {
         let ops = CorrectionResult.computeDiff(original: "hello", corrected: "hello")
         XCTAssertNil(ops)
+    }
+
+    func testComputeDiff_consecutiveSpaces_doesNotCrash() {
+        _ = CorrectionResult.computeDiff(original: "hello  world", corrected: "hello world")
+    }
+
+    func testComputeDiff_tabAndNewline_handlesCorrectly() {
+        let ops = CorrectionResult.computeDiff(original: "a b c", corrected: "a b c")
+        XCTAssertNil(ops)
+    }
+
+    func testComputeDiff_complexChange_returnsOpsWithValidOffsets() {
+        let ops = CorrectionResult.computeDiff(original: "The quick brown fox", corrected: "The fast brown dog")
+        XCTAssertNotNil(ops)
+        guard let diffs = ops else { return }
+        for diff in diffs {
+            XCTAssertGreaterThanOrEqual(diff.offset, 0)
+            if diff.type == .delete {
+                XCTAssertNil(diff.replacement)
+            }
+            if diff.type == .insert {
+                XCTAssertNotNil(diff.replacement)
+            }
+        }
     }
 }
 
@@ -277,10 +325,121 @@ final class CorrectionErrorTests: XCTestCase {
             .networkUnavailable,
             .invalidAPIKey,
             .rateLimited,
-            .outputParsingFailed(raw: "raw")
+            .outputParsingFailed(raw: "raw"),
+            .textTooLong(length: 10000, maxLength: 8000)
         ]
         for error in errors {
             XCTAssertNotNil(error.errorDescription, "\(error) missing errorDescription")
         }
+    }
+
+    func testTextTooLongDescription_containsLengthAndMax() {
+        let error = CorrectionError.textTooLong(length: 9000, maxLength: 8000)
+        let desc = error.errorDescription ?? ""
+        XCTAssertTrue(desc.contains("9000"))
+        XCTAssertTrue(desc.contains("8000"))
+    }
+}
+
+final class TextLengthValidationTests: XCTestCase {
+    func testMaxTextLength_isPositive() {
+        XCTAssertGreaterThan(Constants.maxTextLength, 0)
+    }
+
+    func testMaxTextLength_isReasonable() {
+        XCTAssertLessThan(Constants.maxTextLength, 100_000)
+    }
+}
+
+final class ContinuationBoxTests: XCTestCase {
+    func testDoubleResume_returning_noOp() {
+        let box = ContinuationBox<String>()
+        let exp = expectation(description: "resume")
+        let sem = DispatchSemaphore(value: 0)
+        Task {
+            _ = try? await withCheckedThrowingContinuation { cont in
+                box.lock.lock(); box.continuation = cont; box.lock.unlock()
+                sem.signal()
+            }
+            exp.fulfill()
+        }
+        sem.wait()
+        box.resume(returning: "first")
+        box.resume(returning: "second")
+        wait(for: [exp])
+    }
+
+    func testDoubleResume_throwing_noOp() {
+        let box = ContinuationBox<String>()
+        let exp = expectation(description: "resume")
+        let sem = DispatchSemaphore(value: 0)
+        Task {
+            do {
+                _ = try await withCheckedThrowingContinuation { cont in
+                    box.lock.lock(); box.continuation = cont; box.lock.unlock()
+                    sem.signal()
+                }
+            } catch {
+                exp.fulfill()
+            }
+        }
+        sem.wait()
+        box.resume(throwing: CorrectionError.serverTimeout)
+        box.resume(throwing: CorrectionError.networkUnavailable)
+        wait(for: [exp])
+    }
+
+    func testMixedResume_thenError_noOp() {
+        let box = ContinuationBox<String>()
+        let exp = expectation(description: "resume")
+        let sem = DispatchSemaphore(value: 0)
+        Task {
+            _ = try? await withCheckedThrowingContinuation { cont in
+                box.lock.lock(); box.continuation = cont; box.lock.unlock()
+                sem.signal()
+            }
+            exp.fulfill()
+        }
+        sem.wait()
+        box.resume(returning: "ok")
+        box.resume(throwing: CorrectionError.serverTimeout)
+        wait(for: [exp])
+    }
+}
+
+final class StreamCancellationTests: XCTestCase {
+    func testStream_cancelMidStream_doesNotCrash() async {
+        let service = StubLLMService.shared
+        let stream = service.streamCorrect(text: "one two three four five", promptType: .grammar)
+        var count = 0
+        let task = Task<Bool, Never> {
+            do {
+                for try await _ in stream {
+                    count += 1
+                    if count >= 2 {
+                        throw CancellationError()
+                    }
+                }
+                return true
+            } catch {
+                return false
+            }
+        }
+        _ = await task.value
+    }
+
+    func testStream_cancelBeforeYielding_doesNotCrash() async {
+        let service = StubLLMService.shared
+        let stream = service.streamCorrect(text: "hello world", promptType: .grammar)
+        let cancelled = Task<Bool, Never> {
+            do {
+                for try await _ in stream { }
+                return true
+            } catch {
+                return false
+            }
+        }
+        cancelled.cancel()
+        _ = await cancelled.value
     }
 }

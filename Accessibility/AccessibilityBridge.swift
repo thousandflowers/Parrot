@@ -179,20 +179,23 @@ actor AccessibilityBridge {
         }
 
         await MainActor.run {
+            Self.restoreOriginalClipboardIfNeeded()
             let pasteboard = NSPasteboard.general
-            var originalItems: [NSPasteboardItem] = []
-            if let items = pasteboard.pasteboardItems {
-                originalItems = items
-            }
+            let originalItems = pasteboard.pasteboardItems ?? []
+
+            var pending = PendingClipboardRestore(
+                items: originalItems,
+                originalChangeCount: pasteboard.changeCount
+            )
 
             pasteboard.clearContents()
-            let item = NSPasteboardItem()
-            item.setString(correctedText, forType: .string)
-            pasteboard.writeObjects([item])
+            pasteboard.setString(correctedText, forType: .string)
+            pending.saveSnapshotCount = pasteboard.changeCount
 
             let source = CGEventSource(stateID: .hidSystemState)
             guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: true),
                   let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: false) else {
+                Self.restoreClipboard(pending)
                 return
             }
             keyDown.flags = CGEventFlags.maskCommand
@@ -201,21 +204,11 @@ actor AccessibilityBridge {
             keyUp.post(tap: CGEventTapLocation.cghidEventTap)
 
             if !originalItems.isEmpty {
-                let restoreCount = pasteboard.changeCount
-                let pasteboardData: [(String, Data)] = originalItems.flatMap { item in
-                    item.types.compactMap { type in
-                        item.data(forType: type).map { (type.rawValue, $0) }
-                    }
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(800)) {
-                    let pb = NSPasteboard.general
-                    guard pb.changeCount == restoreCount else { return }
-                    pb.clearContents()
-                    for (rawType, data) in pasteboardData {
-                        let item = NSPasteboardItem()
-                        item.setData(data, forType: NSPasteboard.PasteboardType(rawType))
-                        pb.writeObjects([item])
-                    }
+                Self._pendingClipboardRestore = pending
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(200))
+                    Self._pendingClipboardRestore = nil
+                    Self.restoreClipboard(pending)
                 }
             }
         }
@@ -285,5 +278,36 @@ actor AccessibilityBridge {
         }
 
         self.lastSelectionBounds = NSScreen.main?.visibleFrame ?? .zero
+    }
+}
+
+// MARK: - Clipboard Restore
+
+struct PendingClipboardRestore {
+    let items: [NSPasteboardItem]
+    let originalChangeCount: Int
+    var saveSnapshotCount: Int = 0
+}
+
+extension AccessibilityBridge {
+    private nonisolated(unsafe) static var _pendingClipboardRestore: PendingClipboardRestore?
+
+    nonisolated static func emergencyClipboardRestore() {
+        guard let pending = _pendingClipboardRestore else { return }
+        _pendingClipboardRestore = nil
+        restoreClipboard(pending)
+    }
+
+    nonisolated static func restoreOriginalClipboardIfNeeded() {
+        guard let pending = _pendingClipboardRestore else { return }
+        _pendingClipboardRestore = nil
+        restoreClipboard(pending)
+    }
+
+    nonisolated static func restoreClipboard(_ pending: PendingClipboardRestore) {
+        let pasteboard = NSPasteboard.general
+        guard pasteboard.changeCount == pending.saveSnapshotCount else { return }
+        pasteboard.clearContents()
+        pasteboard.writeObjects(pending.items)
     }
 }

@@ -2,13 +2,14 @@ import SwiftUI
 
 struct SettingsView: View {
     @State private var prefs = PreferencesStore.shared
+    @State private var serverIsRunning = false
 
     var body: some View {
         TabView {
-            GeneralTab(prefs: prefs)
+            GeneralTab(prefs: prefs, serverIsRunning: serverIsRunning)
                 .tabItem { Label("Generale", systemImage: "gearshape") }
 
-            ModelsTab(prefs: prefs)
+            ModelsTab(prefs: prefs, serverIsRunning: serverIsRunning)
                 .tabItem { Label("Modelli", systemImage: "brain") }
 
             PromptTab(prefs: prefs)
@@ -24,12 +25,20 @@ struct SettingsView: View {
                 .tabItem { Label("Avanzate", systemImage: "wrench.adjustable") }
         }
         .frame(width: 500, height: 400)
+        .task {
+            serverIsRunning = await ServerManager.shared.currentPort > 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { break }
+                serverIsRunning = await ServerManager.shared.currentPort > 0
+            }
+        }
     }
 }
 
 struct GeneralTab: View {
     @Bindable var prefs: PreferencesStore
-    @State private var serverIsRunning = false
+    var serverIsRunning: Bool
 
     var body: some View {
         Form {
@@ -96,24 +105,16 @@ struct GeneralTab: View {
         }
         .formStyle(.grouped)
         .padding()
-        .task {
-            serverIsRunning = await ServerManager.shared.currentPort > 0
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3))
-                guard !Task.isCancelled else { break }
-                serverIsRunning = await ServerManager.shared.currentPort > 0
-            }
-        }
     }
 }
 
 struct ModelsTab: View {
     @Bindable var prefs: PreferencesStore
+    var serverIsRunning: Bool
     @State private var downloadProgress: Double = 0
     @State private var isDownloading = false
     @State private var downloadError: String?
     @State private var recommended: ModelRecommendation?
-    @State private var serverIsRunning = false
     @State private var downloadTask: Task<Void, Never>?
 
     var body: some View {
@@ -166,12 +167,6 @@ struct ModelsTab: View {
         .padding()
         .task {
             recommended = await ModelManager.shared.recommendedDefaultModel()
-            serverIsRunning = await ServerManager.shared.currentPort > 0
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3))
-                guard !Task.isCancelled else { break }
-                serverIsRunning = await ServerManager.shared.currentPort > 0
-            }
         }
         .onDisappear {
             downloadTask?.cancel()
@@ -185,7 +180,10 @@ struct ModelsTab: View {
         downloadTask?.cancel()
         downloadTask = Task {
             do {
-                let destinationURL = try await ModelManager.shared.downloadModel(from: rec.url)
+                let destinationURL = try await ModelManager.shared.downloadModel(
+                    from: rec.url,
+                    expectedSHA256: rec.expectedSHA256
+                )
                 guard !Task.isCancelled else { return }
                 let modelID = destinationURL.deletingPathExtension().lastPathComponent
                 await MainActor.run {
@@ -360,16 +358,17 @@ struct ExclusionsTab: View {
 private struct OpenRouterKeyField: View {
     let prefs: PreferencesStore
     @State private var localKey: String = ""
-    @FocusState private var isFocused: Bool
 
     var body: some View {
         SecureField("API Key OpenRouter", text: $localKey)
-            .focused($isFocused)
             .onAppear {
                 localKey = prefs.openRouterAPIKey
             }
-            .onChange(of: localKey) { _, newValue in
-                prefs.openRouterAPIKey = newValue
+            .onSubmit {
+                prefs.openRouterAPIKey = localKey
+            }
+            .onDisappear {
+                prefs.openRouterAPIKey = localKey
             }
     }
 }

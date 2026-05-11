@@ -32,6 +32,9 @@ actor RequestQueue {
         overrideServiceType: ServiceType? = nil,
         overrideCustomPrompt: CustomPrompt? = nil
     ) async throws -> CorrectionResult {
+        guard text.count <= Constants.maxTextLength else {
+            throw CorrectionError.textTooLong(length: text.count, maxLength: Constants.maxTextLength)
+        }
         let box = ContinuationBox<CorrectionResult>()
         let timeoutTask = Task {
             do {

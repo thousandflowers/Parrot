@@ -96,6 +96,7 @@ final class OllamaService: LLMService, Sendable {
                         continuation.finish()
                     }
                 } catch {
+                    guard !Task.isCancelled else { return }
                     continuation.finish(throwing: error)
                 }
             }

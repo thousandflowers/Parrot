@@ -8,6 +8,7 @@ final class GlobalHotkeyManager {
     private var eventHandler: EventHandlerRef?
     private var hotKeyRefs: [EventHotKeyRef] = []
     private var actions: [UInt32: () -> Void] = [:]
+    private let actionsLock = NSLock()
     private var nextID: UInt32 = 1
     private(set) var failedShortcuts: [String] = []
 
@@ -37,7 +38,10 @@ final class GlobalHotkeyManager {
             guard result == noErr else { return noErr }
 
             let manager = Unmanaged<GlobalHotkeyManager>.fromOpaque(userData).takeUnretainedValue()
-            manager.actions[hotKeyID.id]?()
+            manager.actionsLock.lock()
+            let action = manager.actions[hotKeyID.id]
+            manager.actionsLock.unlock()
+            action?()
             return noErr
         }
 
