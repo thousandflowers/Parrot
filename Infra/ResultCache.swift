@@ -6,7 +6,7 @@ actor ResultCache: Sendable {
     private var cache: [String: CacheEntry] = [:]
     private let maxEntries = Constants.cacheMaxEntries
     private let ttl = Constants.cacheTTL
-    private let maxMemoryBytes = 10 * 1024 * 1024
+    private let maxMemoryBytes = Constants.cacheMaxMemoryBytes
     private var currentMemoryBytes = 0
 
     struct CacheEntry {
@@ -16,13 +16,8 @@ actor ResultCache: Sendable {
         let byteSize: Int
     }
 
-    private func key(for text: String) -> String {
-        text
-    }
-
     func get(for text: String, modelID: String) -> CorrectionResult? {
-        let k = key(for: text)
-        guard let entry = cache[k],
+        guard let entry = cache[text],
               entry.modelID == modelID,
               Date().timeIntervalSince(entry.timestamp) < ttl else {
             return nil
@@ -31,13 +26,12 @@ actor ResultCache: Sendable {
     }
 
     func set(_ result: CorrectionResult, for text: String, modelID: String) {
-        let k = key(for: text)
         let byteSize = (result.originalText.utf8.count + result.correctedText.utf8.count)
 
         if cache.count >= maxEntries || (currentMemoryBytes + byteSize) > maxMemoryBytes {
             evictUntilUnderLimit(neededBytes: byteSize)
         }
-        cache[k] = CacheEntry(result: result, timestamp: Date(), modelID: modelID, byteSize: byteSize)
+        cache[text] = CacheEntry(result: result, timestamp: Date(), modelID: modelID, byteSize: byteSize)
         currentMemoryBytes += byteSize
     }
 
@@ -56,8 +50,7 @@ actor ResultCache: Sendable {
     }
 
     func setIfNewer(_ result: CorrectionResult, for text: String, modelID: String) {
-        let k = key(for: text)
-        if let existing = cache[k], existing.timestamp >= result.timestamp { return }
+        if let existing = cache[text], existing.timestamp >= result.timestamp { return }
         set(result, for: text, modelID: modelID)
     }
 }

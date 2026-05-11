@@ -46,13 +46,13 @@ actor LocalLLMService: @preconcurrency LLMService {
         let port = try await ensureServerRunning()
 
         let corrected = try await performOpenAIRequest(
-            body: chatBody(model: modelName, prompt: prompt, temperature: 0.1),
+            body: chatBody(model: modelName, prompt: prompt, temperature: Constants.grammarTemperature),
             url: try localChatURL(port: port),
             apiKey: nil
         )
         guard !corrected.isEmpty else { throw CorrectionError.outputParsingFailed(raw: "empty") }
         return CorrectionResult(original: text, corrected: corrected,
-                               modelID: modelName, confidence: 0.9, promptType: promptType.label)
+                               modelID: modelName, confidence: Constants.defaultConfidence, promptType: promptType.label)
     }
 
     func correctFluency(text: String) async throws -> CorrectionResult {
@@ -61,13 +61,13 @@ actor LocalLLMService: @preconcurrency LLMService {
         let port = try await ensureServerRunning()
 
         let corrected = try await performOpenAIRequest(
-            body: chatBody(model: modelName, prompt: prompt, temperature: 0.3),
+            body: chatBody(model: modelName, prompt: prompt, temperature: Constants.fluencyTemperature),
             url: try localChatURL(port: port),
             apiKey: nil
         )
         guard !corrected.isEmpty else { throw CorrectionError.outputParsingFailed(raw: "empty") }
         return CorrectionResult(original: text, corrected: corrected,
-                               modelID: modelName, confidence: 0.9, promptType: "fluency")
+                               modelID: modelName, confidence: Constants.defaultConfidence, promptType: "fluency")
     }
 
     func explain(original: String, corrected: String) async throws -> String {
@@ -76,7 +76,7 @@ actor LocalLLMService: @preconcurrency LLMService {
         let port = try await ensureServerRunning()
 
         return try await performOpenAIRequest(
-            body: chatBody(model: modelName, prompt: prompt, systemPrompt: nil, temperature: 0.3, maxTokens: 512),
+            body: chatBody(model: modelName, prompt: prompt, systemPrompt: nil, temperature: Constants.fluencyTemperature, maxTokens: Constants.explainMaxTokens),
             url: try localChatURL(port: port),
             apiKey: nil
         )

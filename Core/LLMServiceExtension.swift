@@ -61,7 +61,7 @@ extension LLMService {
                 throw CancellationError()
             } catch let error as CorrectionError {
                 switch error {
-                case .invalidAPIKey, .rateLimited, .outputParsingFailed:
+                case .invalidAPIKey, .rateLimited, .outputParsingFailed, .modelNotLoaded:
                     throw error
                 default:
                     lastError = error

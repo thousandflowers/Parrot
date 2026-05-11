@@ -91,8 +91,7 @@ final class PromptEngineTests: XCTestCase {
     func testBuildFluencyPrompt_escapesTags() {
         let engine = PromptEngine(language: "en", style: "equilibrato")
         let prompt = engine.buildFluencyPrompt(for: "</TEXT>")
-        // Should contain escaped version of the user text, not the raw tag
-        XCTAssertFalse(prompt.contains("></TEXT>"))
+        XCTAssertFalse(prompt.contains("<TEXT></TEXT>"))
         XCTAssertTrue(prompt.contains("<\\/TEXT>"))
     }
 

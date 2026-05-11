@@ -13,27 +13,7 @@ actor AccessibilityBridge {
         set { _pidLock.withLock { _storedPID = newValue } }
     }
 
-    func fetchSelectedText(fromPID pid: pid_t) async throws -> String {
-        guard AXIsProcessTrusted() else {
-            throw CorrectionError.accessibilityPermissionDenied
-        }
-
-        let frontAppAX = AXUIElementCreateApplication(pid)
-
-        var focusedRef: CFTypeRef?
-        let focusResult = AXUIElementCopyAttributeValue(
-            frontAppAX,
-            kAXFocusedUIElementAttribute as CFString,
-            &focusedRef
-        )
-
-        guard focusResult == .success,
-              let focusedElement = focusedRef,
-              CFGetTypeID(focusedElement) == AXUIElementGetTypeID() else {
-            throw CorrectionError.noTextSelected
-        }
-        let axElement = focusedElement as! AXUIElement
-
+    private func extractText(from axElement: AXUIElement) async throws -> String {
         var selectedTextRef: CFTypeRef?
         let textResult = AXUIElementCopyAttributeValue(
             axElement,
@@ -61,6 +41,29 @@ actor AccessibilityBridge {
         throw CorrectionError.textExtractionFailed(appName: "unknown")
     }
 
+    func fetchSelectedText(fromPID pid: pid_t) async throws -> String {
+        guard AXIsProcessTrusted() else {
+            throw CorrectionError.accessibilityPermissionDenied
+        }
+
+        let frontAppAX = AXUIElementCreateApplication(pid)
+
+        var focusedRef: CFTypeRef?
+        let focusResult = AXUIElementCopyAttributeValue(
+            frontAppAX,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedRef
+        )
+
+        guard focusResult == .success,
+              let focusedElement = focusedRef,
+              CFGetTypeID(focusedElement) == AXUIElementGetTypeID() else {
+            throw CorrectionError.noTextSelected
+        }
+
+        return try await extractText(from: focusedElement as! AXUIElement)
+    }
+
     func fetchSelectedText() async throws -> String {
         guard AXIsProcessTrusted() else {
             throw CorrectionError.accessibilityPermissionDenied
@@ -80,6 +83,7 @@ actor AccessibilityBridge {
               CFGetTypeID(frontApp) == AXUIElementGetTypeID() else {
             throw CorrectionError.textExtractionFailed(appName: await AppDetector.shared.frontAppName(from: frontAppRef))
         }
+
         let frontAppAX = frontApp as! AXUIElement
 
         var focusedRef: CFTypeRef?
@@ -94,33 +98,8 @@ actor AccessibilityBridge {
               CFGetTypeID(focusedElement) == AXUIElementGetTypeID() else {
             throw CorrectionError.noTextSelected
         }
-        let axElement = focusedElement as! AXUIElement
 
-        var selectedTextRef: CFTypeRef?
-        let textResult = AXUIElementCopyAttributeValue(
-            axElement,
-            kAXSelectedTextAttribute as CFString,
-            &selectedTextRef
-        )
-
-        if textResult == .success, let selectedText = selectedTextRef as? String, !selectedText.isEmpty {
-            await updateBounds(axElement: axElement)
-            return selectedText
-        }
-
-        var valueRef: CFTypeRef?
-        let valueResult = AXUIElementCopyAttributeValue(
-            axElement,
-            kAXValueAttribute as CFString,
-            &valueRef
-        )
-
-        if valueResult == .success, let val = valueRef as? String, !val.isEmpty {
-            await updateBounds(axElement: axElement)
-            return val
-        }
-
-        throw CorrectionError.textExtractionFailed(appName: "unknown")
+        return try await extractText(from: focusedElement as! AXUIElement)
     }
 
     func replaceSelectedText(with correctedText: String) async throws {

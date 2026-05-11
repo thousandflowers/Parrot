@@ -44,7 +44,6 @@ actor AppDetector {
             cachedBundleIDTimestamp = Date()
             return fallback
         }
-
         let appElement = app as! AXUIElement
 
         var bundleIDRef: CFTypeRef?

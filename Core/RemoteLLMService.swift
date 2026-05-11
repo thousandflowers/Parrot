@@ -54,13 +54,13 @@ final class RemoteLLMService: LLMService, Sendable {
         let model = openAIModel
 
         let corrected = try await performOpenAIRequest(
-            body: chatBody(model: model, prompt: prompt, temperature: 0.1),
+            body: chatBody(model: model, prompt: prompt, temperature: Constants.grammarTemperature),
             url: try chatURL(),
             apiKey: apiKey
         )
         guard !corrected.isEmpty else { throw CorrectionError.outputParsingFailed(raw: "empty") }
         return CorrectionResult(original: text, corrected: corrected,
-                               modelID: model, confidence: 0.9, promptType: promptType.label)
+                               modelID: model, confidence: Constants.defaultConfidence, promptType: promptType.label)
     }
 
     func correctFluency(text: String) async throws -> CorrectionResult {
@@ -73,13 +73,13 @@ final class RemoteLLMService: LLMService, Sendable {
         let model = openAIModel
 
         let corrected = try await performOpenAIRequest(
-            body: chatBody(model: model, prompt: prompt, temperature: 0.3),
+            body: chatBody(model: model, prompt: prompt, temperature: Constants.fluencyTemperature),
             url: try chatURL(),
             apiKey: apiKey
         )
         guard !corrected.isEmpty else { throw CorrectionError.outputParsingFailed(raw: "empty") }
         return CorrectionResult(original: text, corrected: corrected,
-                               modelID: model, confidence: 0.9, promptType: "fluency")
+                               modelID: model, confidence: Constants.defaultConfidence, promptType: "fluency")
     }
 
     func explain(original: String, corrected: String) async throws -> String {
@@ -91,7 +91,7 @@ final class RemoteLLMService: LLMService, Sendable {
         }
 
         return try await performOpenAIRequest(
-            body: chatBody(model: openAIModel, prompt: prompt, systemPrompt: nil, temperature: 0.3, maxTokens: 512),
+            body: chatBody(model: openAIModel, prompt: prompt, systemPrompt: nil, temperature: Constants.fluencyTemperature, maxTokens: Constants.explainMaxTokens),
             url: try chatURL(),
             apiKey: apiKey
         )

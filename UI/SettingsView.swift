@@ -27,9 +27,18 @@ struct SettingsView: View {
         .frame(width: 500, height: 400)
         .task {
             serverIsRunning = await ServerManager.shared.currentPort > 0
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3))
-                guard !Task.isCancelled else { break }
+            let stream = AsyncStream<Void> { continuation in
+                let task = Task {
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .seconds(3))
+                        if Task.isCancelled { break }
+                        continuation.yield(())
+                    }
+                    continuation.finish()
+                }
+                continuation.onTermination = { _ in task.cancel() }
+            }
+            for await _ in stream {
                 serverIsRunning = await ServerManager.shared.currentPort > 0
             }
         }
