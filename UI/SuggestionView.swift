@@ -6,6 +6,7 @@ struct SuggestionView: View {
     let onApply: () -> Void
     let onExplain: () -> Void
     let onDismiss: () -> Void
+    @State private var feedbackToast = false
 
     private var stateHash: Int {
         var hasher = Hasher()
@@ -110,12 +111,12 @@ struct SuggestionView: View {
 
     private var headerTitle: String {
         switch state {
-        case .loading:         return "Analizzando..."
-        case .suggestion:      return "Suggerimento"
-        case .fluencySuggestion: return "Fluidità"
-        case .noErrors:        return "Nessun errore"
-        case .error:           return "Errore"
-        case .textTooLong:     return "Testo troppo lungo"
+        case .loading:         return String(localized: "panel.analyzing")
+        case .suggestion:      return String(localized: "panel.corrected")
+        case .fluencySuggestion: return String(localized: "panel.fluency")
+        case .noErrors:        return String(localized: "panel.noErrors")
+        case .error:           return String(localized: "panel.error")
+        case .textTooLong:     return String(localized: "panel.error")
         }
     }
 
@@ -171,12 +172,31 @@ struct SuggestionView: View {
         HStack {
             switch state {
             case .suggestion, .fluencySuggestion:
-                Button("Ignora") { onDismiss() }
-                    .accessibilityHint("Scarta il suggerimento senza applicarlo")
+                if feedbackToast {
+                    Text("Segnalato, grazie")
+                        .font(.caption2)
+                        .foregroundColor(.green)
+                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                } else {
+                    Button(String(localized: "panel.ignore")) { onDismiss() }
+                        .accessibilityHint("Scarta il suggerimento senza applicarlo")
+                    Button(String(localized: "panel.reportError")) {
+                        if let r = result {
+                            FeedbackLogger.log(original: r.originalText, corrected: r.correctedText, modelID: r.modelID)
+                        }
+                        feedbackToast = true
+                        Task {
+                            try? await Task.sleep(for: .seconds(2))
+                            feedbackToast = false
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                }
                 Spacer()
-                Button("Spiega") { onExplain() }
+                Button(String(localized: "panel.explain")) { onExplain() }
                     .accessibilityHint("Richiedi una spiegazione delle correzioni")
-                Button("Applica") {
+                Button(String(localized: "panel.apply")) {
                     onApply()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -184,14 +204,12 @@ struct SuggestionView: View {
                 .accessibilityHint("Sostituisci il testo con la versione corretta")
 
             case .error:
-                Button("Chiudi") { onDismiss() }
+                Button(String(localized: "panel.close")) { onDismiss() }
                     .accessibilityHint("Chiudi il messaggio di errore")
                 Spacer()
-                Button("Riprova") { onDismiss() }
-                    .accessibilityHint("Riprova la correzione")
 
             case .loading:
-                Button("Annulla") { onDismiss() }
+                Button("Annulla controllo") { onDismiss() }
                     .accessibilityHint("Annulla l'elaborazione in corso")
                 Spacer()
 
@@ -202,6 +220,7 @@ struct SuggestionView: View {
                 Spacer()
             }
         }
+        .animation(.easeOut(duration: 0.25), value: feedbackToast)
     }
 }
 

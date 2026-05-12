@@ -50,27 +50,27 @@ enum CorrectionError: Error, LocalizedError, Sendable {
         case .textExtractionFailed(let appName):
             return "Impossibile leggere il testo da \(appName). L'app potrebbe non supportare l'Accessibilità."
         case .serverNotRunning:
-            return "Il motore AI è offline. Riavvio in corso..."
+            return "Il motore AI non è ancora pronto. Attendi qualche secondo e riprova."
         case .serverTimeout:
             return "Il server sta impiegando troppo tempo. Riprova tra qualche secondo."
         case .modelNotLoaded:
-            return "Modello non caricato. Verifica nelle impostazioni Modelli che sia installato."
+            return "Nessun modello installato. Vai su Impostazioni > Modelli per scaricarne uno."
         case .modelDownloadFailed:
-            return "Impossibile scaricare il modello. Controlla la connessione e riprova."
+            return "Download fallito. Controlla la connessione. Se il problema persiste, aggiungi un token HuggingFace in Impostazioni > Avanzate."
         case .modelCorrupted:
             return "Il file del modello è danneggiato. Scaricalo di nuovo dal pannello Modelli."
         case .modelIncompatibleVersion:
-            return "Il formato del modello non è compatibile. Scarica un modello aggiornato dal pannello Modelli."
+            return "Questo modello non è compatibile con la versione attuale. Scarica un modello aggiornato."
         case .outOfMemory:
-            return "Memoria insufficiente. Chiudi altre app o usa un modello più piccolo."
+            return "Memoria insufficiente. Chiudi altre app o scegli un modello più piccolo nel pannello Modelli."
         case .networkUnavailable:
-            return "Connessione di rete non disponibile. Controlla il Wi-Fi o la connessione ethernet."
+            return "Connessione assente. Controlla il Wi-Fi o il cavo ethernet."
         case .invalidAPIKey:
-            return "API Key non valida. Controllala nelle impostazioni del servizio."
+            return "API Key non valida. Verificala in Impostazioni > Motore."
         case .rateLimited:
-            return "Troppe richieste. Attendi qualche secondo e riprova."
+            return "Troppe richieste. Riprova tra qualche secondo."
         case .outputParsingFailed:
-            return "La risposta ricevuta non è nel formato atteso. Riprova."
+            return "Il modello ha prodotto una risposta inattesa. Riprova la correzione."
         case .textTooLong(let length, let maxLength):
             return "Testo troppo lungo (\(length) caratteri). Massimo: \(maxLength)."
         }

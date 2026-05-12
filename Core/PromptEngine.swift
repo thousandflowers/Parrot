@@ -1,5 +1,6 @@
 import Foundation
 import os
+import AppKit
 
 enum LanguageFamily: String {
     case latin
@@ -74,6 +75,38 @@ struct PromptEngine {
         }
     }
 
+    private func preCheckSpelling(_ text: String) -> (corrected: String, flagged: [String]) {
+        let spellChecker = NSSpellChecker.shared
+        let words = text.split(separator: " ")
+        var corrected = text
+        var flagged: [String] = []
+
+        for word in words {
+            let wordStr = String(word)
+            let trimmed = wordStr.trimmingCharacters(in: .punctuationCharacters)
+            guard trimmed.count > 2 else { continue }
+            guard !IgnoreList.isIgnored(trimmed) else { continue }
+
+            let range = spellChecker.checkSpelling(of: wordStr, startingAt: 0,
+                language: language.starts(with: "en") ? "en" : language,
+                wrap: false, inSpellDocumentWithTag: 0, wordCount: nil)
+
+            if range.location == NSNotFound { continue }
+
+            guard let guesses = spellChecker.guesses(forWordRange: NSRange(location: 0, length: wordStr.utf16.count),
+                in: wordStr, language: language.starts(with: "en") ? "en" : language,
+                inSpellDocumentWithTag: 0), !guesses.isEmpty else { continue }
+
+            if guesses.count == 1, guesses[0].lowercased() != wordStr.lowercased() {
+                corrected = corrected.replacingOccurrences(of: wordStr, with: guesses[0])
+            } else if guesses.count > 1 {
+                flagged.append(wordStr)
+            }
+        }
+
+        return (corrected, flagged)
+    }
+
     private func escapeForPrompt(_ text: String) -> String {
         var escaped = text
         if escaped.contains("<TEXT>") {
@@ -94,10 +127,21 @@ struct PromptEngine {
     func buildGrammarPrompt(for text: String, customInstruction: String? = nil) -> String {
         let extra = grammarFamilyInstruction
         let styleLine = styleInstruction
-        let safeText = escapeForPrompt(text)
+
+        let (preChecked, flagged) = preCheckSpelling(text)
+        let safeText = escapeForPrompt(preChecked)
+
         var header = "Fix only grammar/spelling for correctness; no style/fluency edits."
         if !extra.isEmpty { header += "\n\(extra)" }
         if !styleLine.isEmpty { header += "\n\(styleLine)" }
+        if preChecked != text {
+            header += "\nSome words were pre-corrected by spell check. Do not change them unless grammatically incorrect."
+        }
+        if !flagged.isEmpty {
+            header += "\nPay special attention to these possibly misspelled words: \(flagged.joined(separator: ", "))"
+        }
+        header += "\n\nExample corrections:\n\(fewShotExamples())"
+
         return """
         \(header)
 
@@ -107,11 +151,19 @@ struct PromptEngine {
         """
     }
 
+    private func fewShotExamples() -> String {
+        if language.starts(with: "it") {
+            return "Input: \"Io andato al mercato ieri.\"\nOutput: \"Io sono andato al mercato ieri.\"\n\nInput: \"Li ragazzi gioca a calcio nel parco.\"\nOutput: \"I ragazzi giocano a calcio nel parco.\"\n\nInput: \"La mela e buona.\"\nOutput: \"La mela è buona.\""
+        }
+        return "Input: \"He go to the store yesterday.\"\nOutput: \"He went to the store yesterday.\"\n\nInput: \"The cats is sleeping on the couch.\"\nOutput: \"The cats are sleeping on the couch.\"\n\nInput: \"Their going to the park.\"\nOutput: \"They're going to the park.\""
+    }
+
     func buildFluencyPrompt(for text: String, customInstruction: String? = nil) -> String {
         let styleLine = styleInstruction
         let safeText = escapeForPrompt(text)
         var header = "Improve fluency and naturalness only; do not fix grammar already correct."
         if !styleLine.isEmpty { header += "\n\(styleLine)" }
+        header += "\n\nExample:\nInput: \"The project was completed. The team celebrated. It was good.\"\nOutput: \"After completing the project, the team celebrated. It was a rewarding experience.\""
         return """
         \(header)
 

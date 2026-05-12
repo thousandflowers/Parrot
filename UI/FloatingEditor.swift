@@ -133,6 +133,8 @@ struct FloatingEditorView: View {
                 }
             }
 
+            wordCountFooter
+
             Divider()
 
             HStack {
@@ -167,6 +169,19 @@ struct FloatingEditorView: View {
         .onDisappear {
             checkTask?.cancel()
         }
+    }
+
+    private var wordCountFooter: some View {
+        let wc = inputText.split(separator: " ").count
+        let cc = inputText.count
+        return HStack(spacing: 16) {
+            Label("\(wc) parole", systemImage: "text.word.spacing")
+            Label("\(cc) caratteri", systemImage: "character.cursor.ibeam")
+        }
+        .font(.caption2)
+        .foregroundColor(.secondary)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
     }
 
     private func checkText() {

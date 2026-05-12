@@ -39,6 +39,31 @@ final class PreferencesStore {
         if UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.language) == nil {
             UserDefaults.standard.set("it", forKey: Constants.UserDefaultsKey.language)
         }
+        seedPromptPresets()
+    }
+
+    private func seedPromptPresets() {
+        guard customPrompts.isEmpty else { return }
+        self.customPrompts = [
+            CustomPrompt(
+                id: UUID(uuidString: "E1E1E1E1-0000-4000-8000-000000000001")!,
+                name: "Email Formale",
+                template: "Correggi il testo mantenendo un tono formale e professionale. Preserva saluti, firme e formule di cortesia. Non aggiungere emoji o slang.\n\n{{TEXT}}",
+                checkType: .grammar
+            ),
+            CustomPrompt(
+                id: UUID(uuidString: "E1E1E1E1-0000-4000-8000-000000000002")!,
+                name: "Chat / Messaggi",
+                template: "Correggi solo errori grammaticali evidenti. Mantieni il tono informale e conversazionale. Le contrazioni e lo slang leggero sono accettabili.\n\n{{TEXT}}",
+                checkType: .grammar
+            ),
+            CustomPrompt(
+                id: UUID(uuidString: "E1E1E1E1-0000-4000-8000-000000000003")!,
+                name: "Documento Tecnico",
+                template: "Correggi la grammatica preservando TUTTI i termini tecnici, nomi di variabili, snippet di codice, comandi, URL e abbreviazioni. Non modificare la formattazione tecnica.\n\n{{TEXT}}",
+                checkType: .grammar
+            ),
+        ]
     }
 
     private func downloadedModels() -> [String] {

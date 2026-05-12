@@ -16,6 +16,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         observeFrontmostAppChanges()
 
+        OnboardingController.shared.showIfNeeded()
+
         if UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.autoCheckEnabled) {
             Task { await RealtimeMonitor.shared.start() }
         }

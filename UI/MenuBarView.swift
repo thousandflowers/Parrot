@@ -63,7 +63,7 @@ struct MenuBarView: View {
             Group {
                 Toggle("Controllo Automatico", isOn: $prefs.autoCheckEnabled)
                     .padding(.horizontal, 12)
-                    .accessibilityHint("Attiva il controllo ortografico in tempo reale mentre scrivi")
+                    .accessibilityHint("Controlla il testo automaticamente mentre scrivi")
 
                 Button(action: { checkGrammar() }) {
                     HStack {
@@ -115,7 +115,41 @@ struct MenuBarView: View {
             Divider()
 
             Group {
-                Button(action: { NSApp.terminate(nil) }) {
+                HStack {
+                    Text("Lingua:")
+                        .font(.caption)
+                    Picker("", selection: $prefs.language) {
+                        Text("🇮🇹 IT").tag("it")
+                        Text("🇬🇧 EN").tag("en-US")
+                        Text("🇪🇸 ES").tag("es")
+                        Text("🇫🇷 FR").tag("fr")
+                        Text("🇩🇪 DE").tag("de")
+                    }
+                    .labelsHidden()
+                    .frame(width: 70)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 2)
+
+                HStack {
+                    Text("Stile:")
+                        .font(.caption)
+                    Picker("", selection: $prefs.style) {
+                        Text("Equilibrato").tag("equilibrato")
+                        Text("Formale").tag("formale")
+                        Text("Informale").tag("informale")
+                    }
+                    .labelsHidden()
+                    .frame(width: 95)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 2)
+            }
+
+            Divider()
+
+            Group {
+                Button(action: { NSApplication.shared.terminate(nil) }) {
                     HStack {
                         Image(systemName: "power")
                         Text("Esci")

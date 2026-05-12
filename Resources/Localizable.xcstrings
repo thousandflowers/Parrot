@@ -1,0 +1,251 @@
+{
+  "sourceLanguage": "it",
+  "strings": {
+    "menu.checkGrammar": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Controlla Grammatica" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Check Grammar" } }
+      }
+    },
+    "menu.checkFluency": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Controlla Fluidità" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Check Fluency" } }
+      }
+    },
+    "menu.openEditor": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Apri Editor" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Open Editor" } }
+      }
+    },
+    "menu.autoCheck": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Controllo Automatico" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Auto Check" } }
+      }
+    },
+    "menu.preferences": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Preferenze..." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Preferences..." } }
+      }
+    },
+    "menu.quit": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Esci" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Quit" } }
+      }
+    },
+    "menu.language": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Lingua:" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Language:" } }
+      }
+    },
+    "menu.style": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Stile:" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Style:" } }
+      }
+    },
+    "panel.ignore": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Ignora" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Dismiss" } }
+      }
+    },
+    "panel.explain": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Spiega" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Explain" } }
+      }
+    },
+    "panel.apply": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Applica" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Apply" } }
+      }
+    },
+    "panel.reportError": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Segnala" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Report" } }
+      }
+    },
+    "panel.close": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Chiudi" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Close" } }
+      }
+    },
+    "panel.retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Riprova" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Retry" } }
+      }
+    },
+    "panel.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Annulla" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Cancel" } }
+      }
+    },
+    "panel.corrected": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Suggerimento" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Suggestion" } }
+      }
+    },
+    "panel.fluency": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Fluidità" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Fluency" } }
+      }
+    },
+    "panel.noErrors": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Nessun errore" } },
+        "en": { "stringUnit": { "state": "translated", "value": "No errors" } }
+      }
+    },
+    "panel.error": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Errore" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Error" } }
+      }
+    },
+    "panel.analyzing": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Analizzando..." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Analyzing..." } }
+      }
+    },
+    "onboarding.welcome": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Benvenuto in RefineClone" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Welcome to RefineClone" } }
+      }
+    },
+    "onboarding.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Correggi la grammatica ovunque sul tuo Mac.\nNessun dato lascia il computer — tutto funziona offline con un'intelligenza artificiale locale." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Fix grammar anywhere on your Mac.\nNo data leaves your computer — everything runs offline with a local AI." } }
+      }
+    },
+    "onboarding.permissions": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Permessi di Accessibilità" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Accessibility Permissions" } }
+      }
+    },
+    "onboarding.back": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Indietro" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Back" } }
+      }
+    },
+    "onboarding.next": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Avanti" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Next" } }
+      }
+    },
+    "onboarding.start": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Inizia" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Start" } }
+      }
+    },
+    "onboarding.skip": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Salta" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Skip" } }
+      }
+    },
+    "settings.general": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Generale" } },
+        "en": { "stringUnit": { "state": "translated", "value": "General" } }
+      }
+    },
+    "settings.models": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Modelli" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Models" } }
+      }
+    },
+    "settings.prompts": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Prompt" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Prompts" } }
+      }
+    },
+    "settings.rules": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Regole App" } },
+        "en": { "stringUnit": { "state": "translated", "value": "App Rules" } }
+      }
+    },
+    "settings.exclusions": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Esclusioni" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Exclusions" } }
+      }
+    },
+    "settings.advanced": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Avanzate" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Advanced" } }
+      }
+    },
+    "server.active": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Server attivo" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Server active" } }
+      }
+    },
+    "server.stopped": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Server fermo" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Server stopped" } }
+      }
+    }
+  },
+  "version": "1.0"
+}
