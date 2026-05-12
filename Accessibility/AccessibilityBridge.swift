@@ -263,8 +263,7 @@ actor AccessibilityBridge {
 
             if !originalItems.isEmpty {
                 Self._pendingClipboardRestore = pending
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(200))
+                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) {
                     Self._pendingClipboardRestore = nil
                     Self.restoreClipboard(pending)
                 }

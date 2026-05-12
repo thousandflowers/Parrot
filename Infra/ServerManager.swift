@@ -30,6 +30,9 @@ actor ServerManager: Sendable {
 
     func start(modelPath: String) async throws {
         guard process == nil else { return }
+        guard GGUFVersionCheck.isCompatible(filePath: modelPath) else {
+            throw CorrectionError.modelIncompatibleVersion(path: modelPath)
+        }
         for attempt in 0..<3 {
             let (port, probeSock) = try allocatePort()
             currentPort = port

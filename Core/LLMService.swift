@@ -33,6 +33,7 @@ enum CorrectionError: Error, LocalizedError, Sendable {
     case modelNotLoaded
     case modelDownloadFailed(url: URL)
     case modelCorrupted(expectedSHA: String)
+    case modelIncompatibleVersion(path: String)
     case outOfMemory
     case networkUnavailable
     case invalidAPIKey
@@ -58,6 +59,8 @@ enum CorrectionError: Error, LocalizedError, Sendable {
             return "Download del modello fallito da \(url.host ?? url.absoluteString)."
         case .modelCorrupted(let sha):
             return "Modello corrotto (SHA: \(sha.prefix(12))...). Scarica di nuovo il modello."
+        case .modelIncompatibleVersion:
+            return "Versione GGUF del modello non compatibile. Scarica un modello aggiornato."
         case .outOfMemory:
             return "Memoria insufficiente. Chiudi altre app o usa un modello piu piccolo."
         case .networkUnavailable:

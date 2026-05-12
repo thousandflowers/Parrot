@@ -127,24 +127,14 @@ actor ModelManager: Sendable {
     }
 
     private func downloadWithProgress(from url: URL, progressHandler: ((Double) -> Void)?) async throws -> URL {
-        let delegate = ProgressDelegate(progressHandler: progressHandler)
-        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
-        defer { session.invalidateAndCancel() }
-
-        let (localURL, response) = try await session.download(from: url)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw URLError(.badServerResponse)
+        try await withCheckedThrowingContinuation { continuation in
+            let delegate = ProgressDelegate(progressHandler: progressHandler) {
+                continuation.resume(with: $0)
+            }
+            let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+            let task = session.downloadTask(with: url)
+            task.resume()
         }
-
-        let tempDir = FileManager.default.temporaryDirectory
-        let destURL = tempDir.appendingPathComponent(url.lastPathComponent)
-        if FileManager.default.fileExists(atPath: destURL.path(percentEncoded: false)) {
-            try FileManager.default.removeItem(at: destURL)
-        }
-        try FileManager.default.moveItem(at: localURL, to: destURL)
-        return destURL
     }
 
     func downloadModel(from url: URL, expectedSHA256: String? = nil, progressHandler: ((Double) -> Void)? = nil) async throws -> URL {
@@ -233,9 +223,13 @@ actor ModelManager: Sendable {
 
 private final class ProgressDelegate: NSObject, URLSessionDownloadDelegate {
     let progressHandler: ((Double) -> Void)?
+    let completion: (Result<URL, Error>) -> Void
+    private var downloadLocation: URL?
+    private var responseError: Error?
 
-    init(progressHandler: ((Double) -> Void)?) {
+    init(progressHandler: ((Double) -> Void)?, completion: @escaping (Result<URL, Error>) -> Void) {
         self.progressHandler = progressHandler
+        self.completion = completion
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
@@ -243,7 +237,39 @@ private final class ProgressDelegate: NSObject, URLSessionDownloadDelegate {
         handler(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
     }
 
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        let tempDir = FileManager.default.temporaryDirectory
+        let destURL = tempDir.appendingPathComponent(location.lastPathComponent)
+        if FileManager.default.fileExists(atPath: destURL.path(percentEncoded: false)) {
+            try? FileManager.default.removeItem(at: destURL)
+        }
+        do {
+            try FileManager.default.moveItem(at: location, to: destURL)
+            downloadLocation = destURL
+        } catch {
+            responseError = error
+        }
+    }
 
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {}
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        session.invalidateAndCancel()
+        if let error = error {
+            completion(.failure(error))
+            return
+        }
+        if let responseError = responseError {
+            completion(.failure(responseError))
+            return
+        }
+        guard let url = downloadLocation else {
+            completion(.failure(URLError(.cannotMoveFile)))
+            return
+        }
+        guard let httpResponse = task.response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            completion(.failure(URLError(.badServerResponse)))
+            return
+        }
+        completion(.success(url))
+    }
 }
