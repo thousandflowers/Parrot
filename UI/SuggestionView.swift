@@ -7,6 +7,13 @@ struct SuggestionView: View {
     let onExplain: () -> Void
     let onDismiss: () -> Void
 
+    private var stateHash: Int {
+        var hasher = Hasher()
+        hasher.combine(headerTitle)
+        hasher.combine(result?.detectedTone)
+        return hasher.finalize()
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             headerView
@@ -15,8 +22,10 @@ struct SuggestionView: View {
                 .padding(.horizontal, 8)
 
             contentView
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 12)
                 .padding(.vertical, 12)
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                .id(stateHash)
 
             Divider()
                 .padding(.horizontal, 8)
@@ -26,6 +35,7 @@ struct SuggestionView: View {
                 .padding(.vertical, 8)
         }
         .frame(width: 380)
+        .animation(.easeOut(duration: 0.2), value: stateHash)
         .background(
             VisualEffectView(material: .popover, blendingMode: .behindWindow)
                 .cornerRadius(12)
@@ -53,6 +63,7 @@ struct SuggestionView: View {
                     .foregroundColor(.secondary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Chiudi")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -161,26 +172,33 @@ struct SuggestionView: View {
             switch state {
             case .suggestion, .fluencySuggestion:
                 Button("Ignora") { onDismiss() }
+                    .accessibilityHint("Scarta il suggerimento senza applicarlo")
                 Spacer()
                 Button("Spiega") { onExplain() }
+                    .accessibilityHint("Richiedi una spiegazione delle correzioni")
                 Button("Applica") {
                     onApply()
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
+                .accessibilityHint("Sostituisci il testo con la versione corretta")
 
             case .error:
                 Button("Chiudi") { onDismiss() }
+                    .accessibilityHint("Chiudi il messaggio di errore")
                 Spacer()
                 Button("Riprova") { onDismiss() }
+                    .accessibilityHint("Riprova la correzione")
 
             case .loading:
                 Button("Annulla") { onDismiss() }
+                    .accessibilityHint("Annulla l'elaborazione in corso")
                 Spacer()
 
             default:
                 Button("Chiudi") { onDismiss() }
                 .keyboardShortcut(.defaultAction)
+                .accessibilityHint("Chiudi il pannello")
                 Spacer()
             }
         }

@@ -117,7 +117,7 @@ actor ModelManager: Sendable {
             guard let mirror = mirrorURL(for: url) else {
                 throw CorrectionError.modelDownloadFailed(url: url)
             }
-            print("Trying mirror: hf-mirror.com")
+            os_log(.info, "Trying mirror: hf-mirror.com")
             do {
                 return try await downloadWithProgress(from: mirror, progressHandler: progressHandler)
             } catch {

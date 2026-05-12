@@ -44,33 +44,33 @@ enum CorrectionError: Error, LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .accessibilityPermissionDenied:
-            return "Accessibilita non abilitata. Vai in Preferenze di Sistema > Privacy e sicurezza > Accessibilita."
+            return "Accessibilità non abilitata. Apri Impostazioni di Sistema > Privacy e sicurezza > Accessibilità e aggiungi RefineClone all'elenco."
         case .noTextSelected:
             return "Nessun testo selezionato. Seleziona del testo e riprova."
         case .textExtractionFailed(let appName):
-            return "Impossibile leggere il testo da \(appName)."
+            return "Impossibile leggere il testo da \(appName). L'app potrebbe non supportare l'Accessibilità."
         case .serverNotRunning:
-            return "Il motore AI e offline. Riavvio in corso..."
+            return "Il motore AI è offline. Riavvio in corso..."
         case .serverTimeout:
-            return "Timeout del server. Riprova tra qualche secondo."
+            return "Il server sta impiegando troppo tempo. Riprova tra qualche secondo."
         case .modelNotLoaded:
-            return "Modello non caricato. Verifica che sia installato correttamente."
-        case .modelDownloadFailed(let url):
-            return "Download del modello fallito da \(url.host ?? url.absoluteString)."
-        case .modelCorrupted(let sha):
-            return "Modello corrotto (SHA: \(sha.prefix(12))...). Scarica di nuovo il modello."
+            return "Modello non caricato. Verifica nelle impostazioni Modelli che sia installato."
+        case .modelDownloadFailed:
+            return "Impossibile scaricare il modello. Controlla la connessione e riprova."
+        case .modelCorrupted:
+            return "Il file del modello è danneggiato. Scaricalo di nuovo dal pannello Modelli."
         case .modelIncompatibleVersion:
-            return "Versione GGUF del modello non compatibile. Scarica un modello aggiornato."
+            return "Il formato del modello non è compatibile. Scarica un modello aggiornato dal pannello Modelli."
         case .outOfMemory:
-            return "Memoria insufficiente. Chiudi altre app o usa un modello piu piccolo."
+            return "Memoria insufficiente. Chiudi altre app o usa un modello più piccolo."
         case .networkUnavailable:
-            return "Connessione di rete non disponibile."
+            return "Connessione di rete non disponibile. Controlla il Wi-Fi o la connessione ethernet."
         case .invalidAPIKey:
-            return "API Key non valida. Verifica le impostazioni."
+            return "API Key non valida. Controllala nelle impostazioni del servizio."
         case .rateLimited:
-            return "Troppe richieste. Attendi qualche secondo."
-        case .outputParsingFailed(let raw):
-            return "Risposta AI non valida (\(raw.prefix(30))...). Riprova."
+            return "Troppe richieste. Attendi qualche secondo e riprova."
+        case .outputParsingFailed:
+            return "La risposta ricevuta non è nel formato atteso. Riprova."
         case .textTooLong(let length, let maxLength):
             return "Testo troppo lungo (\(length) caratteri). Massimo: \(maxLength)."
         }

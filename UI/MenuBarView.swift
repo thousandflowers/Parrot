@@ -2,7 +2,6 @@ import SwiftUI
 
 struct MenuBarView: View {
     @State private var prefs = PreferencesStore.shared
-    @State private var isAutoCheckEnabled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -62,8 +61,9 @@ struct MenuBarView: View {
             Divider()
 
             Group {
-                Toggle("Controllo Automatico", isOn: $isAutoCheckEnabled)
+                Toggle("Controllo Automatico", isOn: $prefs.autoCheckEnabled)
                     .padding(.horizontal, 12)
+                    .accessibilityHint("Attiva il controllo ortografico in tempo reale mentre scrivi")
 
                 Button(action: { checkGrammar() }) {
                     HStack {
@@ -74,6 +74,7 @@ struct MenuBarView: View {
                 .buttonStyle(.plain)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
+                .accessibilityHint("Correggi errori grammaticali nel testo selezionato")
 
                 Button(action: { checkFluency() }) {
                     HStack {
@@ -84,6 +85,7 @@ struct MenuBarView: View {
                 .buttonStyle(.plain)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
+                .accessibilityHint("Migliora la fluidità del testo selezionato")
 
                 Button(action: { openEditor() }) {
                     HStack {
@@ -124,12 +126,6 @@ struct MenuBarView: View {
             .padding(.bottom, 8)
         }
         .frame(width: 250)
-        .onChange(of: isAutoCheckEnabled) { _, newValue in
-            prefs.autoCheckEnabled = newValue
-        }
-        .onAppear {
-            isAutoCheckEnabled = prefs.autoCheckEnabled
-        }
     }
 
     private func checkGrammar() {

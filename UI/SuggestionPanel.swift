@@ -20,6 +20,30 @@ final class SuggestionPanelController {
 
     private init() {}
 
+    private var reduceMotion: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
+    private func animateIn(_ panel: NSPanel) {
+        guard !reduceMotion else { return }
+        panel.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().alphaValue = 1.0
+        }
+    }
+
+    private func animateOut(_ panel: NSPanel, completion: @escaping () -> Void) {
+        guard !reduceMotion else { completion(); return }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            ctx.completionHandler = completion
+            panel.animator().alphaValue = 0
+        }
+    }
+
     private func clampToScreen(_ origin: NSPoint, size: NSSize) -> NSPoint {
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return origin }
         let frame = screen.visibleFrame
@@ -49,6 +73,7 @@ final class SuggestionPanelController {
         let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: panelSize)
         panel?.setFrameOrigin(origin)
         panel?.orderFrontRegardless()
+        animateIn(panel!)
     }
 
     func showFluency(result: CorrectionResult) {
@@ -72,6 +97,7 @@ final class SuggestionPanelController {
         let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: panelSize)
         panel?.setFrameOrigin(origin)
         panel?.orderFrontRegardless()
+        animateIn(panel!)
     }
 
     func showLoading() {
@@ -84,6 +110,7 @@ final class SuggestionPanelController {
         let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: panelSize)
         panel.setFrameOrigin(origin)
         panel.orderFrontRegardless()
+        animateIn(panel)
     }
 
     func showError(_ error: CorrectionError) {
@@ -106,6 +133,7 @@ final class SuggestionPanelController {
         let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: panelSize)
         panel.setFrameOrigin(origin)
         panel.orderFrontRegardless()
+        animateIn(panel)
     }
 
     private func createPanel(with result: CorrectionResult? = nil, loading: Bool = false, stateFor: ((CorrectionResult) -> SuggestionState)? = nil) -> NSPanel {
@@ -190,7 +218,10 @@ final class SuggestionPanelController {
 
     func close() {
         explanationTask?.cancel()
-        panel?.orderOut(nil)
-        panel = nil
+        guard let panel = panel else { return }
+        self.panel = nil
+        animateOut(panel) {
+            panel.orderOut(nil)
+        }
     }
 }

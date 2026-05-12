@@ -39,7 +39,9 @@ struct SettingsView: View {
                 continuation.onTermination = { _ in task.cancel() }
             }
             for await _ in stream {
-                serverIsRunning = await ServerManager.shared.currentPort > 0
+                let running = await ServerManager.shared.currentPort > 0
+                guard running != serverIsRunning else { continue }
+                serverIsRunning = running
             }
         }
     }

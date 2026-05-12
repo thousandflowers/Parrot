@@ -63,9 +63,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if !enabled {
             let alert = NSAlert()
             alert.messageText = "Permessi di Accessibilità Richiesti"
-            alert.informativeText = "RefineClone necessita dell'accesso all'accessibilità per leggere e correggere il testo in altre applicazioni.\n\nApri Preferenze di Sistema > Privacy e sicurezza > Accessibilità e aggiungi RefineClone."
+            alert.informativeText = "RefineClone usa l'Accessibilità per leggere e correggere il testo in altre applicazioni.\n\nApri Impostazioni di Sistema > Privacy e sicurezza > Accessibilità e aggiungi RefineClone."
             alert.alertStyle = .warning
-            alert.addButton(withTitle: "Apri Preferenze")
+            alert.addButton(withTitle: "Apri Impostazioni")
             alert.addButton(withTitle: "OK")
             if alert.runModal() == .alertFirstButtonReturn {
                 if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {

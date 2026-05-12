@@ -58,7 +58,7 @@ actor ServerHealthMonitor: Sendable {
                 try await ServerManager.shared.start(modelPath: modelPath)
                 startMonitoring()
             } catch {
-                print("ServerHealthMonitor: restart failed — \(error.localizedDescription)")
+                os_log(.error, "ServerHealthMonitor: restart failed — %{public}@", error.localizedDescription)
             }
         }
     }
