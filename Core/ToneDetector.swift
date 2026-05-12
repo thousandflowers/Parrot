@@ -58,7 +58,9 @@ actor ToneDetector {
         let isItalian = language.starts(with: "it")
 
         let contractions: Set<String> = isItalian ? informalContractionsIT : informalContractionsEN
-        let contractionCount = words.filter { w in
+        // Use raw words (before punctuation trimming) because contractions
+        // contain apostrophes that .punctuationCharacters removes.
+        let contractionCount = rawWords.map({ $0.lowercased() }).filter { w in
             contractions.contains { w.hasPrefix($0) }
         }.count
         let informalWordCount = words.filter { informalWords.contains(String($0)) }.count

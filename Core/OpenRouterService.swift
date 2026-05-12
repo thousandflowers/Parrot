@@ -9,6 +9,7 @@ final class OpenRouterService: LLMService, Sendable {
         UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openRouterModel) ?? "openai/gpt-4o-mini"
     }
     private let apiKeyLock = NSLock()
+    // Swift 6 migration: replace with Mutex (swift-synchronization) protecting key + timestamp
     private nonisolated(unsafe) var _cachedAPIKey: String?
     private nonisolated(unsafe) var _lastAPIKeyTime: Date = .distantPast
 

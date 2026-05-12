@@ -6,6 +6,7 @@ actor AccessibilityBridge {
     private(set) var lastSelectionBounds: CGRect = .zero
 
     private static let _pidLock = NSLock()
+    // Swift 6 migration: replace with Mutex or use @MainActor global actor
     private nonisolated(unsafe) static var _storedPID: pid_t = 0
 
     nonisolated static var lastKnownFrontAppPID: pid_t {
@@ -361,6 +362,7 @@ struct PendingClipboardRestore {
 }
 
 extension AccessibilityBridge {
+    // Swift 6 migration: replace with actor-isolated state instead of static + NSLock
     private nonisolated(unsafe) static var _pendingClipboardRestore: PendingClipboardRestore?
 
     nonisolated static func emergencyClipboardRestore() {

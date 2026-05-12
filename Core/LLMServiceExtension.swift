@@ -48,8 +48,7 @@ extension LLMService {
         }
 
         var lastError: Error?
-        // maxRetries controls total attempts (retries = maxRetries - 1)
-        for attempt in 0..<Constants.maxRetries {
+        for attempt in 0..<Constants.requestMaxAttempts {
             do {
                 let (data, response) = try await URLSession.shared.data(for: request)
                 guard let httpResponse = response as? HTTPURLResponse else {
@@ -75,7 +74,7 @@ extension LLMService {
             } catch {
                 lastError = error
             }
-            guard attempt < Constants.maxRetries - 1 else { break }
+            guard attempt < Constants.requestMaxAttempts - 1 else { break }
             let delayMs = UInt64(min(2000, 250 * Int(pow(2.0, Double(attempt)))))
             try await Task.sleep(for: .milliseconds(delayMs))
         }

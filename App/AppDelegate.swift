@@ -23,6 +23,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let replyLock = NSLock()
+        // Swift 6 migration: replace with Mutex (swift-synchronization) or @MainActor redesign
         nonisolated(unsafe) var didReply = false
         let replyOnce: @Sendable () -> Void = {
             replyLock.lock()

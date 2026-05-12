@@ -7,9 +7,16 @@ final class FloatingEditorController {
 
     private var window: NSWindow?
 
+    private var reduceMotion: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
     func show() {
         if let existing = window {
             existing.makeKeyAndOrderFront(nil)
+            if !reduceMotion, existing.alphaValue < 1.0 {
+                fadeIn(existing)
+            }
             return
         }
 
@@ -33,6 +40,17 @@ final class FloatingEditorController {
         newWindow.contentView = hostingView
         window = newWindow
         newWindow.makeKeyAndOrderFront(nil)
+        fadeIn(newWindow)
+    }
+
+    private func fadeIn(_ window: NSWindow) {
+        guard !reduceMotion else { return }
+        window.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.25
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            window.animator().alphaValue = 1.0
+        }
     }
 
     private func close() {

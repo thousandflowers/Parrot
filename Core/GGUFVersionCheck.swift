@@ -19,25 +19,4 @@ struct GGUFVersionCheck: Sendable {
         }
         return magic == "GGUF"
     }
-
-    /// Extract GGUF version from file header.
-    static func ggufVersion(filePath: String) -> Int? {
-        guard let handle = FileHandle(forReadingAtPath: filePath) else { return nil }
-        defer {
-            do { try handle.close() } catch { os_log(.debug, "GGUF close error: %{public}@", error.localizedDescription) }
-        }
-
-        guard let data = try? handle.read(upToCount: 4096),
-              data.count >= 8,
-              String(data: data.subdata(in: 0..<4), encoding: .utf8) == "GGUF" else {
-            return nil
-        }
-        // GGUF version is a u32 little-endian at offset 4-7
-        var version: UInt32 = 0
-        data.subdata(in: 4..<8).withUnsafeBytes { raw in
-            guard raw.count >= 4 else { return }
-            version = UInt32(littleEndian: raw.loadUnaligned(as: UInt32.self))
-        }
-        return Int(version)
-    }
 }

@@ -15,6 +15,7 @@ final class SuggestionPanelController {
     static let shared = SuggestionPanelController()
 
     private var panel: NSPanel?
+    private var hostingView: NSHostingView<SuggestionView>?
     private var currentResult: CorrectionResult?
     private var explanationTask: Task<Void, Never>?
 
@@ -52,20 +53,20 @@ final class SuggestionPanelController {
         return NSPoint(x: clampedX, y: clampedY)
     }
 
-    func show(result: CorrectionResult) {
+    private func showOrUpdate(result: CorrectionResult, state: SuggestionState) {
         self.currentResult = result
+        let view = SuggestionView(
+            result: result,
+            state: state,
+            onApply: { [weak self] in self?.applyCorrection() },
+            onExplain: { [weak self] in self?.requestExplanation() },
+            onDismiss: { [weak self] in self?.close() }
+        )
 
-        if panel == nil {
-            panel = createPanel(with: result)
+        if let hv = hostingView {
+            hv.rootView = view
         } else {
-            let hostingView = NSHostingView(rootView: SuggestionView(
-                result: result,
-                state: .suggestion(result),
-                onApply: { [weak self] in self?.applyCorrection() },
-                onExplain: { [weak self] in self?.requestExplanation() },
-                onDismiss: { [weak self] in self?.close() }
-            ))
-            panel?.contentView = hostingView
+            panel = createPanel(with: view)
         }
 
         let mouseLoc = NSEvent.mouseLocation
@@ -74,69 +75,60 @@ final class SuggestionPanelController {
         panel?.setFrameOrigin(origin)
         panel?.orderFrontRegardless()
         animateIn(panel!)
+    }
+
+    func show(result: CorrectionResult) {
+        let state: SuggestionState = result.hasChanges ? .suggestion(result) : .noErrors
+        showOrUpdate(result: result, state: state)
     }
 
     func showFluency(result: CorrectionResult) {
-        self.currentResult = result
-
-        if panel == nil {
-            panel = createPanel(with: result, stateFor: { .fluencySuggestion($0) })
-        } else {
-            let hostingView = NSHostingView(rootView: SuggestionView(
-                result: result,
-                state: .fluencySuggestion(result),
-                onApply: { [weak self] in self?.applyCorrection() },
-                onExplain: { [weak self] in self?.requestExplanation() },
-                onDismiss: { [weak self] in self?.close() }
-            ))
-            panel?.contentView = hostingView
-        }
-
-        let mouseLoc = NSEvent.mouseLocation
-        let panelSize = panel?.frame.size ?? NSSize(width: 400, height: 220)
-        let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: panelSize)
-        panel?.setFrameOrigin(origin)
-        panel?.orderFrontRegardless()
-        animateIn(panel!)
+        let state: SuggestionState = result.hasChanges ? .fluencySuggestion(result) : .noErrors
+        showOrUpdate(result: result, state: state)
     }
 
     func showLoading() {
+        let view = SuggestionView(
+            result: nil,
+            state: .loading,
+            onApply: {},
+            onExplain: {},
+            onDismiss: { [weak self] in self?.close() }
+        )
         panel?.orderOut(nil)
-        let panel = createPanel(loading: true)
-        self.panel = panel
+        hostingView = nil
+        panel = createPanel(with: view)
 
         let mouseLoc = NSEvent.mouseLocation
-        let panelSize = panel.frame.size
+        let panelSize = panel!.frame.size
         let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: panelSize)
-        panel.setFrameOrigin(origin)
-        panel.orderFrontRegardless()
-        animateIn(panel)
+        panel!.setFrameOrigin(origin)
+        panel!.orderFrontRegardless()
+        animateIn(panel!)
     }
 
     func showError(_ error: CorrectionError) {
-        panel?.orderOut(nil)
-        panel = nil
-        let panel = createPanel(loading: false)
-        self.panel = panel
-
-        let hostingView = NSHostingView(rootView: SuggestionView(
+        let view = SuggestionView(
             result: nil,
             state: .error(error),
             onApply: {},
             onExplain: {},
             onDismiss: { [weak self] in self?.close() }
-        ))
-        panel.contentView = hostingView
+        )
+        panel?.orderOut(nil)
+        panel = nil
+        hostingView = nil
+        panel = createPanel(with: view)
 
         let mouseLoc = NSEvent.mouseLocation
-        let panelSize = panel.frame.size
+        let panelSize = panel!.frame.size
         let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: panelSize)
-        panel.setFrameOrigin(origin)
-        panel.orderFrontRegardless()
-        animateIn(panel)
+        panel!.setFrameOrigin(origin)
+        panel!.orderFrontRegardless()
+        animateIn(panel!)
     }
 
-    private func createPanel(with result: CorrectionResult? = nil, loading: Bool = false, stateFor: ((CorrectionResult) -> SuggestionState)? = nil) -> NSPanel {
+    private func createPanel(with view: SuggestionView) -> NSPanel {
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 400, height: 220),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -151,25 +143,9 @@ final class SuggestionPanelController {
         panel.isMovableByWindowBackground = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
-        let state: SuggestionState
-        if loading {
-            state = .loading
-        } else if let result = result, let mapper = stateFor {
-            state = result.hasChanges ? mapper(result) : .noErrors
-        } else if let result = result {
-            state = result.hasChanges ? .suggestion(result) : .noErrors
-        } else {
-            state = .noErrors
-        }
-
-        let hostingView = NSHostingView(rootView: SuggestionView(
-            result: result,
-            state: state,
-            onApply: { [weak self] in self?.applyCorrection() },
-            onExplain: { [weak self] in self?.requestExplanation() },
-            onDismiss: { [weak self] in self?.close() }
-        ))
-        panel.contentView = hostingView
+        let hv = NSHostingView(rootView: view)
+        hostingView = hv
+        panel.contentView = hv
 
         return panel
     }
@@ -220,6 +196,7 @@ final class SuggestionPanelController {
         explanationTask?.cancel()
         guard let panel = panel else { return }
         self.panel = nil
+        self.hostingView = nil
         animateOut(panel) {
             panel.orderOut(nil)
         }

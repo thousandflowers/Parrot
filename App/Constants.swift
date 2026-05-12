@@ -6,7 +6,7 @@ enum Constants {
     static let requestTimeout: TimeInterval = 60.0
     static let cacheTTL: TimeInterval = 3600
     static let cacheMaxEntries = 100
-    static let maxRetries = 3
+    static let requestMaxAttempts = 3
     static let huggingFaceHost = "huggingface.co"
     static let huggingFaceMirrorHost = "hf-mirror.com"
     static let grammarTemperature: Double = 0.1

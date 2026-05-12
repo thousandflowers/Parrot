@@ -71,9 +71,10 @@ struct MenuBarView: View {
                         Text("Controlla Grammatica (Cmd+Shift+E)")
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableButtonStyle())
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
+                .accessibilityLabel("Controlla Grammatica")
                 .accessibilityHint("Correggi errori grammaticali nel testo selezionato")
 
                 Button(action: { checkFluency() }) {
@@ -82,9 +83,10 @@ struct MenuBarView: View {
                         Text("Controlla Fluidità (Cmd+Shift+T)")
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableButtonStyle())
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
+                .accessibilityLabel("Controlla Fluidità")
                 .accessibilityHint("Migliora la fluidità del testo selezionato")
 
                 Button(action: { openEditor() }) {
@@ -93,9 +95,10 @@ struct MenuBarView: View {
                         Text("Apri Editor (Cmd+Shift+F)")
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableButtonStyle())
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
+                .accessibilityLabel("Apri Editor")
 
                 SettingsLink {
                     HStack {
@@ -105,7 +108,7 @@ struct MenuBarView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 4)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableButtonStyle())
                 .keyboardShortcut(",", modifiers: .command)
             }
 
@@ -118,7 +121,7 @@ struct MenuBarView: View {
                         Text("Esci")
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableButtonStyle())
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
                 .keyboardShortcut("q", modifiers: .command)
@@ -160,5 +163,14 @@ struct MenuBarView: View {
     private func openEditor() {
         FloatingEditorController.shared.show()
         NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+private struct PressableButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .opacity(configuration.isPressed ? 0.7 : 1.0)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }

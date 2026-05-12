@@ -34,12 +34,12 @@ struct SuggestionView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
         }
-        .frame(width: 380)
+        .frame(minWidth: 300, idealWidth: 380, maxWidth: 500)
         .animation(.easeOut(duration: 0.2), value: stateHash)
         .background(
             VisualEffectView(material: .popover, blendingMode: .behindWindow)
                 .cornerRadius(12)
-                .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 4)
+                .shadow(color: .primary.opacity(0.15), radius: 10, x: 0, y: 4)
         )
     }
 
