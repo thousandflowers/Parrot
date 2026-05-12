@@ -195,7 +195,12 @@ struct ModelsTab: View {
             do {
                 let destinationURL = try await ModelManager.shared.downloadModel(
                     from: rec.url,
-                    expectedSHA256: rec.expectedSHA256
+                    expectedSHA256: rec.expectedSHA256,
+                    progressHandler: { fraction in
+                        Task { @MainActor in
+                            downloadProgress = fraction
+                        }
+                    }
                 )
                 guard !Task.isCancelled else { return }
                 let modelID = destinationURL.deletingPathExtension().lastPathComponent
