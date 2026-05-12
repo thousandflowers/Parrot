@@ -17,6 +17,10 @@ enum Constants {
     static let defaultContextSize = 4096
     static let serverHealthAttempts = 20
     static let queueTimeout: TimeInterval = 60
+    static let downloadTimeout: TimeInterval = 3600
+    static let downloadProgressMinInterval: TimeInterval = 0.1
+    static let sha256ChunkSize = 1_048_576
+    static let minModelFileSize = 10_000_000
     static let cacheMaxMemoryBytes = 10 * 1024 * 1024
     static let maxTextLength = 8000
 
@@ -44,5 +48,7 @@ enum Constants {
         static let ollamaModel = "ollamaModel"
         static let openRouterModel = "openRouterModel"
         static let realtimeEnabled = "realtimeEnabled"
+        static let hfToken = "hfToken"
+        static let externalModelPaths = "externalModelPaths"
     }
 }

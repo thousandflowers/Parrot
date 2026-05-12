@@ -12,6 +12,14 @@ struct ModelRecommendation: Sendable {
     var warning: String?
 }
 
+struct DiscoveredModel: Identifiable, Sendable {
+    let id: String
+    let name: String
+    let path: String
+    let size: Int64
+    let source: String
+}
+
 struct ModelInfo: Codable {
     let id: String
     let name: String
@@ -33,13 +41,29 @@ actor ModelManager: Sendable {
         return appSupport.appendingPathComponent("RefineClone/Models")
     }()
 
+    private static let scanDirs: [String] = [
+        "~/Library/Application Support/nomic.ai/GPT4All",
+        "~/.cache/lm-studio/models",
+        "~/.cache/lmstudio/models",
+        "~/LM Studio/models",
+        "~/Downloads",
+        "~/Documents",
+        "~/models",
+        "~/.ollama/models",
+    ]
+
     nonisolated var currentModelPath: String? {
         let id = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID) ?? ""
         let cleanID = id.hasSuffix(".gguf") ? String(id.dropLast(5)) : id
         if !cleanID.isEmpty {
-            let path = modelsDir.appendingPathComponent("\(cleanID).gguf").path(percentEncoded: false)
-            if FileManager.default.fileExists(atPath: path) {
-                return path
+            let ownPath = modelsDir.appendingPathComponent("\(cleanID).gguf").path(percentEncoded: false)
+            if FileManager.default.fileExists(atPath: ownPath) {
+                return ownPath
+            }
+            let fullPathID = id.hasSuffix(".gguf") ? id : "\(id).gguf"
+            let external = adoptedModelPaths().first { ($0 as NSString).lastPathComponent == fullPathID || $0.contains(cleanID) }
+            if let ext = external, FileManager.default.fileExists(atPath: ext) {
+                return ext
             }
         }
         guard let contents = try? FileManager.default.contentsOfDirectory(atPath: modelsDir.path(percentEncoded: false)),
@@ -49,53 +73,99 @@ actor ModelManager: Sendable {
         return modelsDir.appendingPathComponent(firstModel).path(percentEncoded: false)
     }
 
-    func recommendedDefaultModel() -> ModelRecommendation? {
-        let lang = Locale.preferredLanguages.first
-            .flatMap { Locale(identifier: $0).language.languageCode?.identifier } ?? "en"
+    nonisolated func adoptedModelPaths() -> [String] {
+        UserDefaults.standard.stringArray(forKey: Constants.UserDefaultsKey.externalModelPaths) ?? []
+    }
+
+    func adoptModel(path: String) {
+        var paths = adoptedModelPaths()
+        guard !paths.contains(path) else { return }
+        paths.append(path)
+        UserDefaults.standard.set(paths, forKey: Constants.UserDefaultsKey.externalModelPaths)
+        let name = (path as NSString).lastPathComponent
+        let modelID = name.hasSuffix(".gguf") ? String(name.dropLast(5)) : name
+        if UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID)?.isEmpty != false {
+            UserDefaults.standard.set(modelID, forKey: Constants.UserDefaultsKey.selectedModelID)
+        }
+    }
+
+    func discoverExternalModels() -> [DiscoveredModel] {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        var results: [DiscoveredModel] = []
+        var seen = Set<String>()
+
+        for dir in Self.scanDirs {
+            let expanded = dir.replacingOccurrences(of: "~", with: home)
+            guard let files = try? FileManager.default.contentsOfDirectory(atPath: expanded) else { continue }
+            for file in files where file.hasSuffix(".gguf") {
+                let fullPath = (expanded as NSString).appendingPathComponent(file)
+                let resolved = (fullPath as NSString).resolvingSymlinksInPath
+                guard !seen.contains(resolved) else { continue }
+                seen.insert(resolved)
+                guard GGUFVersionCheck.isCompatible(filePath: resolved) else { continue }
+                let attrs = (try? FileManager.default.attributesOfItem(atPath: resolved))
+                let size = (attrs?[.size] as? Int64) ?? 0
+                let source = dir.contains("LM Studio") || dir.contains("lm-studio") ? "LM Studio"
+                    : dir.contains("GPT4All") ? "GPT4All"
+                    : dir.contains("ollama") ? "Ollama"
+                    : dir.contains("Downloads") ? "Downloads"
+                    : dir.contains("Documents") ? "Documenti"
+                    : "Trovato"
+                results.append(DiscoveredModel(
+                    id: resolved,
+                    name: file.replacingOccurrences(of: ".gguf", with: ""),
+                    path: resolved,
+                    size: size,
+                    source: source
+                ))
+            }
+        }
+        return results.sorted { $0.size > $1.size }
+    }
+
+    func recommendedModels() -> [ModelRecommendation] {
         let ramGB = getSystemRAM()
 
-        func makeRec(id: String, name: String, reason: String, ramRequired: Int, urlString: String) -> ModelRecommendation? {
-            guard let url = URL(string: urlString) else {
-                os_log(.error, "Invalid model URL: %{public}@", urlString)
-                return nil
-            }
-            return ModelRecommendation(
-                id: id, name: name, reason: reason, ramRequired: ramRequired, url: url, expectedSHA256: nil
-            )
+        func rec(id: String, name: String, reason: String, ram: Int, urlString: String, warning: String? = nil) -> ModelRecommendation? {
+            guard let url = URL(string: urlString) else { return nil }
+            var r = ModelRecommendation(id: id, name: name, reason: reason, ramRequired: ram, url: url, expectedSHA256: nil)
+            r.warning = ram > ramGB ? "Richiede ~\(ram)GB RAM (hai \(ramGB)GB). Potrebbe usare swap." : warning
+            return r
         }
 
-        if ["zh", "zh-Hans", "zh-Hant", "zh-HK"].contains(lang) {
-            return makeRec(
-                id: "qwen2.5-1.5b-instruct-q4_k_m",
-                name: "Qwen 2.5 1.5B Instruct",
-                reason: "Ottimizzato per lingua cinese",
-                ramRequired: 2,
-                urlString: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
-            )
-        } else {
-            if ramGB >= 16 {
-                return makeRec(
-                    id: "gemma-4-E4B-it-q4_k_m",
-                    name: "Gemma 4 E4B IT (8B)",
-                    reason: "Massima qualita per lingue occidentali (Mac 16GB+)",
-                    ramRequired: 6,
-                    urlString: "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf"
-                )
-            } else {
-                guard let rec = makeRec(
-                    id: "gemma-4-E2B-it-q4_k_m",
-                    name: "Gemma 4 E2B IT (5B)",
-                    reason: "Ottimizzato per lingue occidentali",
-                    ramRequired: 4,
-                    urlString: "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf"
-                ) else { return nil }
-                var mutableRec = rec
-                if ramGB < 12 {
-                    mutableRec.warning = "Questo modello richiede ~3.5GB RAM. Chiudi altre app per migliori prestazioni."
-                }
-                return mutableRec
-            }
-        }
+        let all: [ModelRecommendation?] = [
+            rec(id: "qwen2.5-0.5b-instruct-q4_k_m",     name: "Qwen 2.5 0.5B",
+                reason: "🏆 Più veloce — ideale per Mac con poca RAM", ram: 1,
+                urlString: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf"),
+            rec(id: "qwen2.5-1.5b-instruct-q4_k_m",    name: "Qwen 2.5 1.5B",
+                reason: "Veloce, multilingue (ottimo per italiano)", ram: 2,
+                urlString: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"),
+            rec(id: "Llama-3.2-1B-Instruct-Q4_K_M",     name: "Llama 3.2 1B",
+                reason: "Leggero, buona qualità per inglese", ram: 2,
+                urlString: "https://huggingface.co/unsloth/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
+            rec(id: "gemma-2-2b-it-Q4_K_M",             name: "Gemma 2 2B IT",
+                reason: "Eccellente qualità multilingue", ram: 3,
+                urlString: "https://huggingface.co/lmstudio-community/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf"),
+            rec(id: "Llama-3.2-3B-Instruct-Q4_K_M",     name: "Llama 3.2 3B",
+                reason: "Buon bilanciamento qualità/velocità", ram: 3,
+                urlString: "https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf"),
+            rec(id: "Phi-3.5-mini-instruct-Q4_K_M",     name: "Phi-3.5 Mini 3.8B",
+                reason: "Microsoft — forte nel ragionamento grammaticale", ram: 4,
+                urlString: "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf"),
+            rec(id: "Qwen2.5-3B-Instruct-Q4_K_M",       name: "Qwen 2.5 3B",
+                reason: "Multilingue, ottima qualità per grammatica", ram: 4,
+                urlString: "https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-Q4_K_M.gguf"),
+            rec(id: "gemma-4-E2B-it-Q4_K_M",            name: "Gemma 4 E2B IT (5B)",
+                reason: "Ultima generazione — massima qualità", ram: 4,
+                urlString: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf"),
+            rec(id: "gemma-4-E4B-it-Q4_K_M",            name: "Gemma 4 E4B IT (8B)",
+                reason: "Qualità professionale (16GB+ RAM consigliati)", ram: 6,
+                urlString: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf"),
+            rec(id: "gemma-2-9b-it-Q4_K_M",             name: "Gemma 2 9B IT",
+                reason: "Massima qualità assoluta (16GB+ RAM)", ram: 7,
+                urlString: "https://huggingface.co/bartowski/gemma-2-9b-it-GGUF/resolve/main/gemma-2-9b-it-Q4_K_M.gguf"),
+        ]
+        return all.compactMap { $0 }
     }
 
     private func getSystemRAM() -> Int {
@@ -110,93 +180,199 @@ actor ModelManager: Sendable {
         return components?.url
     }
 
+    private func hfToken() -> String? {
+        let token = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.hfToken)
+        guard let t = token, !t.isEmpty else { return nil }
+        return t
+    }
+
+    private func downloadSession() -> URLSession {
+        let config = URLSessionConfiguration.ephemeral
+        config.waitsForConnectivity = true
+        config.timeoutIntervalForResource = Constants.downloadTimeout
+        config.timeoutIntervalForRequest = 60
+        config.httpMaximumConnectionsPerHost = 1
+        return URLSession(configuration: config)
+    }
+
     private func downloadFile(from url: URL, progressHandler: ((Double) -> Void)? = nil) async throws -> URL {
+        let token = hfToken()
         do {
-            return try await downloadWithProgress(from: url, progressHandler: progressHandler)
+            return try await downloadWithResume(from: url, progressHandler: progressHandler, token: token)
+        } catch let error as CorrectionError {
+            throw error
         } catch {
             guard let mirror = mirrorURL(for: url) else {
                 throw CorrectionError.modelDownloadFailed(url: url)
             }
-            os_log(.info, "Trying mirror: hf-mirror.com")
+            os_log(.info, "Primary failed (%{public}@), trying mirror: hf-mirror.com", error.localizedDescription)
             do {
-                return try await downloadWithProgress(from: mirror, progressHandler: progressHandler)
+                return try await downloadWithResume(from: mirror, progressHandler: progressHandler, token: token)
             } catch {
                 throw CorrectionError.modelDownloadFailed(url: url)
             }
         }
     }
 
-    private func downloadWithProgress(from url: URL, progressHandler: ((Double) -> Void)?) async throws -> URL {
-        try await withCheckedThrowingContinuation { continuation in
-            let delegate = ProgressDelegate(progressHandler: progressHandler) {
-                continuation.resume(with: $0)
-            }
-            let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
-            let task = session.downloadTask(with: url)
-            task.resume()
+    private func downloadWithResume(from url: URL, progressHandler: ((Double) -> Void)?, token: String?) async throws -> URL {
+        let filename = url.lastPathComponent
+        let destURL = modelsDir.appendingPathComponent(filename)
+        let partialURL = modelsDir.appendingPathComponent("\(filename).partial")
+
+        let existingSize: Int64 = {
+            guard let attrs = try? FileManager.default.attributesOfItem(atPath: partialURL.path(percentEncoded: false)),
+                  let size = attrs[.size] as? Int64, size > 0 else { return 0 }
+            return size
+        }()
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 120
+        request.setValue("RefineClone/1.0", forHTTPHeaderField: "User-Agent")
+        if let token = token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
+        if existingSize > 0 {
+            request.setValue("bytes=\(existingSize)-", forHTTPHeaderField: "Range")
+        }
+
+        let session = downloadSession()
+        defer { session.invalidateAndCancel() }
+
+        let (asyncBytes, response) = try await session.bytes(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+
+        guard httpResponse.statusCode == 200 || httpResponse.statusCode == 206 else {
+            switch httpResponse.statusCode {
+            case 401, 403:
+                os_log(.error, "Model download: auth required (HTTP %{public}d). Set HF token in Impostazioni > Avanzate.", httpResponse.statusCode)
+                throw CorrectionError.modelDownloadFailed(url: url)
+            case 404:
+                os_log(.error, "Model file not found (HTTP 404): %{public}@", url.absoluteString)
+                throw CorrectionError.modelDownloadFailed(url: url)
+            default:
+                os_log(.error, "Model download failed: HTTP %{public}d for %{public}@", httpResponse.statusCode, url.absoluteString)
+                throw URLError(.badServerResponse)
+            }
+        }
+
+        let totalExpected: Int64
+        let isResume = (httpResponse.statusCode == 206)
+        if isResume {
+            totalExpected = existingSize + (httpResponse.expectedContentLength > 0 ? httpResponse.expectedContentLength : 0)
+        } else {
+            totalExpected = httpResponse.expectedContentLength
+            if FileManager.default.fileExists(atPath: partialURL.path(percentEncoded: false)) {
+                try? FileManager.default.removeItem(at: partialURL)
+            }
+        }
+
+        try FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
+        guard let fileHandle = FileHandle(forWritingAtPath: partialURL.path(percentEncoded: false)) else {
+            FileManager.default.createFile(atPath: partialURL.path(percentEncoded: false), contents: nil)
+            guard let fh = FileHandle(forWritingAtPath: partialURL.path(percentEncoded: false)) else {
+                throw URLError(.cannotCreateFile)
+            }
+            defer { try? fh.close() }
+            var downloaded = existingSize
+            var lastReport: Date = .distantPast
+            for try await byte in asyncBytes {
+                fh.write(Data([byte]))
+                downloaded += 1
+                if totalExpected > 0, let handler = progressHandler {
+                    let now = Date()
+                    if now.timeIntervalSince(lastReport) >= Constants.downloadProgressMinInterval {
+                        handler(Double(downloaded) / Double(totalExpected))
+                        lastReport = now
+                    }
+                }
+            }
+            progressHandler?(1.0)
+            try fh.synchronize()
+            try FileManager.default.moveItem(at: partialURL, to: destURL)
+            return destURL
+        }
+        defer { try? fileHandle.close() }
+        try fileHandle.seekToEnd()
+
+        var downloaded = existingSize
+        var lastReport: Date = .distantPast
+        for try await byte in asyncBytes {
+            fileHandle.write(Data([byte]))
+            downloaded += 1
+            if totalExpected > 0, let handler = progressHandler {
+                let now = Date()
+                if now.timeIntervalSince(lastReport) >= Constants.downloadProgressMinInterval {
+                    handler(Double(downloaded) / Double(totalExpected))
+                    lastReport = now
+                }
+            }
+        }
+        progressHandler?(1.0)
+        try fileHandle.synchronize()
+
+        try FileManager.default.moveItem(at: partialURL, to: destURL)
+        return destURL
     }
 
-    func downloadModel(from url: URL, expectedSHA256: String? = nil, progressHandler: ((Double) -> Void)? = nil) async throws -> URL {
+    func downloadModel(from url: URL, expectedSHA256: String? = nil, progressHandler: ((Double) -> Void)? = nil, verificationHandler: ((Double) -> Void)? = nil) async throws -> URL {
         try FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
 
-        let tempURL = try await downloadFile(from: url, progressHandler: progressHandler)
-        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let destURL = try await downloadFile(from: url, progressHandler: progressHandler)
 
-        let filename = url.lastPathComponent
-        let destination = modelsDir.appendingPathComponent(filename)
-
-        if FileManager.default.fileExists(atPath: destination.path(percentEncoded: false)) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.moveItem(at: tempURL, to: destination)
-
-        guard FileManager.default.fileExists(atPath: destination.path(percentEncoded: false)) else {
-            try? FileManager.default.removeItem(at: destination)
+        guard FileManager.default.fileExists(atPath: destURL.path(percentEncoded: false)) else {
             throw CorrectionError.modelCorrupted(expectedSHA: "file-validation-failed")
         }
         let fileSize: Int
         do {
-            let attrs = try FileManager.default.attributesOfItem(atPath: destination.path(percentEncoded: false))
+            let attrs = try FileManager.default.attributesOfItem(atPath: destURL.path(percentEncoded: false))
             fileSize = (attrs[.size] as? Int) ?? 0
         } catch {
-            os_log(.error, "ModelManager: cannot read file attributes: %{public}@", error.localizedDescription)
-            try? FileManager.default.removeItem(at: destination)
             throw CorrectionError.modelCorrupted(expectedSHA: "file-validation-failed")
         }
-        guard fileSize > 10_000_000,
-              GGUFVersionCheck.isCompatible(filePath: destination.path(percentEncoded: false)) else {
-            try? FileManager.default.removeItem(at: destination)
+        guard fileSize > Constants.minModelFileSize,
+              GGUFVersionCheck.isCompatible(filePath: destURL.path(percentEncoded: false)) else {
+            try? FileManager.default.removeItem(at: destURL)
             throw CorrectionError.modelCorrupted(expectedSHA: "file-validation-failed")
         }
 
         if let expected = expectedSHA256 {
-            guard verifySHA256(filePath: destination.path(percentEncoded: false), expectedSHA: expected) else {
-                try? FileManager.default.removeItem(at: destination)
+            let valid = verifySHA256(filePath: destURL.path(percentEncoded: false), expectedSHA: expected, progressHandler: verificationHandler)
+            guard valid else {
+                try? FileManager.default.removeItem(at: destURL)
                 throw CorrectionError.modelCorrupted(expectedSHA: String(expected.prefix(12)))
             }
         }
 
-        return destination
+        let partialURL = modelsDir.appendingPathComponent("\(destURL.lastPathComponent).partial")
+        try? FileManager.default.removeItem(at: partialURL)
+
+        return destURL
     }
 
-    private func verifySHA256(filePath: String, expectedSHA: String) -> Bool {
-        guard let handle = FileHandle(forReadingAtPath: filePath) else {
-            return false
-        }
+    private func verifySHA256(filePath: String, expectedSHA: String, progressHandler: ((Double) -> Void)? = nil) -> Bool {
+        guard let handle = FileHandle(forReadingAtPath: filePath) else { return false }
         defer { try? handle.close() }
         var hasher = SHA256()
-        while let chunk = try? handle.read(upToCount: 1_048_576) {
+        let fileSize: UInt64 = {
+            let attrs = try? FileManager.default.attributesOfItem(atPath: filePath)
+            return (attrs?[.size] as? UInt64) ?? 0
+        }()
+        var totalRead: UInt64 = 0
+        while let chunk = try? handle.read(upToCount: Constants.sha256ChunkSize) {
             guard !chunk.isEmpty else { break }
             hasher.update(data: chunk)
+            totalRead += UInt64(chunk.count)
+            if fileSize > 0, let handler = progressHandler {
+                handler(Double(totalRead) / Double(fileSize))
+            }
         }
         let computedHex = hasher.finalize().compactMap { String(format: "%02x", $0) }.joined()
         return computedHex.lowercased() == expectedSHA.lowercased()
     }
 
-
-
-    func downloadModelWithProgress(from url: URL, expectedSHA256: String? = nil) -> AsyncThrowingStream<Double, Error> {
+    nonisolated func downloadModelWithProgress(from url: URL, expectedSHA256: String? = nil) -> AsyncThrowingStream<DownloadProgress, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -204,10 +380,13 @@ actor ModelManager: Sendable {
                         from: url,
                         expectedSHA256: expectedSHA256,
                         progressHandler: { fraction in
-                            continuation.yield(fraction)
+                            continuation.yield(.downloading(fraction))
+                        },
+                        verificationHandler: { fraction in
+                            continuation.yield(.verifying(fraction))
                         }
                     )
-                    continuation.yield(1.0)
+                    continuation.yield(.complete)
                     continuation.finish()
                 } catch {
                     guard !Task.isCancelled else { return }
@@ -221,55 +400,8 @@ actor ModelManager: Sendable {
     }
 }
 
-private final class ProgressDelegate: NSObject, URLSessionDownloadDelegate {
-    let progressHandler: ((Double) -> Void)?
-    let completion: (Result<URL, Error>) -> Void
-    private var downloadLocation: URL?
-    private var responseError: Error?
-
-    init(progressHandler: ((Double) -> Void)?, completion: @escaping (Result<URL, Error>) -> Void) {
-        self.progressHandler = progressHandler
-        self.completion = completion
-    }
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        guard totalBytesExpectedToWrite > 0, let handler = progressHandler else { return }
-        handler(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
-    }
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        let tempDir = FileManager.default.temporaryDirectory
-        let destURL = tempDir.appendingPathComponent(location.lastPathComponent)
-        if FileManager.default.fileExists(atPath: destURL.path(percentEncoded: false)) {
-            try? FileManager.default.removeItem(at: destURL)
-        }
-        do {
-            try FileManager.default.moveItem(at: location, to: destURL)
-            downloadLocation = destURL
-        } catch {
-            responseError = error
-        }
-    }
-
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        session.invalidateAndCancel()
-        if let error = error {
-            completion(.failure(error))
-            return
-        }
-        if let responseError = responseError {
-            completion(.failure(responseError))
-            return
-        }
-        guard let url = downloadLocation else {
-            completion(.failure(URLError(.cannotMoveFile)))
-            return
-        }
-        guard let httpResponse = task.response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            completion(.failure(URLError(.badServerResponse)))
-            return
-        }
-        completion(.success(url))
-    }
+enum DownloadProgress: Sendable {
+    case downloading(Double)
+    case verifying(Double)
+    case complete
 }
