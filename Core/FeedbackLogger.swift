@@ -11,7 +11,10 @@ struct FeedbackEntry: Codable {
 
 enum FeedbackLogger {
     private static let feedbackDir: URL = {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            os_log(.error, "Cannot access Application Support directory")
+            return FileManager.default.temporaryDirectory
+        }
         return appSupport.appendingPathComponent("RefineClone")
     }()
 

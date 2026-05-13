@@ -79,7 +79,7 @@ struct OnboardingView: View {
         VStack(spacing: 20) {
             Spacer()
             Image(systemName: "checkmark.shield")
-                .font(.system(size: 64))
+                .font(.largeTitle)
                 .foregroundColor(.statusOk)
             Text("Benvenuto in RefineClone")
                 .font(.title)
@@ -95,7 +95,7 @@ struct OnboardingView: View {
         VStack(spacing: 20) {
             Spacer()
             Image(systemName: "hand.raised.fill")
-                .font(.system(size: 48))
+                .font(.title)
                 .foregroundColor(.statusWarning)
             Text("Permessi di Accessibilità")
                 .font(.title2)
@@ -119,7 +119,7 @@ struct OnboardingView: View {
         VStack(spacing: 20) {
             Spacer()
             Image(systemName: "cpu")
-                .font(.system(size: 48))
+                .font(.title)
                 .foregroundColor(.accentBrand)
             Text("Scegli un Modello")
                 .font(.title2)

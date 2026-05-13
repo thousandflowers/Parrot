@@ -135,7 +135,7 @@ actor ModelManager: Sendable {
 
         let all: [ModelRecommendation?] = [
             rec(id: "qwen2.5-0.5b-instruct-q4_k_m",     name: "Qwen 2.5 0.5B",
-                reason: "🏆 Più veloce — ideale per Mac con poca RAM", ram: 1,
+                reason: "Più veloce — ideale per Mac con poca RAM", ram: 1,
                 urlString: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf"),
             rec(id: "qwen2.5-1.5b-instruct-q4_k_m",    name: "Qwen 2.5 1.5B",
                 reason: "Veloce, multilingue (ottimo per italiano)", ram: 2,
@@ -149,21 +149,12 @@ actor ModelManager: Sendable {
             rec(id: "Llama-3.2-3B-Instruct-Q4_K_M",     name: "Llama 3.2 3B",
                 reason: "Buon bilanciamento qualità/velocità", ram: 3,
                 urlString: "https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf"),
-            rec(id: "Phi-3.5-mini-instruct-Q4_K_M",     name: "Phi-3.5 Mini 3.8B",
+            rec(id: "Phi-3.5-mini-instruct-Q4_K_M",     name: "Phi-3.5 Mini",
                 reason: "Microsoft — forte nel ragionamento grammaticale", ram: 4,
                 urlString: "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf"),
-            rec(id: "Qwen2.5-3B-Instruct-Q4_K_M",       name: "Qwen 2.5 3B",
-                reason: "Multilingue, ottima qualità per grammatica", ram: 4,
-                urlString: "https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-Q4_K_M.gguf"),
-            rec(id: "gemma-4-E2B-it-Q4_K_M",            name: "Gemma 4 E2B IT (5B)",
+            rec(id: "gemma-4-E2B-it-Q4_K_M",            name: "Gemma 4 E2B IT",
                 reason: "Ultima generazione — massima qualità", ram: 4,
                 urlString: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf"),
-            rec(id: "gemma-4-E4B-it-Q4_K_M",            name: "Gemma 4 E4B IT (8B)",
-                reason: "Qualità professionale (16GB+ RAM consigliati)", ram: 6,
-                urlString: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf"),
-            rec(id: "gemma-2-9b-it-Q4_K_M",             name: "Gemma 2 9B IT",
-                reason: "Massima qualità assoluta (16GB+ RAM)", ram: 7,
-                urlString: "https://huggingface.co/bartowski/gemma-2-9b-it-GGUF/resolve/main/gemma-2-9b-it-Q4_K_M.gguf"),
         ]
         return all.compactMap { $0 }
     }

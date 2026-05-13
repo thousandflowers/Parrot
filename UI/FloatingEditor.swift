@@ -100,6 +100,7 @@ struct FloatingEditorView: View {
 
                     TextEditor(text: $inputText)
                         .font(.body)
+                        .accessibilityLabel("Editor di testo")
                         .frame(minWidth: 250, minHeight: 200)
                         .scrollContentBackground(.hidden)
                         .background(Color(.textBackgroundColor))
@@ -123,6 +124,7 @@ struct FloatingEditorView: View {
                         Text(correctedText)
                             .font(.body)
                             .textSelection(.enabled)
+                            .accessibilityLabel("Testo corretto")
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .frame(minWidth: 250, minHeight: 200)
@@ -145,16 +147,22 @@ struct FloatingEditorView: View {
                     Button("Riprova") { checkText() }
                         .buttonStyle(.borderless)
                         .controlSize(.small)
+                        .accessibilityLabel("Riprova controllo")
+                        .accessibilityHint("Riesegue il controllo grammaticale")
                     Button("Usa Stub") { checkWithStub() }
                         .buttonStyle(.borderless)
                         .controlSize(.small)
                         .font(.caption)
+                        .accessibilityLabel("Usa servizio stub")
+                        .accessibilityHint("Esegue il controllo con il servizio di test locale")
                 }
                 Spacer()
 
                 Button("Controlla") { checkText() }
                     .buttonStyle(.borderedProminent)
                     .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+                    .accessibilityLabel("Controlla testo")
+                    .accessibilityHint("Avvia il controllo grammaticale sul testo inserito")
 
                 Button("Copia") {
                     NSPasteboard.general.clearContents()
@@ -163,6 +171,8 @@ struct FloatingEditorView: View {
                     NSPasteboard.general.writeObjects([item])
                 }
                 .disabled(correctedText.isEmpty)
+                .accessibilityLabel("Copia testo corretto")
+                .accessibilityHint("Copia il testo corretto negli appunti")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)

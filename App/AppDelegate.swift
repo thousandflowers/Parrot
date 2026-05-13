@@ -60,6 +60,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func checkAccessibilityPermissions() {
+        if AXIsProcessTrusted() { return }
+        guard !UserDefaults.standard.bool(forKey: "hasAcknowledgedAccessibilityWarning") else { return }
+
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         let enabled = AXIsProcessTrustedWithOptions(options as CFDictionary)
 
@@ -69,11 +72,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             alert.informativeText = "RefineClone usa l'Accessibilità per leggere e correggere il testo in altre applicazioni.\n\nApri Impostazioni di Sistema > Privacy e sicurezza > Accessibilità e aggiungi RefineClone."
             alert.alertStyle = .warning
             alert.addButton(withTitle: "Apri Impostazioni")
+            alert.addButton(withTitle: "Non mostrare più")
             alert.addButton(withTitle: "OK")
-            if alert.runModal() == .alertFirstButtonReturn {
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
                 if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
                     NSWorkspace.shared.open(url)
                 }
+            } else if response == .alertSecondButtonReturn {
+                UserDefaults.standard.set(true, forKey: "hasAcknowledgedAccessibilityWarning")
             }
         }
     }

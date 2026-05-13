@@ -114,19 +114,16 @@ struct TextCheckCoordinator: Sendable {
 
                     try Task.checkCancellation()
                     let rawResult = try await action(text, resolved, replacementRange, detectedTone)
-                    let finalResult: CorrectionResult = {
-                        var r = CorrectionResult(
-                            original: rawResult.originalText,
-                            corrected: rawResult.correctedText,
-                            modelID: rawResult.modelID,
-                            explanation: rawResult.explanation,
-                            confidence: rawResult.confidence,
-                            customInstruction: rawResult.customInstruction,
-                            promptType: rawResult.promptType,
-                            detectedTone: detectedTone.rawValue)
-                        r.replacementRange = replacementRange
-                        return r
-                    }()
+                    let finalResult = CorrectionResult(
+                        original: rawResult.originalText,
+                        corrected: rawResult.correctedText,
+                        modelID: rawResult.modelID,
+                        explanation: rawResult.explanation,
+                        confidence: rawResult.confidence,
+                        customInstruction: rawResult.customInstruction,
+                        promptType: rawResult.promptType,
+                        replacementRange: replacementRange,
+                        detectedTone: detectedTone.rawValue)
                     try Task.checkCancellation()
                     await MainActor.run { onSuccess(finalResult) }
                 } catch is CancellationError {

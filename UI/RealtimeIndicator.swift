@@ -14,7 +14,8 @@ final class RealtimeIndicatorController {
     }
 
     func show(errors: Bool) {
-        Task { @MainActor in
+        Task { @MainActor [weak self] in
+            guard let self else { return }
             let bounds = await AccessibilityBridge.shared.lastSelectionBounds
             let mousePoint = NSEvent.mouseLocation
             let x: CGFloat
