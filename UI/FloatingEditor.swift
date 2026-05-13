@@ -140,7 +140,14 @@ struct FloatingEditorView: View {
             HStack {
                 if let error = errorMessage {
                     Text(error)
-                        .foregroundColor(.red)
+                        .foregroundColor(.statusError)
+                        .font(.caption)
+                    Button("Riprova") { checkText() }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                    Button("Usa Stub") { checkWithStub() }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
                         .font(.caption)
                 }
                 Spacer()
@@ -226,6 +233,33 @@ struct FloatingEditorView: View {
                     guard !Task.isCancelled else { return }
                     self.correctedText = result.correctedText
                 }
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.errorMessage = "Errore: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func checkWithStub() {
+        guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        isLoading = true
+        errorMessage = nil
+        correctedText = ""
+        checkTask?.cancel()
+        checkTask = Task { @MainActor in
+            defer {
+                if !Task.isCancelled { self.isLoading = false }
+            }
+            do {
+                let result = try await RequestQueue.shared.enqueue(
+                    text: inputText,
+                    type: checkMode == .fluency ? .fluency : .grammar,
+                    priority: .floatingEditor,
+                    overrideServiceType: .stub
+                )
+                guard !Task.isCancelled else { return }
+                self.correctedText = result.correctedText
             } catch {
                 guard !Task.isCancelled else { return }
                 self.errorMessage = "Errore: \(error.localizedDescription)"

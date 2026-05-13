@@ -10,26 +10,32 @@ struct SettingsView: View {
             GeneralTab(prefs: prefs, serverIsRunning: serverIsRunning)
                 .tabItem { Label("Generale", systemImage: "gearshape") }
                 .tag(0)
+                .accessibilityElement(children: .contain)
 
             ModelsTab(prefs: prefs, serverIsRunning: serverIsRunning)
                 .tabItem { Label("Modelli", systemImage: "brain") }
                 .tag(1)
+                .accessibilityElement(children: .contain)
 
             PromptTab(prefs: prefs)
                 .tabItem { Label("Prompt", systemImage: "text.quote") }
                 .tag(2)
+                .accessibilityElement(children: .contain)
 
             AppRulesTab(prefs: prefs)
                 .tabItem { Label("Regole App", systemImage: "apps.iphone") }
                 .tag(3)
+                .accessibilityElement(children: .contain)
 
             ExclusionsTab(prefs: prefs)
                 .tabItem { Label("Esclusioni", systemImage: "eye.slash") }
                 .tag(4)
+                .accessibilityElement(children: .contain)
 
             AdvancedTab()
                 .tabItem { Label("Avanzate", systemImage: "wrench.adjustable") }
                 .tag(5)
+                .accessibilityElement(children: .contain)
         }
         .frame(minWidth: 500, minHeight: 400)
         .animation(.easeInOut(duration: 0.2), value: selectedTab)
@@ -110,15 +116,15 @@ struct GeneralTab: View {
                 Toggle("Controllo automatico", isOn: $prefs.autoCheckEnabled)
                 Toggle("Controllo in tempo reale", isOn: $prefs.realtimeEnabled)
                     .disabled(!prefs.autoCheckEnabled)
-                Text("Cmd+Shift+E — Controlla selezione").font(.caption).foregroundColor(.secondary)
-                Text("Cmd+Shift+T — Controlla fluidita").font(.caption).foregroundColor(.secondary)
-                Text("Cmd+Shift+F — Apri editor").font(.caption).foregroundColor(.secondary)
+                Text("Cmd+Shift+E — Controlla selezione").font(.caption).foregroundColor(.textSecondary)
+                Text("Cmd+Shift+T — Controlla fluidita").font(.caption).foregroundColor(.textSecondary)
+                Text("Cmd+Shift+F — Apri editor").font(.caption).foregroundColor(.textSecondary)
             }
 
             Section("Stato Server") {
                 HStack {
                     Circle()
-                        .fill(serverIsRunning ? Color.green : Color.red)
+                        .fill(serverIsRunning ? Color.statusOk : Color.statusError)
                         .frame(width: 8, height: 8)
                     Text(serverIsRunning ? "llama-server: attivo" : "llama-server: fermo")
                         .font(.caption)
@@ -148,31 +154,15 @@ struct ModelsTab: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Circle()
-                    .fill(serverIsRunning ? Color.green : Color.red)
-                    .frame(width: 8, height: 8)
-                Text(serverIsRunning ? "Server attivo" : "Server fermo")
+                        .fill(serverIsRunning ? Color.statusOk : Color.statusError)
+                        .frame(width: 8, height: 8)
+                    Text(serverIsRunning ? "Server attivo" : "Server fermo")
                     .font(.caption)
                 Spacer()
                 if !externalModels.isEmpty {
                     Text("\(externalModels.count) trovati")
                         .font(.caption2)
-                        .foregroundColor(.green)
-                }
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
-
-            HStack {
-                Circle()
-                    .fill(serverIsRunning ? Color.green : Color.red)
-                    .frame(width: 8, height: 8)
-                Text(serverIsRunning ? "Server attivo" : "Server fermo")
-                    .font(.caption)
-                Spacer()
-                if !externalModels.isEmpty {
-                    Text("\(externalModels.count) trovati")
-                        .font(.caption2)
-                        .foregroundColor(.green)
+                        .foregroundColor(.statusOk)
                 }
             }
             .padding(.horizontal)
@@ -181,10 +171,10 @@ struct ModelsTab: View {
             if let error = downloadError {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.red)
+                        .foregroundColor(.statusError)
                     Text(error)
                         .font(.caption)
-                        .foregroundColor(.red)
+                        .foregroundColor(.statusError)
                 }
                 .padding(.horizontal)
                 .padding(.top, 4)
@@ -217,6 +207,7 @@ struct ModelsTab: View {
                 }
             }
             .listStyle(.inset)
+            .frame(minHeight: 350)
         }
         .task {
             models = await ModelManager.shared.recommendedModels()
@@ -242,8 +233,10 @@ struct ModelsTab: View {
     }
 
     private func detectDownloadedModels() async -> Set<String> {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("RefineClone/Models")
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return []
+        }
+        let dir = appSupport.appendingPathComponent("RefineClone/Models")
         guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir.path(percentEncoded: false)) else {
             return []
         }
@@ -315,7 +308,7 @@ private struct ModelRow: View {
                 HStack(spacing: 6) {
                     if isDownloaded {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
+                        .foregroundColor(.statusOk)
                             .font(.caption)
                     }
                     Text(model.name)
@@ -324,16 +317,16 @@ private struct ModelRow: View {
                 }
                 Text(model.reason)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textSecondary)
                     .lineLimit(2)
                 HStack(spacing: 8) {
                     Label("~\(model.ramRequired)GB RAM", systemImage: "memorychip")
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textSecondary)
                     if let warning = model.warning {
                         Label(warning, systemImage: "exclamationmark.triangle")
                             .font(.caption2)
-                            .foregroundColor(.orange)
+                            .foregroundColor(.statusWarning)
                     }
                 }
             }
@@ -346,12 +339,12 @@ private struct ModelRow: View {
                         .frame(width: 60)
                     Text(status)
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textSecondary)
                 }
             } else if isDownloaded {
                 Text("Scaricato")
                     .font(.caption)
-                    .foregroundColor(.green)
+                    .foregroundColor(.statusOk)
             } else {
                 Button("Scarica") { onDownload() }
                     .buttonStyle(.borderedProminent)
@@ -370,7 +363,7 @@ private struct ExternalModelRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "externaldrive.fill")
-                .foregroundColor(.blue)
+                .foregroundColor(.accentBrand)
                 .font(.caption)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -381,10 +374,10 @@ private struct ExternalModelRow: View {
                 HStack(spacing: 8) {
                     Label(model.source, systemImage: "folder")
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textSecondary)
                     Label(formatSize(model.size), systemImage: "doc")
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textSecondary)
                 }
             }
 
@@ -393,7 +386,7 @@ private struct ExternalModelRow: View {
             if isAdopted {
                 Text("In uso")
                     .font(.caption)
-                    .foregroundColor(.green)
+                    .foregroundColor(.statusOk)
             } else {
                 Button("Usa") { onAdopt() }
                     .buttonStyle(.bordered)
@@ -422,7 +415,7 @@ struct PromptTab: View {
                 ForEach(prefs.customPrompts) { prompt in
                     VStack(alignment: .leading) {
                         Text(prompt.name).font(.headline)
-                        Text(prompt.template).font(.caption).foregroundColor(.secondary)
+                        Text(prompt.template).font(.caption).foregroundColor(.textSecondary)
                     }
                 }
                 .onDelete { indexSet in
@@ -474,21 +467,21 @@ struct AdvancedTab: View {
                     .disabled(hfToken == UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.hfToken) ?? "")
                 }
                 if tokenSaved {
-                    Text("Token salvato").font(.caption).foregroundColor(.green)
+                    Text("Token salvato").font(.caption).foregroundColor(.statusOk)
                 }
                 Text("Senza token: ~500 KB/s. Con token: fino a 50 MB/s.")
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textSecondary)
                 Text("Crea un token su huggingface.co/settings/tokens (tipo: Read)")
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textSecondary)
             }
 
             Section("Debug") {
                 Text("Accessibilità: \(PreferencesStore.shared.isAccessibilityEnabled ? "OK" : "Non abilitata")")
                 Text("Bundle: \(Constants.bundleID)")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textSecondary)
             }
         }
         .formStyle(.grouped)
@@ -510,7 +503,7 @@ struct AppRulesTab: View {
                             Text(rule.displayName).font(.headline)
                             Text(rule.bundleID)
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.textSecondary)
                         }
                         Spacer()
                         Toggle("", isOn: Binding(
@@ -564,7 +557,7 @@ struct ExclusionsTab: View {
                         Spacer()
                         Text("escluso")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.textSecondary)
                     }
                 }
                 .onDelete { indexSet in

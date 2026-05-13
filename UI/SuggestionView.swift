@@ -6,7 +6,7 @@ struct SuggestionView: View {
     let onApply: () -> Void
     let onExplain: () -> Void
     let onDismiss: () -> Void
-    @State private var feedbackToast = false
+    @State private var noErrorsShown = false
 
     private var stateHash: Int {
         var hasher = Hasher()
@@ -51,17 +51,17 @@ struct SuggestionView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(headerTitle)
                     .font(.headline)
-                    .foregroundColor(.primary)
+                    .foregroundColor(.textPrimary)
                 if let tone = toneLabel {
                     Text(tone)
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textSecondary)
                 }
             }
             Spacer()
             Button(action: onDismiss) {
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textSecondary)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Chiudi")
@@ -93,19 +93,26 @@ struct SuggestionView: View {
                 .frame(width: 16, height: 16)
         case .suggestion:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(.green)
-        case .fluencySuggestion:
+                .foregroundColor(.statusOk)
+            case .fluencySuggestion:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(.blue)
-        case .noErrors:
+                .foregroundColor(.accentBrand)
+            case .noErrors:
             Image(systemName: "checkmark.shield.fill")
-                .foregroundColor(.green)
+                .foregroundColor(.statusOk)
+                .scaleEffect(noErrorsShown ? 1.0 : 0.3)
+                .onAppear {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+                        noErrorsShown = true
+                    }
+                }
+                .onDisappear { noErrorsShown = false }
         case .error:
             Image(systemName: "xmark.octagon.fill")
-                .foregroundColor(.red)
+                .foregroundColor(.statusError)
         case .textTooLong:
             Image(systemName: "text.alignleft")
-                .foregroundColor(.orange)
+                .foregroundColor(.statusWarning)
         }
     }
 
@@ -120,12 +127,23 @@ struct SuggestionView: View {
         }
     }
 
+    private var loadingMessage: String {
+        let messages = [
+            "Analizzando la grammatica...",
+            "Controllando i verbi...",
+            "Verificando la punteggiatura...",
+            "Analisi delle concordanze...",
+            "Controllo ortografico in corso..."
+        ]
+        return messages[Int(Date().timeIntervalSince1970) % messages.count]
+    }
+
     @ViewBuilder
     private var contentView: some View {
         switch state {
         case .loading:
             VStack {
-                ProgressView("Elaborazione in corso...")
+                ProgressView(loadingMessage)
                     .frame(height: 60)
             }
         case .suggestion(let result), .fluencySuggestion(let result):
@@ -140,18 +158,18 @@ struct SuggestionView: View {
             VStack(spacing: 12) {
                 Image(systemName: "checkmark.circle")
                     .font(.largeTitle)
-                    .foregroundColor(.green)
+                .foregroundColor(.statusOk)
                 Text("Il testo è già corretto!")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textSecondary)
             }
             .frame(height: 80)
         case .error(let error):
             VStack(spacing: 12) {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.largeTitle)
-                    .foregroundColor(.red)
+                .foregroundColor(.statusError)
                 Text(error.errorDescription ?? "Errore sconosciuto")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textSecondary)
                     .multilineTextAlignment(.center)
             }
             .frame(height: 80)
@@ -161,7 +179,7 @@ struct SuggestionView: View {
                     Text("Il testo è troppo lungo (\(length) caratteri)")
                     Text("Massimo: \(maxLength) caratteri")
                 }
-                .foregroundColor(.secondary)
+                .foregroundColor(.textSecondary)
             }
             .frame(height: 80)
         }
@@ -172,27 +190,8 @@ struct SuggestionView: View {
         HStack {
             switch state {
             case .suggestion, .fluencySuggestion:
-                if feedbackToast {
-                    Text("Segnalato, grazie")
-                        .font(.caption2)
-                        .foregroundColor(.green)
-                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
-                } else {
-                    Button(String(localized: "panel.ignore")) { onDismiss() }
-                        .accessibilityHint("Scarta il suggerimento senza applicarlo")
-                    Button(String(localized: "panel.reportError")) {
-                        if let r = result {
-                            FeedbackLogger.log(original: r.originalText, corrected: r.correctedText, modelID: r.modelID)
-                        }
-                        feedbackToast = true
-                        Task {
-                            try? await Task.sleep(for: .seconds(2))
-                            feedbackToast = false
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                    .font(.caption)
-                }
+                Button(String(localized: "panel.ignore")) { onDismiss() }
+                    .accessibilityHint("Scarta il suggerimento senza applicarlo")
                 Spacer()
                 Button(String(localized: "panel.explain")) { onExplain() }
                     .accessibilityHint("Richiedi una spiegazione delle correzioni")
@@ -220,7 +219,6 @@ struct SuggestionView: View {
                 Spacer()
             }
         }
-        .animation(.easeOut(duration: 0.25), value: feedbackToast)
     }
 }
 

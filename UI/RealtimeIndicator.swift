@@ -88,12 +88,12 @@ struct RealtimeIndicatorView: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: hasErrors ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-                .foregroundColor(hasErrors ? .orange : .green)
+                .foregroundColor(hasErrors ? .statusWarning : .statusOk)
                 .font(.callout)
             Text(hasErrors ? "Errori" : "OK")
                 .font(.caption)
                 .fontWeight(.medium)
-                .foregroundColor(.primary)
+                .foregroundColor(.textPrimary)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)

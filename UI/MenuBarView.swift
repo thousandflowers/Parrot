@@ -22,7 +22,7 @@ struct MenuBarView: View {
                 if prefs.isAccessibilityEnabled {
                     HStack {
                         Image(systemName: "checkmark.circle")
-                            .foregroundColor(.green)
+                            .foregroundColor(.statusOk)
                             .frame(width: 16)
                         Text("Accessibilita: OK")
                             .font(.caption)
@@ -30,7 +30,7 @@ struct MenuBarView: View {
                 } else {
                     HStack {
                         Image(systemName: "exclamationmark.triangle")
-                            .foregroundColor(.orange)
+                            .foregroundColor(.statusWarning)
                             .frame(width: 16)
                         Text("Accessibilita: Richiesta")
                             .font(.caption)
@@ -63,7 +63,8 @@ struct MenuBarView: View {
             Group {
                 Toggle("Controllo Automatico", isOn: $prefs.autoCheckEnabled)
                     .padding(.horizontal, 12)
-                    .accessibilityHint("Controlla il testo automaticamente mentre scrivi")
+                    .accessibilityLabel("Controllo automatico")
+                    .accessibilityHint("Attiva o disattiva il controllo automatico del testo")
 
                 Button(action: { checkGrammar() }) {
                     HStack {
@@ -74,8 +75,8 @@ struct MenuBarView: View {
                 .buttonStyle(PressableButtonStyle())
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
-                .accessibilityLabel("Controlla Grammatica")
-                .accessibilityHint("Correggi errori grammaticali nel testo selezionato")
+                .accessibilityLabel("Controlla grammatica")
+                .accessibilityHint("Cmd+Shift+E")
 
                 Button(action: { checkFluency() }) {
                     HStack {
@@ -86,8 +87,8 @@ struct MenuBarView: View {
                 .buttonStyle(PressableButtonStyle())
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
-                .accessibilityLabel("Controlla Fluidità")
-                .accessibilityHint("Migliora la fluidità del testo selezionato")
+                .accessibilityLabel("Analizza tono")
+                .accessibilityHint("Cmd+Shift+T")
 
                 Button(action: { openEditor() }) {
                     HStack {
@@ -98,7 +99,8 @@ struct MenuBarView: View {
                 .buttonStyle(PressableButtonStyle())
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
-                .accessibilityLabel("Apri Editor")
+                .accessibilityLabel("Apri editor libero")
+                .accessibilityHint("Cmd+Shift+F")
 
                 SettingsLink {
                     HStack {
@@ -110,40 +112,8 @@ struct MenuBarView: View {
                 }
                 .buttonStyle(PressableButtonStyle())
                 .keyboardShortcut(",", modifiers: .command)
-            }
-
-            Divider()
-
-            Group {
-                HStack {
-                    Text("Lingua:")
-                        .font(.caption)
-                    Picker("", selection: $prefs.language) {
-                        Text("🇮🇹 IT").tag("it")
-                        Text("🇬🇧 EN").tag("en-US")
-                        Text("🇪🇸 ES").tag("es")
-                        Text("🇫🇷 FR").tag("fr")
-                        Text("🇩🇪 DE").tag("de")
-                    }
-                    .labelsHidden()
-                    .frame(width: 70)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 2)
-
-                HStack {
-                    Text("Stile:")
-                        .font(.caption)
-                    Picker("", selection: $prefs.style) {
-                        Text("Equilibrato").tag("equilibrato")
-                        Text("Formale").tag("formale")
-                        Text("Informale").tag("informale")
-                    }
-                    .labelsHidden()
-                    .frame(width: 95)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 2)
+                .accessibilityLabel("Apri impostazioni")
+                .accessibilityHint("Cmd+,")
             }
 
             Divider()
@@ -159,10 +129,13 @@ struct MenuBarView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
                 .keyboardShortcut("q", modifiers: .command)
+                .accessibilityLabel("Esci da RefineClone")
+                .accessibilityHint("Chiude l'applicazione")
             }
             .padding(.bottom, 8)
         }
         .frame(width: 250)
+        .accessibilityElement(children: .contain)
     }
 
     private func checkGrammar() {
