@@ -7,6 +7,7 @@ actor ServerManager: Sendable {
 
     private var process: Process?
     private var startupTask: Task<Void, Error>?
+    private var isExternalServer: Bool = false
     var currentPort: Int = 0
 
     func ensureRunning(modelPath: String) async throws -> Int {
@@ -14,8 +15,20 @@ actor ServerManager: Sendable {
             try await existingTask.value
             return currentPort
         }
-        if currentPort > 0 { return currentPort }
+        
+        // 1. Check if current is still healthy
+        if currentPort > 0 && await checkServerHealth(port: currentPort) {
+            return currentPort
+        }
 
+        // 2. Try to find an external server
+        if let externalPort = await findExistingServer() {
+            self.currentPort = externalPort
+            self.isExternalServer = true
+            return externalPort
+        }
+
+        // 3. Start our own
         let task = Task { try await start(modelPath: modelPath) }
         startupTask = task
         do {
@@ -28,11 +41,25 @@ actor ServerManager: Sendable {
         }
     }
 
+    private func findExistingServer() async -> Int? {
+        // Common ports: 11434 (Ollama), 8080 (llama-server default), 11435 (RefineClone default fallback)
+        let candidatePorts = [11434, 8080, 11435]
+        for port in candidatePorts {
+            if await checkServerHealth(port: port) {
+                return port
+            }
+        }
+        return nil
+    }
+
     func start(modelPath: String) async throws {
         guard process == nil else { return }
+        self.isExternalServer = false
+        
         guard GGUFVersionCheck.isCompatible(filePath: modelPath) else {
             throw CorrectionError.modelIncompatibleVersion(path: modelPath)
         }
+        
         for attempt in 0..<3 {
             let (port, probeSock) = try allocatePort()
             currentPort = port
@@ -68,7 +95,7 @@ actor ServerManager: Sendable {
 
             do {
                 for healthAttempt in 0..<20 {
-                    if await checkServerHealth() { return }
+                    if await checkServerHealth(port: currentPort) { return }
                     let delayMs = min(2000, 250 * Int(pow(2.0, Double(healthAttempt))))
                     try await Task.sleep(for: .milliseconds(delayMs))
                 }
@@ -89,11 +116,19 @@ actor ServerManager: Sendable {
 
     func stop() async {
         await ServerHealthMonitor.shared.stopMonitoring()
+        
+        if isExternalServer {
+            self.currentPort = 0
+            self.isExternalServer = false
+            return
+        }
+        
         guard let process = process, process.isRunning else {
             self.process = nil
             currentPort = 0
             return
         }
+        
         let pid = process.processIdentifier
         process.terminate()
 
@@ -121,6 +156,12 @@ actor ServerManager: Sendable {
     }
 
     private func allocatePort() throws -> (port: Int, socket: Int32) {
+        // Try standard fallback first
+        if !isPortInUse(11435) {
+            if let (p, s) = try? bindTo(port: 11435) { return (p, s) }
+        }
+        
+        // Random port
         let sock = socket(AF_INET, SOCK_STREAM, 0)
         guard sock >= 0 else { throw CorrectionError.serverNotRunning }
 
@@ -151,8 +192,44 @@ actor ServerManager: Sendable {
         let port = Int(UInt16(bigEndian: boundAddr.sin_port))
         return (port, sock)
     }
+    
+    private func bindTo(port: Int) throws -> (port: Int, socket: Int32) {
+        let sock = socket(AF_INET, SOCK_STREAM, 0)
+        guard sock >= 0 else { throw CorrectionError.serverNotRunning }
+        
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = UInt16(port).bigEndian
+        addr.sin_addr.s_addr = INADDR_LOOPBACK
+        
+        let result = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(sock, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        if result == 0 { return (port, sock) }
+        close(sock)
+        throw CorrectionError.serverNotRunning
+    }
 
-    /// Auto-detect GPU layers: 999 on 16GB+, 20 on 8-15GB, 0 on <8GB or no Metal GPU
+    private func isPortInUse(_ port: Int) -> Bool {
+        let sock = socket(AF_INET, SOCK_STREAM, 0)
+        guard sock >= 0 else { return true }
+        defer { close(sock) }
+        
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = UInt16(port).bigEndian
+        addr.sin_addr.s_addr = INADDR_LOOPBACK
+        
+        let result = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.connect(sock, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        return result == 0
+    }
+
     private func gpuLayers() -> String {
         guard MTLCreateSystemDefaultDevice() != nil else { return "0" }
         let ramGB = ProcessInfo.processInfo.physicalMemory / (1024 * 1024 * 1024)
@@ -161,13 +238,15 @@ actor ServerManager: Sendable {
         return "0"
     }
 
-    private func checkServerHealth() async -> Bool {
-        guard currentPort > 0 else { return false }
-        guard let url = URL(string: "http://127.0.0.1:\(currentPort)/health") else {
+    private func checkServerHealth(port: Int) async -> Bool {
+        guard port > 0 else { return false }
+        guard let url = URL(string: "http://127.0.0.1:\(port)/health") else {
             return false
         }
         do {
-            let (_, response) = try await URLSession.shared.data(from: url)
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 1.0
+            let (_, response) = try await URLSession.shared.data(for: request)
             return (response as? HTTPURLResponse)?.statusCode == 200
         } catch {
             return false

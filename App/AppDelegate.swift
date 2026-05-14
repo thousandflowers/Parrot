@@ -51,7 +51,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        AccessibilityBridge.emergencyClipboardRestore()
         if let observer = frontAppObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
             frontAppObserver = nil
@@ -93,8 +92,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ) { notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
-            AccessibilityBridge.lastKnownFrontAppPID = app.processIdentifier
-            Task { await RealtimeMonitor.shared.frontAppChanged() }
+            Task {
+                await AccessibilityBridge.shared.setLastKnownFrontAppPID(app.processIdentifier)
+                await RealtimeMonitor.shared.frontAppChanged()
+            }
         }
     }
 

@@ -4,14 +4,15 @@ actor AccessibilityBridge {
     static let shared = AccessibilityBridge()
 
     private(set) var lastSelectionBounds: CGRect = .zero
+    private var pendingClipboardRestore: PendingClipboardRestore?
+    private var _lastKnownFrontAppPID: pid_t = 0
 
-    private static let _pidLock = NSLock()
-    // Swift 6 migration: replace with Mutex or use @MainActor global actor
-    private nonisolated(unsafe) static var _storedPID: pid_t = 0
+    func setLastKnownFrontAppPID(_ pid: pid_t) {
+        self._lastKnownFrontAppPID = pid
+    }
 
-    nonisolated static var lastKnownFrontAppPID: pid_t {
-        get { _pidLock.withLock { _storedPID } }
-        set { _pidLock.withLock { _storedPID = newValue } }
+    func lastKnownFrontAppPID() -> pid_t {
+        return _lastKnownFrontAppPID
     }
 
     private(set) var lastSelectedRange: CFRange = CFRange(location: 0, length: 0)
@@ -237,39 +238,61 @@ actor AccessibilityBridge {
             return
         }
 
-        await MainActor.run {
-            Self.restoreOriginalClipboardIfNeeded()
-            let pasteboard = NSPasteboard.general
-            let originalItems = pasteboard.pasteboardItems ?? []
+        // Fallback: Clipboard injection
+        try await injectViaClipboard(correctedText: correctedText)
+    }
 
-            var pending = PendingClipboardRestore(
-                items: originalItems,
-                originalChangeCount: pasteboard.changeCount
-            )
-
-            pasteboard.clearContents()
-            pasteboard.setString(correctedText, forType: .string)
-            pending.saveSnapshotCount = pasteboard.changeCount
-
-            let source = CGEventSource(stateID: .hidSystemState)
-            guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: true),
-                  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: false) else {
-                Self.restoreClipboard(pending)
-                return
-            }
-            keyDown.flags = CGEventFlags.maskCommand
-            keyUp.flags = CGEventFlags.maskCommand
-            keyDown.post(tap: CGEventTapLocation.cghidEventTap)
-            keyUp.post(tap: CGEventTapLocation.cghidEventTap)
-
-            if !originalItems.isEmpty {
-                Self._pendingClipboardRestore = pending
-                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) {
-                    Self._pendingClipboardRestore = nil
-                    Self.restoreClipboard(pending)
-                }
+    private func injectViaClipboard(correctedText: String) async throws {
+        let pasteboard = NSPasteboard.general
+        let originalItems = pasteboard.pasteboardItems ?? []
+        
+        let pending = PendingClipboardRestore(
+            items: originalItems,
+            originalChangeCount: pasteboard.changeCount
+        )
+        
+        // Se c'era già un ripristino in sospeso, forzalo ora
+        if let existing = self.pendingClipboardRestore {
+            restoreClipboard(existing)
+        }
+        
+        pasteboard.clearContents()
+        pasteboard.setString(correctedText, forType: .string)
+        let newContentChangeCount = pasteboard.changeCount
+        
+        let source = CGEventSource(stateID: .hidSystemState)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: false) else {
+            restoreClipboard(pending)
+            return
+        }
+        keyDown.flags = CGEventFlags.maskCommand
+        keyUp.flags = CGEventFlags.maskCommand
+        keyDown.post(tap: CGEventTapLocation.cghidEventTap)
+        keyUp.post(tap: CGEventTapLocation.cghidEventTap)
+        
+        guard !originalItems.isEmpty else { return }
+        
+        self.pendingClipboardRestore = pending
+        
+        // Aspettiamo che l'app target incolli. Poll di 500ms totali.
+        for _ in 0..<10 {
+            try? await Task.sleep(for: .milliseconds(50))
+            if self.pendingClipboardRestore?.originalChangeCount != pending.originalChangeCount {
+                return // Un altro task ha preso il controllo
             }
         }
+        
+        if self.pendingClipboardRestore?.originalChangeCount == pending.originalChangeCount {
+            restoreClipboard(pending)
+            self.pendingClipboardRestore = nil
+        }
+    }
+
+    private func restoreClipboard(_ pending: PendingClipboardRestore) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects(pending.items)
     }
 
     func frontAppBundleID() async -> String? {
@@ -358,29 +381,4 @@ actor AccessibilityBridge {
 struct PendingClipboardRestore {
     let items: [NSPasteboardItem]
     let originalChangeCount: Int
-    var saveSnapshotCount: Int = 0
-}
-
-extension AccessibilityBridge {
-    // Swift 6 migration: replace with actor-isolated state instead of static + NSLock
-    private nonisolated(unsafe) static var _pendingClipboardRestore: PendingClipboardRestore?
-
-    nonisolated static func emergencyClipboardRestore() {
-        guard let pending = _pendingClipboardRestore else { return }
-        _pendingClipboardRestore = nil
-        restoreClipboard(pending)
-    }
-
-    nonisolated static func restoreOriginalClipboardIfNeeded() {
-        guard let pending = _pendingClipboardRestore else { return }
-        _pendingClipboardRestore = nil
-        restoreClipboard(pending)
-    }
-
-    nonisolated static func restoreClipboard(_ pending: PendingClipboardRestore) {
-        let pasteboard = NSPasteboard.general
-        guard pasteboard.changeCount == pending.saveSnapshotCount else { return }
-        pasteboard.clearContents()
-        pasteboard.writeObjects(pending.items)
-    }
 }

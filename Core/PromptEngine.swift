@@ -75,10 +75,9 @@ struct PromptEngine {
         }
     }
 
-    private func preCheckSpelling(_ text: String) -> (corrected: String, flagged: [String]) {
+    private func flagSuspiciousWords(_ text: String) -> [String] {
         let spellChecker = NSSpellChecker.shared
         let words = text.split(separator: " ")
-        var corrected = text
         var flagged: [String] = []
 
         for word in words {
@@ -91,20 +90,12 @@ struct PromptEngine {
                 language: language.starts(with: "en") ? "en" : language,
                 wrap: false, inSpellDocumentWithTag: 0, wordCount: nil)
 
-            if range.location == NSNotFound { continue }
-
-            guard let guesses = spellChecker.guesses(forWordRange: NSRange(location: 0, length: wordStr.utf16.count),
-                in: wordStr, language: language.starts(with: "en") ? "en" : language,
-                inSpellDocumentWithTag: 0), !guesses.isEmpty else { continue }
-
-            if guesses.count == 1, guesses[0].lowercased() != wordStr.lowercased() {
-                corrected = corrected.replacingOccurrences(of: wordStr, with: guesses[0])
-            } else if guesses.count > 1 {
+            if range.location != NSNotFound {
                 flagged.append(wordStr)
             }
         }
 
-        return (corrected, flagged)
+        return flagged
     }
 
     private func escapeForPrompt(_ text: String) -> String {
@@ -128,17 +119,15 @@ struct PromptEngine {
         let extra = grammarFamilyInstruction
         let styleLine = styleInstruction
 
-        let (preChecked, flagged) = preCheckSpelling(text)
-        let safeText = escapeForPrompt(preChecked)
+        let flagged = flagSuspiciousWords(text)
+        let safeText = escapeForPrompt(text)
 
-        var header = "Fix only grammar/spelling for correctness; no style/fluency edits."
+        var header = "Fix grammar, spelling, and punctuation errors for correctness. Keep the original style and tone unless specified otherwise."
         if !extra.isEmpty { header += "\n\(extra)" }
         if !styleLine.isEmpty { header += "\n\(styleLine)" }
-        if preChecked != text {
-            header += "\nSome words were pre-corrected by spell check. Do not change them unless grammatically incorrect."
-        }
+        
         if !flagged.isEmpty {
-            header += "\nPay special attention to these possibly misspelled words: \(flagged.joined(separator: ", "))"
+            header += "\nNote: These words might be misspelled: \(flagged.joined(separator: ", ")). Use your context to decide if they need fixing."
         }
         header += "\n\nExample corrections:\n\(fewShotExamples())"
 
@@ -147,7 +136,7 @@ struct PromptEngine {
 
         <TEXT>\(safeText)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
 
-        Output only the corrected text; no notes. Do not include <TEXT>/<CUSTOM> tags.
+        Output only the corrected text; no notes or explanations. Do not include <TEXT>/<CUSTOM> tags.
         """
     }
 

@@ -146,14 +146,70 @@ struct SuggestionView: View {
                 ProgressView(loadingMessage)
                     .frame(height: 60)
             }
-        case .suggestion(let result), .fluencySuggestion(let result):
+        case .suggestion(let result, let explanation, let isLoading):
             ScrollView(.vertical) {
-                Text(result.correctedText)
-                    .font(.body)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(result.correctedText)
+                        .font(.body)
+                        .textSelection(.enabled)
+                    
+                    if isLoading {
+                        Divider()
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                            Text("Generazione spiegazione...")
+                                .font(.caption)
+                                .foregroundColor(.textSecondary)
+                        }
+                    } else if let explanation = explanation {
+                        Divider()
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Spiegazione")
+                                .font(.caption.bold())
+                                .foregroundColor(.accentBrand)
+                            Text(explanation)
+                                .font(.subheadline)
+                                .foregroundColor(.textSecondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(minHeight: 60, maxHeight: 200)
+            .frame(minHeight: 60, maxHeight: 300)
+        case .fluencySuggestion(let result, let explanation, let isLoading):
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(result.correctedText)
+                        .font(.body)
+                        .textSelection(.enabled)
+                    
+                    if isLoading {
+                        Divider()
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                            Text("Generazione spiegazione...")
+                                .font(.caption)
+                                .foregroundColor(.textSecondary)
+                        }
+                    } else if let explanation = explanation {
+                        Divider()
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Miglioramento fluidità")
+                                .font(.caption.bold())
+                                .foregroundColor(.accentBrand)
+                            Text(explanation)
+                                .font(.subheadline)
+                                .foregroundColor(.textSecondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(minHeight: 60, maxHeight: 300)
         case .noErrors:
             VStack(spacing: 12) {
                 Image(systemName: "checkmark.circle")

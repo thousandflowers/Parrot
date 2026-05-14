@@ -139,36 +139,21 @@ struct MenuBarView: View {
     }
 
     private func checkGrammar() {
-        let pid = resolveFrontmostPID()
-        if pid > 0 {
-            TextCheckCoordinator.shared.checkSelectedText(fromPID: pid)
-        } else {
-            TextCheckCoordinator.shared.checkSelectedText()
+        Task {
+            await TextCheckCoordinator.shared.checkSelectedText()
         }
     }
 
     private func checkFluency() {
-        let pid = resolveFrontmostPID()
-        if pid > 0 {
-            TextCheckCoordinator.shared.checkFluency(fromPID: pid)
-        } else {
-            TextCheckCoordinator.shared.checkFluency()
+        Task {
+            await TextCheckCoordinator.shared.checkFluency()
         }
-    }
-
-    private func resolveFrontmostPID() -> pid_t {
-        let tracked = AccessibilityBridge.lastKnownFrontAppPID
-        if tracked > 0 { return tracked }
-
-        guard let frontApp = NSWorkspace.shared.frontmostApplication,
-              frontApp.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
-            return 0
-        }
-        return frontApp.processIdentifier
     }
 
     private func openEditor() {
-        FloatingEditorController.shared.show()
+        Task {
+            await TextCheckCoordinator.shared.openFloatingEditor()
+        }
         NSApp.activate(ignoringOtherApps: true)
     }
 }

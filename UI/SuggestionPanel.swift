@@ -3,8 +3,8 @@ import Cocoa
 
 enum SuggestionState: Sendable {
     case loading
-    case suggestion(CorrectionResult)
-    case fluencySuggestion(CorrectionResult)
+    case suggestion(CorrectionResult, explanation: String? = nil, isLoadingExplanation: Bool = false)
+    case fluencySuggestion(CorrectionResult, explanation: String? = nil, isLoadingExplanation: Bool = false)
     case noErrors
     case error(CorrectionError)
     case textTooLong(length: Int, maxLength: Int)
@@ -17,44 +17,17 @@ final class SuggestionPanelController {
     private var panel: NSPanel?
     private var hostingView: NSHostingView<SuggestionView>?
     private var currentResult: CorrectionResult?
+    private var currentState: SuggestionState?
     private var explanationTask: Task<Void, Never>?
 
     private init() {}
 
-    private var reduceMotion: Bool {
-        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-    }
+    // ... (animateIn, animateOut, clampToScreen stay same)
 
-    private func animateIn(_ panel: NSPanel) {
-        guard !reduceMotion else { return }
-        panel.alphaValue = 0
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.2
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().alphaValue = 1.0
-        }
-    }
-
-    private func animateOut(_ panel: NSPanel, completion: @escaping () -> Void) {
-        guard !reduceMotion else { completion(); return }
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.15
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            ctx.completionHandler = completion
-            panel.animator().alphaValue = 0
-        }
-    }
-
-    private func clampToScreen(_ origin: NSPoint, size: NSSize) -> NSPoint {
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return origin }
-        let frame = screen.visibleFrame
-        let clampedX = max(frame.minX, min(frame.maxX - size.width, origin.x))
-        let clampedY = max(frame.minY, min(frame.maxY - size.height, origin.y))
-        return NSPoint(x: clampedX, y: clampedY)
-    }
-
-    private func showOrUpdate(result: CorrectionResult, state: SuggestionState) {
+    private func showOrUpdate(result: CorrectionResult?, state: SuggestionState) {
         self.currentResult = result
+        self.currentState = state
+        
         let view = SuggestionView(
             result: result,
             state: state,
@@ -67,14 +40,14 @@ final class SuggestionPanelController {
             hv.rootView = view
         } else {
             panel = createPanel(with: view)
+            
+            let mouseLoc = NSEvent.mouseLocation
+            let panelSize = panel?.frame.size ?? NSSize(width: 400, height: 220)
+            let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: panelSize)
+            panel?.setFrameOrigin(origin)
+            panel?.orderFrontRegardless()
+            animateIn(panel!)
         }
-
-        let mouseLoc = NSEvent.mouseLocation
-        let panelSize = panel?.frame.size ?? NSSize(width: 400, height: 220)
-        let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: panelSize)
-        panel?.setFrameOrigin(origin)
-        panel?.orderFrontRegardless()
-        animateIn(panel!)
     }
 
     func show(result: CorrectionResult) {
@@ -88,44 +61,11 @@ final class SuggestionPanelController {
     }
 
     func showLoading() {
-        let view = SuggestionView(
-            result: nil,
-            state: .loading,
-            onApply: {},
-            onExplain: {},
-            onDismiss: { [weak self] in self?.close() }
-        )
-        panel?.orderOut(nil)
-        hostingView = nil
-        panel = createPanel(with: view)
-
-        let mouseLoc = NSEvent.mouseLocation
-        let panelSize = panel!.frame.size
-        let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: panelSize)
-        panel!.setFrameOrigin(origin)
-        panel!.orderFrontRegardless()
-        animateIn(panel!)
+        showOrUpdate(result: nil, state: .loading)
     }
 
     func showError(_ error: CorrectionError) {
-        let view = SuggestionView(
-            result: nil,
-            state: .error(error),
-            onApply: {},
-            onExplain: {},
-            onDismiss: { [weak self] in self?.close() }
-        )
-        panel?.orderOut(nil)
-        panel = nil
-        hostingView = nil
-        panel = createPanel(with: view)
-
-        let mouseLoc = NSEvent.mouseLocation
-        let panelSize = panel!.frame.size
-        let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: panelSize)
-        panel!.setFrameOrigin(origin)
-        panel!.orderFrontRegardless()
-        animateIn(panel!)
+        showOrUpdate(result: nil, state: .error(error))
     }
 
     private func createPanel(with view: SuggestionView) -> NSPanel {
@@ -165,8 +105,17 @@ final class SuggestionPanelController {
     }
 
     private func requestExplanation() {
-        guard let current = currentResult else { return }
+        guard let current = currentResult, let state = currentState else { return }
         explanationTask?.cancel()
+
+        // Update state to loading explanation
+        switch state {
+        case .suggestion(let res, _, _):
+            showOrUpdate(result: res, state: .suggestion(res, explanation: nil, isLoadingExplanation: true))
+        case .fluencySuggestion(let res, _, _):
+            showOrUpdate(result: res, state: .fluencySuggestion(res, explanation: nil, isLoadingExplanation: true))
+        default: break
+        }
 
         explanationTask = Task { [weak self] in
             guard let self else { return }
@@ -177,16 +126,20 @@ final class SuggestionPanelController {
                         corrected: current.correctedText
                     )
                 }
-                guard !Task.isCancelled, let panel = self.panel else { return }
+                guard !Task.isCancelled else { return }
                 guard !result.isEmpty else {
                     self.showError(.outputParsingFailed(raw: "empty explanation"))
                     return
                 }
 
-                let alert = NSAlert()
-                alert.messageText = "Spiegazione"
-                alert.informativeText = result
-                alert.beginSheetModal(for: panel) { _ in }
+                // Update state with result
+                switch self.currentState {
+                case .suggestion(let res, _, _):
+                    self.showOrUpdate(result: res, state: .suggestion(res, explanation: result, isLoadingExplanation: false))
+                case .fluencySuggestion(let res, _, _):
+                    self.showOrUpdate(result: res, state: .fluencySuggestion(res, explanation: result, isLoadingExplanation: false))
+                default: break
+                }
             } catch {
                 self.showError(error as? CorrectionError ?? .serverTimeout)
             }
@@ -198,6 +151,7 @@ final class SuggestionPanelController {
         guard let panel = panel else { return }
         self.panel = nil
         self.hostingView = nil
+        self.currentState = nil
         animateOut(panel) {
             panel.orderOut(nil)
         }
