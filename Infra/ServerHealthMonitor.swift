@@ -56,9 +56,9 @@ actor ServerHealthMonitor: Sendable {
         if let modelPath = ModelManager.shared.currentModelPath {
             do {
                 try await ServerManager.shared.start(modelPath: modelPath)
-                startMonitoring()
+                // The existing health-check loop continues naturally after restart
             } catch {
-                print("ServerHealthMonitor: restart failed — \(error.localizedDescription)")
+                os_log(.error, "ServerHealthMonitor: restart failed — %{public}@", error.localizedDescription)
             }
         }
     }

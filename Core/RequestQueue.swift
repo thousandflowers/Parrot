@@ -38,7 +38,7 @@ actor RequestQueue {
         let box = ContinuationBox<CorrectionResult>()
         let timeoutTask = Task {
             do {
-                try await Task.sleep(for: .seconds(60))
+                try await Task.sleep(for: .seconds(Constants.queueTimeout))
                 box.resume(throwing: CorrectionError.serverTimeout)
             } catch {
                 // Timeout task cancelled, body already completed
@@ -55,7 +55,7 @@ actor RequestQueue {
                     promptType: type,
                     priority: priority,
                     box: box,
-                    deadline: Date().addingTimeInterval(60),
+                    deadline: Date().addingTimeInterval(Constants.queueTimeout),
                     overrideServiceType: overrideServiceType,
                     overrideCustomPrompt: overrideCustomPrompt
                 )

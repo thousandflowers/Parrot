@@ -50,14 +50,10 @@ final class StubLLMService: LLMService, Sendable {
     }
 
     func streamCorrect(text: String, promptType: PromptType) -> AsyncThrowingStream<String, Error> {
-        AsyncThrowingStream { continuation in
-            let task = Task {
-                let words = text.components(separatedBy: " ")
-                for (i, word) in words.enumerated() {
-                    guard !Task.isCancelled else { return }
-                    continuation.yield(word + (i < words.count - 1 ? " " : ""))
-                    try? await Task.sleep(for: .milliseconds(30))
-                }
+        // Stub implementation: yield input text immediately
+        continuation.yield(text)
+        continuation.finish()
+    }
                 guard !Task.isCancelled else { return }
                 continuation.finish()
             }

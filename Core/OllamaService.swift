@@ -3,9 +3,6 @@ import Foundation
 final class OllamaService: LLMService, Sendable {
     static let shared = OllamaService()
 
-    nonisolated private var language: String {
-        UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.language) ?? "it"
-    }
     nonisolated private var ollamaBaseURL: String {
         UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.ollamaBaseURL) ?? "http://localhost:11434"
     }
@@ -31,37 +28,17 @@ final class OllamaService: LLMService, Sendable {
     }
 
     func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
-        let engine = PromptEngine(language: language)
-        let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-        let model = ollamaModel
-
-        let corrected = try await performOpenAIRequest(
-            body: chatBody(model: model, prompt: prompt, temperature: Constants.grammarTemperature),
-            url: try chatURL(),
-            apiKey: nil
-        )
-        guard !corrected.isEmpty else { throw CorrectionError.outputParsingFailed(raw: "empty") }
-        return CorrectionResult(original: text, corrected: corrected,
-                               modelID: model, confidence: Constants.defaultConfidence, promptType: promptType.label)
+        try await performCorrection(text: text, promptType: promptType,
+            model: ollamaModel, url: try chatURL(), apiKey: nil)
     }
 
     func correctFluency(text: String) async throws -> CorrectionResult {
-        let engine = PromptEngine(language: language)
-        let prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
-        let model = ollamaModel
-
-        let corrected = try await performOpenAIRequest(
-            body: chatBody(model: model, prompt: prompt, temperature: Constants.fluencyTemperature),
-            url: try chatURL(),
-            apiKey: nil
-        )
-        guard !corrected.isEmpty else { throw CorrectionError.outputParsingFailed(raw: "empty") }
-        return CorrectionResult(original: text, corrected: corrected,
-                               modelID: model, confidence: Constants.defaultConfidence, promptType: "fluency")
+        try await performCorrection(text: text, promptType: .fluency,
+            model: ollamaModel, url: try chatURL(), apiKey: nil)
     }
 
     func explain(original: String, corrected: String) async throws -> String {
-        let engine = PromptEngine(language: language)
+        let engine = PromptEngine(language: resolvedLanguage)
         let prompt = engine.buildExplainPrompt(original: original, corrected: corrected, customInstruction: nil)
         let model = ollamaModel
 
@@ -76,7 +53,7 @@ final class OllamaService: LLMService, Sendable {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let engine = PromptEngine(language: language)
+                    let engine = PromptEngine(language: resolvedLanguage)
                     let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
                     let model = ollamaModel
 

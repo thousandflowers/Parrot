@@ -86,14 +86,16 @@ final class PreferencesStore {
 
     // MARK: - Fluency
 
-    var autoCheckEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.autoCheckEnabled) }
-        set { UserDefaults.standard.set(newValue, forKey: Constants.UserDefaultsKey.autoCheckEnabled) }
-    }
-
-    var isFluencyCheckingEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.isFluencyCheckingEnabled) }
-        set { UserDefaults.standard.set(newValue, forKey: Constants.UserDefaultsKey.isFluencyCheckingEnabled) }
+    var realtimeEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.realtimeEnabled) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Constants.UserDefaultsKey.realtimeEnabled)
+            if newValue {
+                Task { await RealtimeMonitor.shared.start() }
+            } else {
+                Task { await RealtimeMonitor.shared.stop() }
+            }
+        }
     }
 
     var fluencyServiceType: ServiceType {

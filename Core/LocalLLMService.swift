@@ -3,10 +3,6 @@ import Foundation
 actor LocalLLMService: @preconcurrency LLMService {
     static let shared = LocalLLMService()
 
-    nonisolated private var language: String {
-        UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.language) ?? "it"
-    }
-
     nonisolated private var modelName: String {
         let id = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID)
         return id?.replacingOccurrences(of: ".gguf", with: "") ?? "local-qwen"
@@ -41,37 +37,19 @@ actor LocalLLMService: @preconcurrency LLMService {
     }
 
     func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
-        let engine = PromptEngine(language: language)
-        let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
         let port = try await ensureServerRunning()
-
-        let corrected = try await performOpenAIRequest(
-            body: chatBody(model: modelName, prompt: prompt, temperature: Constants.grammarTemperature),
-            url: try localChatURL(port: port),
-            apiKey: nil
-        )
-        guard !corrected.isEmpty else { throw CorrectionError.outputParsingFailed(raw: "empty") }
-        return CorrectionResult(original: text, corrected: corrected,
-                               modelID: modelName, confidence: Constants.defaultConfidence, promptType: promptType.label)
+        return try await performCorrection(text: text, promptType: promptType,
+            model: modelName, url: try localChatURL(port: port), apiKey: nil)
     }
 
     func correctFluency(text: String) async throws -> CorrectionResult {
-        let engine = PromptEngine(language: language)
-        let prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
         let port = try await ensureServerRunning()
-
-        let corrected = try await performOpenAIRequest(
-            body: chatBody(model: modelName, prompt: prompt, temperature: Constants.fluencyTemperature),
-            url: try localChatURL(port: port),
-            apiKey: nil
-        )
-        guard !corrected.isEmpty else { throw CorrectionError.outputParsingFailed(raw: "empty") }
-        return CorrectionResult(original: text, corrected: corrected,
-                               modelID: modelName, confidence: Constants.defaultConfidence, promptType: "fluency")
+        return try await performCorrection(text: text, promptType: .fluency,
+            model: modelName, url: try localChatURL(port: port), apiKey: nil)
     }
 
     func explain(original: String, corrected: String) async throws -> String {
-        let engine = PromptEngine(language: language)
+        let engine = PromptEngine(language: resolvedLanguage)
         let prompt = engine.buildExplainPrompt(original: original, corrected: corrected, customInstruction: nil)
         let port = try await ensureServerRunning()
 
@@ -86,7 +64,7 @@ actor LocalLLMService: @preconcurrency LLMService {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let engine = PromptEngine(language: language)
+                    let engine = PromptEngine(language: resolvedLanguage)
                     let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
                     let port = try await ensureServerRunning()
 
