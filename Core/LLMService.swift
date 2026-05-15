@@ -13,6 +13,7 @@ enum PromptType: Sendable {
     case fluency
     case explain
     case custom(name: String, template: String)
+    case translation(targetLanguage: String)
 
     var label: String {
         switch self {
@@ -20,6 +21,7 @@ enum PromptType: Sendable {
         case .fluency: "fluency"
         case .explain: "explain"
         case .custom: "custom"
+        case .translation(let lang): "translation:\(lang)"
         }
     }
 }

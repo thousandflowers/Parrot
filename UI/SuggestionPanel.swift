@@ -60,14 +60,15 @@ final class SuggestionPanelController {
     private func showOrUpdate(result: CorrectionResult?, state: SuggestionState) {
         self.currentResult = result
         self.currentState = state
-        
+
         let view = SuggestionView(
             result: result,
             state: state,
             onApply: { [weak self] in self?.applyCorrection() },
             onExplain: { [weak self] in self?.requestExplanation() },
             onDismiss: { [weak self] in self?.close() },
-            onUndo: { [weak self] in self?.undoCorrection() }
+            onUndo: { [weak self] in self?.undoCorrection() },
+            onTranslate: { [weak self] lang in self?.translate(to: lang) }
         )
 
         if let hv = hostingView {
@@ -200,6 +201,32 @@ final class SuggestionPanelController {
                 }
             } catch {
                 self.showError(error as? CorrectionError ?? .serverTimeout)
+            }
+        }
+    }
+
+    private func translate(to language: String) {
+        guard let result = currentResult else { return }
+        showOrUpdate(result: nil, state: .loading)
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let newResult = try await RequestQueue.shared.enqueue(
+                    text: result.originalText,
+                    type: .translation(targetLanguage: language),
+                    priority: .manual,
+                    overrideServiceType: nil,
+                    overrideCustomPrompt: nil
+                )
+                let finalResult = CorrectionResult(
+                    original: result.originalText,
+                    corrected: newResult.correctedText,
+                    modelID: newResult.modelID,
+                    promptType: "translation"
+                )
+                self.showOrUpdate(result: finalResult, state: .suggestion(finalResult))
+            } catch {
+                self.showError(error as? CorrectionError ?? .outputParsingFailed(raw: error.localizedDescription))
             }
         }
     }

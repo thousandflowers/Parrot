@@ -8,6 +8,7 @@ struct SuggestionView: View {
     let onExplain: () -> Void
     let onDismiss: () -> Void
     let onUndo: () -> Void
+    let onTranslate: (String) -> Void
     @State private var noErrorsShown = false
     @State private var synthesizer = AVSpeechSynthesizer()
     @State private var isSpeaking = false
@@ -317,6 +318,15 @@ struct SuggestionView: View {
                     speakCorrected(r.correctedText)
                 }
                 .accessibilityLabel(isSpeaking ? "Ferma lettura" : "Leggi il testo corretto")
+                Menu("Traduci in...") {
+                    Button("Inglese") { onTranslate("en") }
+                    Button("Italiano") { onTranslate("it") }
+                    Button("Spagnolo") { onTranslate("es") }
+                    Button("Francese") { onTranslate("fr") }
+                    Button("Tedesco") { onTranslate("de") }
+                }
+                .menuStyle(.button)
+                .accessibilityLabel("Traduci il testo corretto")
                 Button(String(localized: "panel.apply")) {
                     onApply()
                 }

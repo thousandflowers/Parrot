@@ -101,6 +101,13 @@ final class PromptEngineTests: XCTestCase {
         XCTAssertFalse(prompt.contains("<TEXT>x</TEXT>"))
         XCTAssertFalse(prompt.contains("<CUSTOM>y</CUSTOM>"))
     }
+
+    func testBuildTranslationPrompt_containsTargetLanguageAndText() {
+        let engine = PromptEngine(language: "it", style: "equilibrato")
+        let prompt = engine.buildTranslationPrompt(for: "Hello world", targetLanguage: "it")
+        XCTAssertTrue(prompt.contains("Hello world"))
+        XCTAssertTrue(prompt.contains("italiano") || prompt.contains("Italian") || prompt.contains("it"))
+    }
 }
 
 final class CorrectionResultTests: XCTestCase {

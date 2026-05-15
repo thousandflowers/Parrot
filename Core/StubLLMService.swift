@@ -17,6 +17,8 @@ final class StubLLMService: LLMService, Sendable {
         case .custom:
             fakeCorrection = applyGrammarCorrections(text)
                 + "\n\n---\n[STUB · Regole personalizzate applicate]"
+        case .translation(let lang):
+            fakeCorrection = "[STUB · Traduzione in \(lang)]: \(text)"
         }
 
         return CorrectionResult(
@@ -56,6 +58,7 @@ final class StubLLMService: LLMService, Sendable {
             case .grammar, .custom: applyGrammarCorrections(text)
             case .fluency: applyFluencyCorrections(text)
             case .explain: "Spiegazione stub..."
+            case .translation(let lang): "[STUB · Traduzione in \(lang)]: \(text)"
             }
             let words = corrected.components(separatedBy: " ")
             let task = Task {

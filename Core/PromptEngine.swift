@@ -186,6 +186,16 @@ struct PromptEngine {
         custom.buildPrompt(for: text, language: language)
     }
 
+    func buildTranslationPrompt(for text: String, targetLanguage: String) -> String {
+        let escaped = escapeForPrompt(text)
+        let langName = Locale.current.localizedString(forLanguageCode: targetLanguage) ?? targetLanguage
+        return """
+        Translate the following text into \(langName). Output only the translated text, nothing else.
+
+        <TEXT>\(escaped)</TEXT>
+        """
+    }
+
     func buildPrompt(for text: String, type: PromptType, customInstruction: String? = nil) -> String {
         switch type {
         case .grammar:
@@ -210,6 +220,8 @@ struct PromptEngine {
                 result += "\n<CUSTOM>\(instruction)</CUSTOM>"
             }
             return result
+        case .translation(let lang):
+            return buildTranslationPrompt(for: text, targetLanguage: lang)
         }
     }
 }
