@@ -8,6 +8,15 @@ struct SuggestionView: View {
     let onDismiss: () -> Void
     @State private var noErrorsShown = false
 
+    private static let loadingMessages = [
+        "Analizzando la grammatica...",
+        "Controllando i verbi...",
+        "Verificando la punteggiatura...",
+        "Analisi delle concordanze...",
+        "Controllo ortografico in corso..."
+    ]
+    @State private var loadingMessageIndex: Int = 0
+
     private var stateHash: Int {
         var hasher = Hasher()
         hasher.combine(headerTitle)
@@ -127,24 +136,24 @@ struct SuggestionView: View {
         }
     }
 
-    private var loadingMessage: String {
-        let messages = [
-            "Analizzando la grammatica...",
-            "Controllando i verbi...",
-            "Verificando la punteggiatura...",
-            "Analisi delle concordanze...",
-            "Controllo ortografico in corso..."
-        ]
-        return messages[Int(Date().timeIntervalSince1970) % messages.count]
-    }
-
     @ViewBuilder
     private var contentView: some View {
         switch state {
         case .loading:
             VStack {
-                ProgressView(loadingMessage)
+                ProgressView(Self.loadingMessages[loadingMessageIndex])
                     .frame(height: 60)
+            }
+            .onAppear {
+                loadingMessageIndex = Int(Date().timeIntervalSince1970) % Self.loadingMessages.count
+            }
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(3))
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        loadingMessageIndex = (loadingMessageIndex + 1) % Self.loadingMessages.count
+                    }
+                }
             }
         case .suggestion(let result, let explanation, let isLoading):
             ScrollView(.vertical) {
