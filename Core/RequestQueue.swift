@@ -72,60 +72,54 @@ actor RequestQueue {
     }
 
     private func processQueue() async {
-        guard !isProcessing, let request = queue.first else { return }
+        guard !isProcessing else { return }
         isProcessing = true
-
-        if Date() > request.deadline {
-            queue.removeFirst()
-            isProcessing = false
-            request.box.resume(throwing: CorrectionError.serverTimeout)
-            Task { await processQueue() }
-            return
-        }
-
-        queue.removeFirst()
-
-        do {
-            let service: LLMService
-            let serviceType: ServiceType
-            if let overrideType = request.overrideServiceType {
-                service = LLMServiceFactory.make(with: overrideType)
-                serviceType = overrideType
-            } else {
-                service = LLMServiceFactory.make()
-                serviceType = LLMServiceFactory.resolveDefaultServiceType()
-            }
-            let modelID = resolveModelID(for: serviceType)
-
-            if let cached = await ResultCache.shared.get(for: request.text, modelID: modelID) {
-                isProcessing = false
-                request.box.resume(returning: cached)
-                Task { await processQueue() }
-                return
-            }
-
-            let promptType: PromptType
-            if let customPrompt = request.overrideCustomPrompt {
-                promptType = .custom(name: customPrompt.name, template: customPrompt.template)
-            } else {
-                promptType = request.promptType
-            }
-
-            let result = try await service.correct(text: request.text, promptType: promptType)
-            await ResultCache.shared.set(result, for: request.text, modelID: modelID)
-            isProcessing = false
-            request.box.resume(returning: result)
-        } catch {
-            isProcessing = false
-            guard Date() <= request.deadline else {
+        
+        while !queue.isEmpty {
+            let request = queue.removeFirst()
+            
+            if Date() > request.deadline {
                 request.box.resume(throwing: CorrectionError.serverTimeout)
-                Task { await processQueue() }
-                return
+                continue
             }
-            request.box.resume(throwing: error)
-        }
+            
+            do {
+                let service: LLMService
+                let serviceType: ServiceType
+                if let overrideType = request.overrideServiceType {
+                    service = LLMServiceFactory.make(with: overrideType)
+                    serviceType = overrideType
+                } else {
+                    service = LLMServiceFactory.make()
+                    serviceType = LLMServiceFactory.resolveDefaultServiceType()
+                }
+                let modelID = resolveModelID(for: serviceType)
 
-        Task { await processQueue() }
+                if let cached = await ResultCache.shared.get(for: request.text, modelID: modelID) {
+                    request.box.resume(returning: cached)
+                    continue
+                }
+
+                let promptType: PromptType
+                if let customPrompt = request.overrideCustomPrompt {
+                    promptType = .custom(name: customPrompt.name, template: customPrompt.template)
+                } else {
+                    promptType = request.promptType
+                }
+
+                let result = try await service.correct(text: request.text, promptType: promptType)
+                await ResultCache.shared.set(result, for: request.text, modelID: modelID)
+                request.box.resume(returning: result)
+            } catch {
+                if Date() > request.deadline {
+                    request.box.resume(throwing: CorrectionError.serverTimeout)
+                } else {
+                    request.box.resume(throwing: error)
+                }
+            }
+        }
+        
+        isProcessing = false
     }
 
     private nonisolated func resolveModelID(for serviceType: ServiceType) -> String {

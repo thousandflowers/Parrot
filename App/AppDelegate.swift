@@ -59,8 +59,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func checkAccessibilityPermissions() {
-        if AXIsProcessTrusted() { return }
-        guard !UserDefaults.standard.bool(forKey: "hasAcknowledgedAccessibilityWarning") else { return }
+        guard shouldShowAccessibilityWarning() else { return }
 
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         let enabled = AXIsProcessTrustedWithOptions(options as CFDictionary)
@@ -82,6 +81,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 UserDefaults.standard.set(true, forKey: "hasAcknowledgedAccessibilityWarning")
             }
         }
+    }
+
+    private func shouldShowAccessibilityWarning() -> Bool {
+        // Se siamo già trusted, non mostrare nulla
+        if AXIsProcessTrusted() { return false }
+        
+        // Se l'utente ha già chiesto di non essere disturbato, rispetta la scelta
+        if UserDefaults.standard.bool(forKey: "hasAcknowledgedAccessibilityWarning") { return false }
+        
+        return true
     }
 
     private func observeFrontmostAppChanges() {

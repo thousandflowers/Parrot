@@ -57,13 +57,13 @@ final class GlobalHotkeyManager {
         register(
             keyCode: UInt32(kVK_ANSI_E),
             modifiers: UInt32(cmdKey | shiftKey),
-            action: { TextCheckCoordinator.shared.checkSelectedText() }
+            action: { Task { await TextCheckCoordinator.shared.checkSelectedText() } }
         )
 
         register(
             keyCode: UInt32(kVK_ANSI_T),
             modifiers: UInt32(cmdKey | shiftKey),
-            action: { TextCheckCoordinator.shared.checkFluency() }
+            action: { Task { await TextCheckCoordinator.shared.checkFluency() } }
         )
 
         register(

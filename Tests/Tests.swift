@@ -623,3 +623,22 @@ final class LLMAPITypesTests: XCTestCase {
         XCTAssertEqual(response.choices.first?.message.content, "corrected text")
     }
 }
+
+final class DiffHighlightTests: XCTestCase {
+    func testDiffHighlight_detectsInsertedWord() {
+        let original = "Il testo è corretto"
+        let corrected = "Il testo è veramente corretto"
+
+        let origWords = original.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+        let corrWords = corrected.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+        let diff = corrWords.difference(from: origWords)
+
+        var insertedIndices = Set<Int>()
+        for change in diff.insertions {
+            if case .insert(let offset, _, _) = change { insertedIndices.insert(offset) }
+        }
+
+        XCTAssertTrue(insertedIndices.contains(3), "Expected 'veramente' to be detected at index 3")
+        XCTAssertEqual(corrWords[3], "veramente", "Expected word at index 3 to be 'veramente'")
+    }
+}

@@ -7,6 +7,7 @@ actor RealtimeMonitor {
     private var lastTextHash: Int?
     private var debounceTask: Task<Void, Never>?
     private var isEnabled = false
+    private var pollInterval: TimeInterval = 5.0
 
     func start() {
         guard !isEnabled else { return }
@@ -17,7 +18,10 @@ actor RealtimeMonitor {
             while !Task.isCancelled {
                 let enabled = await self.isEnabled
                 guard enabled else { break }
-                try? await Task.sleep(for: .seconds(2))
+                
+                let interval = await self.pollInterval
+                try? await Task.sleep(for: .seconds(interval))
+                
                 guard !Task.isCancelled else { break }
                 let stillEnabled = await self.isEnabled
                 guard stillEnabled else { break }
@@ -44,24 +48,43 @@ actor RealtimeMonitor {
     }
 
     private func poll() async {
-        let pid = AccessibilityBridge.lastKnownFrontAppPID
-        guard pid != 0 else { return }
-        guard UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.autoCheckEnabled) else { return }
+        let pid = await AccessibilityBridge.shared.lastKnownFrontAppPID()
+        guard pid != 0 else { 
+            pollInterval = 5.0
+            return 
+        }
+        guard UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.autoCheckEnabled) else { 
+            pollInterval = 5.0
+            return 
+        }
 
         let bundleID = await AppDetector.shared.frontAppBundleID(forPID: pid)
         if let id = bundleID {
             let excluded = await MainActor.run { PreferencesStore.shared.isExcluded(bundleID: id) }
-            guard !excluded else { return }
+            if excluded {
+                pollInterval = 10.0 // Very conservative for excluded apps
+                return
+            }
         }
 
-        guard let text = try? await fetchCurrentText(pid: pid), !text.isEmpty else { return }
+        guard let text = try? await fetchCurrentText(pid: pid), !text.isEmpty else { 
+            pollInterval = 5.0
+            return 
+        }
         let hash = text.hashValue
-        guard hash != lastTextHash else { return }
+        if hash == lastTextHash {
+            // Stable text, slow down
+            pollInterval = min(pollInterval + 1.0, 5.0)
+            return
+        }
+        
+        // Text changed, speed up to be responsive
         lastTextHash = hash
+        pollInterval = 2.0
 
         debounceTask?.cancel()
         debounceTask = Task {
-            try? await Task.sleep(for: .milliseconds(500))
+            try? await Task.sleep(for: .milliseconds(800))
             guard !Task.isCancelled else { return }
             await performCheck(text: text)
         }

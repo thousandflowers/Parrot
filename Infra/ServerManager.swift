@@ -17,8 +17,10 @@ actor ServerManager: Sendable {
         }
         
         // 1. Check if current is still healthy
-        if currentPort > 0 && await checkServerHealth(port: currentPort) {
-            return currentPort
+        if currentPort > 0 {
+            if await checkServerHealth(port: currentPort) {
+                return currentPort
+            }
         }
 
         // 2. Try to find an external server

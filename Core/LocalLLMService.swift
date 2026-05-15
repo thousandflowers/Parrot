@@ -21,7 +21,7 @@ actor LocalLLMService: @preconcurrency LLMService {
         let port = await ServerManager.shared.currentPort
         if port > 0 { return port }
 
-        guard let modelPath = ModelManager.shared.currentModelPath else {
+        guard let modelPath = await ModelManager.shared.getCurrentModelPath() else {
             throw CorrectionError.serverNotRunning
         }
         let newPort = try await ServerManager.shared.ensureRunning(modelPath: modelPath)

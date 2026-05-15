@@ -23,3 +23,11 @@ extension Color {
     /// Testo secondario — mappa al colore secondario del sistema
     static let textSecondary = Color.secondary
 }
+
+extension View {
+    /// Rimuove elementi AX "fantasma" (size 0x0) tipici di ScrollView/List su macOS
+    func cleanAccessibilityTree() -> some View {
+        self.accessibilityElement(children: .contain)
+            .accessibilityHidden(false)
+    }
+}
