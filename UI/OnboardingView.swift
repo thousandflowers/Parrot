@@ -37,6 +37,7 @@ final class OnboardingController {
 struct OnboardingView: View {
     let onComplete: () -> Void
     @State private var step = 0
+    @State private var isAccessibilityGranted: Bool = AXIsProcessTrusted()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -63,6 +64,7 @@ struct OnboardingView: View {
                 if step < 2 {
                     Button("Avanti") { step += 1 }
                         .buttonStyle(.borderedProminent)
+                        .disabled(step == 1 && !isAccessibilityGranted)
                 } else {
                     Button("Inizia") { onComplete() }
                         .buttonStyle(.borderedProminent)
@@ -94,24 +96,42 @@ struct OnboardingView: View {
     private var permissionsStep: some View {
         VStack(spacing: 20) {
             Spacer()
-            Image(systemName: "hand.raised.fill")
-                .font(.title)
-                .foregroundColor(.statusWarning)
-            Text("Permessi di Accessibilità")
-                .font(.title2)
-            Text("RefineClone ha bisogno dei permessi di Accessibilità per leggere e correggere il testo nelle altre applicazioni.")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 40)
-            Button("Apri Impostazioni di Sistema") {
-                let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-                _ = AXIsProcessTrustedWithOptions(options as CFDictionary)
+            if isAccessibilityGranted {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title)
+                    .foregroundColor(.statusOk)
+                Text("Permessi concessi!")
+                    .font(.title2)
+                Text("RefineClone può ora leggere e correggere il testo nelle altre applicazioni.")
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 40)
+            } else {
+                Image(systemName: "hand.raised.fill")
+                    .font(.title)
+                    .foregroundColor(.statusWarning)
+                Text("Permessi di Accessibilità")
+                    .font(.title2)
+                Text("RefineClone ha bisogno dei permessi di Accessibilità per leggere e correggere il testo nelle altre applicazioni.")
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 40)
+                Button("Apri Impostazioni di Sistema") {
+                    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+                    _ = AXIsProcessTrustedWithOptions(options as CFDictionary)
+                }
+                Text("Aggiungi RefineClone alla lista delle app autorizzate in Privacy e Sicurezza → Accessibilità.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 40)
             }
-            Text("Aggiungi RefineClone alla lista delle app autorizzate in Privacy e Sicurezza → Accessibilità.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 40)
             Spacer()
+        }
+        .task {
+            while !isAccessibilityGranted {
+                try? await Task.sleep(for: .milliseconds(500))
+                isAccessibilityGranted = AXIsProcessTrusted()
+            }
         }
     }
 
