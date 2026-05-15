@@ -8,30 +8,9 @@ final class OpenRouterService: LLMService, Sendable {
     nonisolated private var openRouterModel: String {
         UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openRouterModel) ?? "openai/gpt-4o-mini"
     }
-    private let apiKeyLock = NSLock()
-    // Swift 6 migration: replace with Mutex (swift-synchronization) protecting key + timestamp
-    private nonisolated(unsafe) var _cachedAPIKey: String?
-    private nonisolated(unsafe) var _lastAPIKeyTime: Date = .distantPast
 
     private func openRouterAPIKey() -> String {
-        let now = Date()
-        apiKeyLock.lock()
-        defer { apiKeyLock.unlock() }
-        if let cached = _cachedAPIKey, now.timeIntervalSince(_lastAPIKeyTime) < 60 {
-            return cached
-        }
-        let key: String
-        do {
-            key = try KeychainService.shared.load(for: "openrouter")
-        } catch {
-            os_log(.debug, "Keychain load openrouter: %{public}@", error.localizedDescription)
-            key = ""
-        }
-        if !key.isEmpty {
-            _cachedAPIKey = key
-            _lastAPIKeyTime = now
-        }
-        return key
+        (try? KeychainService.shared.load(for: "openrouter")) ?? ""
     }
 
     private func chatURL() throws -> URL {
