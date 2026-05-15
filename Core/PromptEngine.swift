@@ -1,5 +1,5 @@
 import Foundation
-import os
+import OSLog
 import AppKit
 
 enum LanguageFamily: String {
@@ -194,7 +194,7 @@ struct PromptEngine {
             return buildFluencyPrompt(for: text, customInstruction: customInstruction)
         case .explain:
             let safeText = escapeForPrompt(text)
-            os_log(.debug, "buildPrompt called with .explain — use buildExplainPrompt(original:corrected:) directly")
+            Logger.core.debug("buildPrompt called with .explain — use buildExplainPrompt(original:corrected:) directly")
             return """
             Explain any errors in the following text.
 

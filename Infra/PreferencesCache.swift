@@ -1,6 +1,6 @@
 import Cocoa
 import Foundation
-import os
+import OSLog
 
 @MainActor
 final class PreferencesCache {
@@ -17,7 +17,7 @@ final class PreferencesCache {
         if let cachedPrompts, currentData == cachedPromptsData { return cachedPrompts }
         guard let data = currentData,
               let prompts = try? JSONDecoder().decode([CustomPrompt].self, from: data) else {
-            if currentData != nil { os_log(.error, "PreferencesStore: failed to decode customPrompts — resetting") }
+            if currentData != nil { Logger.infra.error("PreferencesStore: failed to decode customPrompts — resetting") }
             cachedPrompts = []
             cachedPromptsData = nil
             return []
@@ -29,7 +29,7 @@ final class PreferencesCache {
 
     func setCustomPrompts(_ prompts: [CustomPrompt]) -> Bool {
         guard let data = try? JSONEncoder().encode(prompts) else {
-            os_log(.error, "PreferencesStore: failed to encode customPrompts — data not saved")
+            Logger.infra.error("PreferencesStore: failed to encode customPrompts — data not saved")
             return false
         }
         cachedPrompts = prompts
@@ -43,7 +43,7 @@ final class PreferencesCache {
         if let cachedAppRules, currentData == cachedAppRulesData { return cachedAppRules }
         guard let data = currentData,
               let rules = try? JSONDecoder().decode([AppRule].self, from: data) else {
-            if currentData != nil { os_log(.error, "PreferencesStore: failed to decode appRules — resetting") }
+            if currentData != nil { Logger.infra.error("PreferencesStore: failed to decode appRules — resetting") }
             cachedAppRules = []
             cachedAppRulesData = nil
             return []
@@ -55,7 +55,7 @@ final class PreferencesCache {
 
     func setAppRules(_ rules: [AppRule]) -> Bool {
         guard let data = try? JSONEncoder().encode(rules) else {
-            os_log(.error, "PreferencesStore: failed to encode appRules — data not saved")
+            Logger.infra.error("PreferencesStore: failed to encode appRules — data not saved")
             return false
         }
         cachedAppRules = rules
@@ -94,7 +94,7 @@ final class PreferencesCache {
 
     static func downloadedModels() -> [String] {
         guard let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            os_log(.error, "Cannot access Application Support directory")
+            Logger.infra.error("Cannot access Application Support directory")
             return []
         }
         let modelsDir = dir.appendingPathComponent("RefineClone/Models")

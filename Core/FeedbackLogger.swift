@@ -1,5 +1,5 @@
 import Foundation
-import os
+import OSLog
 
 struct FeedbackEntry: Codable {
     let timestamp: Date
@@ -12,7 +12,7 @@ struct FeedbackEntry: Codable {
 enum FeedbackLogger {
     private static let feedbackDir: URL = {
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            os_log(.error, "Cannot access Application Support directory")
+            Logger.feedback.error("Cannot access Application Support directory")
             return FileManager.default.temporaryDirectory
         }
         return appSupport.appendingPathComponent("RefineClone")
@@ -46,9 +46,9 @@ enum FeedbackLogger {
             } else {
                 try line.write(to: feedbackURL, atomically: true, encoding: .utf8)
             }
-            os_log(.info, "Feedback logged: %{public}@", reason)
+            Logger.feedback.info("Feedback logged: \(reason, privacy: .public)")
         } catch {
-            os_log(.error, "Failed to write feedback: %{public}@", error.localizedDescription)
+            Logger.feedback.error("Failed to write feedback: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

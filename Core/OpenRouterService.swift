@@ -1,5 +1,4 @@
 import Foundation
-import os
 
 final class OpenRouterService: LLMService, Sendable {
     static let shared = OpenRouterService()

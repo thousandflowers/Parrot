@@ -1,6 +1,6 @@
 import Foundation
 import CryptoKit
-import os
+import OSLog
 
 struct ModelRecommendation: Sendable {
     let id: String
@@ -32,10 +32,13 @@ struct ModelInfo: Codable {
 
 actor ModelManager: Sendable {
     static let shared = ModelManager()
+    
+    private var _cachedModelPath: String?
+    private var _lastCacheTime: Date = .distantPast
 
     private let modelsDir: URL = {
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            os_log(.error, "Cannot locate Application Support directory")
+            Logger.infra.error("Cannot locate Application Support directory")
             return FileManager.default.temporaryDirectory.appendingPathComponent("RefineClone/Models")
         }
         return appSupport.appendingPathComponent("RefineClone/Models")
@@ -53,6 +56,44 @@ actor ModelManager: Sendable {
     ]
 
     nonisolated var currentModelPath: String? {
+        let id = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID) ?? ""
+        let cleanID = id.hasSuffix(".gguf") ? String(id.dropLast(5)) : id
+        if !cleanID.isEmpty {
+            let ownPath = modelsDir.appendingPathComponent("\(cleanID).gguf").path(percentEncoded: false)
+            if FileManager.default.fileExists(atPath: ownPath) {
+                return ownPath
+            }
+            let fullPathID = id.hasSuffix(".gguf") ? id : "\(id).gguf"
+            let external = adoptedModelPaths().first { ($0 as NSString).lastPathComponent == fullPathID || $0.contains(cleanID) }
+            if let ext = external, FileManager.default.fileExists(atPath: ext) {
+                return ext
+            }
+        }
+        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: modelsDir.path(percentEncoded: false)),
+              let firstModel = contents.first(where: { $0.hasSuffix(".gguf") }) else {
+            return nil
+        }
+        return modelsDir.appendingPathComponent(firstModel).path(percentEncoded: false)
+    }
+
+    func getCurrentModelPath() async -> String? {
+        // Cache for 30 seconds or until invalidated
+        if let cached = _cachedModelPath, Date().timeIntervalSince(_lastCacheTime) < 30 {
+            return cached
+        }
+        
+        let path = resolveCurrentModelPath()
+        _cachedModelPath = path
+        _lastCacheTime = Date()
+        return path
+    }
+    
+    func invalidateCache() {
+        _cachedModelPath = nil
+        _lastCacheTime = .distantPast
+    }
+
+    private nonisolated func resolveCurrentModelPath() -> String? {
         let id = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID) ?? ""
         let cleanID = id.hasSuffix(".gguf") ? String(id.dropLast(5)) : id
         if !cleanID.isEmpty {
@@ -196,7 +237,7 @@ actor ModelManager: Sendable {
             guard let mirror = mirrorURL(for: url) else {
                 throw CorrectionError.modelDownloadFailed(url: url)
             }
-            os_log(.info, "Primary failed (%{public}@), trying mirror: hf-mirror.com", error.localizedDescription)
+            Logger.infra.info("Primary failed (\(error.localizedDescription, privacy: .public)), trying mirror: hf-mirror.com")
             do {
                 return try await downloadWithResume(from: mirror, progressHandler: progressHandler, token: token)
             } catch {
@@ -237,13 +278,13 @@ actor ModelManager: Sendable {
         guard httpResponse.statusCode == 200 || httpResponse.statusCode == 206 else {
             switch httpResponse.statusCode {
             case 401, 403:
-                os_log(.error, "Model download: auth required (HTTP %{public}d). Set HF token in Impostazioni > Avanzate.", httpResponse.statusCode)
+                Logger.infra.error("Model download: auth required (HTTP \(httpResponse.statusCode, privacy: .public)). Set HF token in Impostazioni > Avanzate.")
                 throw CorrectionError.modelDownloadFailed(url: url)
             case 404:
-                os_log(.error, "Model file not found (HTTP 404): %{public}@", url.absoluteString)
+                Logger.infra.error("Model file not found (HTTP 404): \(url.absoluteString, privacy: .public)")
                 throw CorrectionError.modelDownloadFailed(url: url)
             default:
-                os_log(.error, "Model download failed: HTTP %{public}d for %{public}@", httpResponse.statusCode, url.absoluteString)
+                Logger.infra.error("Model download failed: HTTP \(httpResponse.statusCode, privacy: .public) for \(url.absoluteString, privacy: .public)")
                 throw URLError(.badServerResponse)
             }
         }

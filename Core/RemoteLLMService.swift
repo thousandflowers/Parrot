@@ -1,5 +1,5 @@
 import Foundation
-import os
+import OSLog
 
 final class RemoteLLMService: LLMService, Sendable {
     static let shared = RemoteLLMService()
@@ -23,10 +23,10 @@ final class RemoteLLMService: LLMService, Sendable {
         do {
             return try KeychainService.shared.load(for: "openai")
         } catch let error as KeychainError {
-            os_log(.debug, "Keychain load openai: %{public}@", error.localizedDescription)
+            Logger.core.debug("Keychain load openai: \(error.localizedDescription, privacy: .public)")
             throw CorrectionError.invalidAPIKey
         } catch {
-            os_log(.debug, "Keychain unexpected: %{public}@", error.localizedDescription)
+            Logger.core.debug("Keychain unexpected: \(error.localizedDescription, privacy: .public)")
             throw CorrectionError.invalidAPIKey
         }
     }

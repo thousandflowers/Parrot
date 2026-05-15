@@ -1,5 +1,5 @@
 import Foundation
-import os
+import OSLog
 
 extension LLMService {
     func parseResponse(data: Data) throws -> String {
@@ -196,7 +196,7 @@ extension LLMService {
                               let content = delta["content"] as? String else {
                             if !jsonStr.isEmpty && jsonStr != "[DONE]" {
                                 skippedChunks += 1
-                                os_log(.debug, "Stream: unparseable chunk (length: %d)", skippedChunks)
+                                Logger.core.debug("Stream: unparseable chunk (length: \(skippedChunks, privacy: .public))")
                             }
                             continue
                         }

@@ -1,5 +1,5 @@
 import Foundation
-import os
+import OSLog
 
 actor ServerHealthMonitor: Sendable {
     static let shared = ServerHealthMonitor()
@@ -40,7 +40,7 @@ actor ServerHealthMonitor: Sendable {
                 return
             }
         } catch {
-            os_log(.debug, "Health check failed: %{public}@", error.localizedDescription)
+            Logger.server.debug("Health check failed: \(error.localizedDescription, privacy: .public)")
         }
 
         consecutiveFailures += 1
@@ -58,7 +58,7 @@ actor ServerHealthMonitor: Sendable {
                 try await ServerManager.shared.start(modelPath: modelPath)
                 startMonitoring()
             } catch {
-                os_log(.error, "ServerHealthMonitor: restart failed — %{public}@", error.localizedDescription)
+                Logger.server.error("ServerHealthMonitor: restart failed — \(error.localizedDescription, privacy: .public)")
             }
         }
     }

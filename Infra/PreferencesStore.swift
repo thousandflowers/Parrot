@@ -1,5 +1,5 @@
 import Foundation
-import os
+import OSLog
 
 @MainActor
 @Observable
@@ -52,11 +52,11 @@ final class PreferencesStore {
         set {
             if newValue.isEmpty {
                 do { try KeychainService.shared.delete(for: "openai") }
-                catch { os_log(.error, "PreferencesStore: failed to delete OpenAI key: %{public}@", error.localizedDescription) }
+                catch { Logger.infra.error("PreferencesStore: failed to delete OpenAI key: \(error.localizedDescription, privacy: .public)") }
                 _cachedAPIKeys.removeValue(forKey: "openai")
             } else {
                 do { try KeychainService.shared.save(key: newValue, for: "openai") }
-                catch { os_log(.error, "PreferencesStore: failed to save OpenAI key: %{public}@", error.localizedDescription) }
+                catch { Logger.infra.error("PreferencesStore: failed to save OpenAI key: \(error.localizedDescription, privacy: .public)") }
                 _cachedAPIKeys["openai"] = newValue
             }
             invalidate()
@@ -78,11 +78,11 @@ final class PreferencesStore {
         set {
             if newValue.isEmpty {
                 do { try KeychainService.shared.delete(for: "openrouter") }
-                catch { os_log(.error, "PreferencesStore: failed to delete OpenRouter key: %{public}@", error.localizedDescription) }
+                catch { Logger.infra.error("PreferencesStore: failed to delete OpenRouter key: \(error.localizedDescription, privacy: .public)") }
                 _cachedAPIKeys.removeValue(forKey: "openrouter")
             } else {
                 do { try KeychainService.shared.save(key: newValue, for: "openrouter") }
-                catch { os_log(.error, "PreferencesStore: failed to save OpenRouter key: %{public}@", error.localizedDescription) }
+                catch { Logger.infra.error("PreferencesStore: failed to save OpenRouter key: \(error.localizedDescription, privacy: .public)") }
                 _cachedAPIKeys["openrouter"] = newValue
             }
             invalidate()

@@ -1,5 +1,5 @@
 import Foundation
-import os
+import OSLog
 
 /// Verifies that a GGUF model file is compatible with the current llama-server version.
 struct GGUFVersionCheck: Sendable {
@@ -9,14 +9,22 @@ struct GGUFVersionCheck: Sendable {
     static func isCompatible(filePath: String) -> Bool {
         guard let handle = FileHandle(forReadingAtPath: filePath) else { return false }
         defer {
-            do { try handle.close() } catch { os_log(.debug, "GGUF close error: %{public}@", error.localizedDescription) }
+            do { try handle.close() } catch { Logger.core.debug("GGUF close error: \(error.localizedDescription, privacy: .public)") }
         }
 
-        guard let data = try? handle.read(upToCount: 4096),
-              data.count >= 4,
-              let magic = String(data: data.subdata(in: 0..<4), encoding: .utf8) else {
+        guard let data = try? handle.read(upToCount: 8), data.count >= 8 else {
             return false
         }
-        return magic == "GGUF"
+        
+        // GGUF Magic (first 4 bytes)
+        let magic = String(data: data.subdata(in: 0..<4), encoding: .utf8)
+        guard magic == "GGUF" else { return false }
+        
+        // GGUF Version (next 4 bytes, little endian)
+        let versionData = data.subdata(in: 4..<8)
+        let version = versionData.withUnsafeBytes { $0.load(as: UInt32.self) }
+        
+        // Current llama.cpp supports v2 and v3
+        return version == 2 || version == 3
     }
 }
