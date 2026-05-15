@@ -582,3 +582,11 @@ final class ServerManagerTests: XCTestCase {
         XCTAssertEqual(port, 0)
     }
 }
+
+final class FeedbackLoggerTests: XCTestCase {
+    func testLog_doesNotCrashWithLongText() {
+        let longText = String(repeating: "a", count: 600)
+        // Must not crash or throw
+        FeedbackLogger.log(original: longText, corrected: "short", reason: "test", modelID: "test")
+    }
+}
