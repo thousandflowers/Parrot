@@ -7,6 +7,7 @@ final class PreferencesStore {
     static let shared = PreferencesStore()
 
     private let cache = PreferencesCache()
+    private var _cachedAPIKeys: [String: String] = [:]
     /// Trigger per notificare @Observable dei cambiamenti a computed property
     private var _observationTrigger: Int = 0
 
@@ -16,34 +17,51 @@ final class PreferencesStore {
         SeedDataProvider.seedDefaults(preferences: self)
     }
 
-    // MARK: - Language & Style
+    // MARK: - Core Preferences
 
     var selectedModelID: String { get { string(Constants.UserDefaultsKey.selectedModelID) } set { set(newValue, for: Constants.UserDefaultsKey.selectedModelID) } }
     var language: String { get { string(Constants.UserDefaultsKey.language, fallback: localeDefaultLanguage()) } set { set(newValue, for: Constants.UserDefaultsKey.language) } }
     var style: String { get { string(Constants.UserDefaultsKey.style, fallback: "equilibrato") } set { set(newValue, for: Constants.UserDefaultsKey.style) } }
-
-    // MARK: - Service Configuration
-
     var serviceType: ServiceType { get { service(Constants.UserDefaultsKey.serviceType) } set { set(newValue, for: Constants.UserDefaultsKey.serviceType) } }
 
-    // MARK: - Fluency
-
     var autoCheckEnabled: Bool { get { bool(Constants.UserDefaultsKey.autoCheckEnabled) } set { set(newValue, for: Constants.UserDefaultsKey.autoCheckEnabled) } }
-    var isFluencyCheckingEnabled: Bool { get { bool(Constants.UserDefaultsKey.isFluencyCheckingEnabled) } set { set(newValue, for: Constants.UserDefaultsKey.isFluencyCheckingEnabled) } }
     var realtimeEnabled: Bool {
         get { bool(Constants.UserDefaultsKey.realtimeEnabled) }
         set {
             set(newValue, for: Constants.UserDefaultsKey.realtimeEnabled)
-            if newValue { Task { await RealtimeMonitor.shared.start() } }
-            else { Task { await RealtimeMonitor.shared.stop() } }
+            if newValue {
+                Task { await RealtimeMonitor.shared.start() }
+            } else {
+                Task { await RealtimeMonitor.shared.stop() }
+            }
         }
     }
-    var fluencyServiceType: ServiceType { get { service(Constants.UserDefaultsKey.fluencyServiceType) } set { set(newValue, for: Constants.UserDefaultsKey.fluencyServiceType) } }
 
     // MARK: - OpenAI / Remote
 
     var openAIBaseURL: String { get { string(Constants.UserDefaultsKey.openAIBaseURL, fallback: "https://api.openai.com/v1") } set { set(newValue, for: Constants.UserDefaultsKey.openAIBaseURL) } }
     var openAIModel: String { get { string(Constants.UserDefaultsKey.openAIModel, fallback: "gpt-4o-mini") } set { set(newValue, for: Constants.UserDefaultsKey.openAIModel) } }
+    var openAIAPIKey: String {
+        get {
+            observe()
+            if let cached = _cachedAPIKeys["openai"] { return cached }
+            let key = (try? KeychainService.shared.load(for: "openai")) ?? ""
+            _cachedAPIKeys["openai"] = key
+            return key
+        }
+        set {
+            if newValue.isEmpty {
+                do { try KeychainService.shared.delete(for: "openai") }
+                catch { os_log(.error, "PreferencesStore: failed to delete OpenAI key: %{public}@", error.localizedDescription) }
+                _cachedAPIKeys.removeValue(forKey: "openai")
+            } else {
+                do { try KeychainService.shared.save(key: newValue, for: "openai") }
+                catch { os_log(.error, "PreferencesStore: failed to save OpenAI key: %{public}@", error.localizedDescription) }
+                _cachedAPIKeys["openai"] = newValue
+            }
+            invalidate()
+        }
+    }
 
     // MARK: - Ollama / OpenRouter
 
@@ -52,15 +70,20 @@ final class PreferencesStore {
     var openRouterAPIKey: String {
         get {
             observe()
-            return (try? KeychainService.shared.load(for: "openrouter")) ?? ""
+            if let cached = _cachedAPIKeys["openrouter"] { return cached }
+            let key = (try? KeychainService.shared.load(for: "openrouter")) ?? ""
+            _cachedAPIKeys["openrouter"] = key
+            return key
         }
         set {
             if newValue.isEmpty {
                 do { try KeychainService.shared.delete(for: "openrouter") }
                 catch { os_log(.error, "PreferencesStore: failed to delete OpenRouter key: %{public}@", error.localizedDescription) }
+                _cachedAPIKeys.removeValue(forKey: "openrouter")
             } else {
                 do { try KeychainService.shared.save(key: newValue, for: "openrouter") }
                 catch { os_log(.error, "PreferencesStore: failed to save OpenRouter key: %{public}@", error.localizedDescription) }
+                _cachedAPIKeys["openrouter"] = newValue
             }
             invalidate()
         }

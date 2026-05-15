@@ -16,6 +16,7 @@ struct GeneralTab: View {
                 }
 
                 if prefs.serviceType == .remote {
+                    OpenAIKeyField(prefs: prefs)
                     TextField("Base URL", text: $prefs.openAIBaseURL)
                     TextField("Modello", text: $prefs.openAIModel)
                 }
@@ -71,6 +72,18 @@ struct GeneralTab: View {
         }
         .formStyle(.grouped)
         .padding()
+    }
+}
+
+private struct OpenAIKeyField: View {
+    let prefs: PreferencesStore
+    @State private var localKey: String = ""
+
+    var body: some View {
+        SecureField("API Key OpenAI", text: $localKey)
+            .onAppear { localKey = prefs.openAIAPIKey }
+            .onSubmit { prefs.openAIAPIKey = localKey }
+            .onDisappear { prefs.openAIAPIKey = localKey }
     }
 }
 
