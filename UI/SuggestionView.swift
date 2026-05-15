@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 struct SuggestionView: View {
     let result: CorrectionResult?
@@ -8,6 +9,8 @@ struct SuggestionView: View {
     let onDismiss: () -> Void
     let onUndo: () -> Void
     @State private var noErrorsShown = false
+    @State private var synthesizer = AVSpeechSynthesizer()
+    @State private var isSpeaking = false
 
     private static let loadingMessages = [
         "Analizzando la grammatica...",
@@ -23,6 +26,24 @@ struct SuggestionView: View {
         hasher.combine(headerTitle)
         hasher.combine(result?.detectedTone)
         return hasher.finalize()
+    }
+
+    private func speakCorrected(_ text: String) {
+        if isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+            isSpeaking = false
+            return
+        }
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        synthesizer.speak(utterance)
+        isSpeaking = true
+        Task {
+            while synthesizer.isSpeaking {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            isSpeaking = false
+        }
     }
 
     var body: some View {
@@ -52,6 +73,10 @@ struct SuggestionView: View {
                 .cornerRadius(12)
                 .shadow(color: .primary.opacity(0.15), radius: 10, x: 0, y: 4)
         )
+        .onDisappear {
+            synthesizer.stopSpeaking(at: .immediate)
+            isSpeaking = false
+        }
     }
 
     @ViewBuilder
@@ -167,10 +192,9 @@ struct SuggestionView: View {
         case .suggestion(let result, let explanation, let isLoading):
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(result.correctedText)
+                    DiffHighlightView(original: result.originalText, corrected: result.correctedText)
                         .font(.body)
-                        .textSelection(.enabled)
-                    
+
                     if isLoading {
                         Divider()
                         HStack(spacing: 8) {
@@ -199,10 +223,9 @@ struct SuggestionView: View {
         case .fluencySuggestion(let result, let explanation, let isLoading):
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(result.correctedText)
+                    DiffHighlightView(original: result.originalText, corrected: result.correctedText)
                         .font(.body)
-                        .textSelection(.enabled)
-                    
+
                     if isLoading {
                         Divider()
                         HStack(spacing: 8) {
@@ -324,6 +347,38 @@ struct SuggestionView: View {
                 Spacer()
             }
         }
+    }
+}
+
+struct DiffHighlightView: View {
+    let original: String
+    let corrected: String
+
+    var body: some View {
+        Text(attributedDiff)
+            .textSelection(.enabled)
+    }
+
+    private var attributedDiff: AttributedString {
+        let origWords = original.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+        let corrWords = corrected.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+        let diff = corrWords.difference(from: origWords)
+
+        var insertedIndices = Set<Int>()
+        for change in diff.insertions {
+            if case .insert(let offset, _, _) = change { insertedIndices.insert(offset) }
+        }
+
+        var result = AttributedString()
+        for (i, word) in corrWords.enumerated() {
+            var chunk = AttributedString(word)
+            if insertedIndices.contains(i) {
+                chunk.foregroundColor = Color(nsColor: .systemGreen)
+            }
+            result += chunk
+            if i < corrWords.count - 1 { result += AttributedString(" ") }
+        }
+        return result
     }
 }
 
