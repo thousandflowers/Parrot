@@ -124,8 +124,15 @@ final class CorrectionResultTests: XCTestCase {
         XCTAssertNil(ops)
     }
 
-    func testComputeDiff_consecutiveSpaces_doesNotCrash() {
-        _ = CorrectionResult.computeDiff(original: "hello  world", corrected: "hello world")
+    func testComputeDiff_consecutiveSpaces_correctOffsets() {
+        // "world" starts at index 7 in "hello  world" (double space at 5,6)
+        guard let ops = CorrectionResult.computeDiff(original: "hello  world", corrected: "hello globe") else {
+            XCTFail("Expected diff ops"); return
+        }
+        let deleteOp = ops.first(where: { $0.type == .delete })
+        XCTAssertNotNil(deleteOp)
+        // "world" is at char offset 7 (h=0,e=1,l=2,l=3,o=4,' '=5,' '=6,w=7)
+        XCTAssertEqual(deleteOp?.offset, 7, "Offset must point to 'world' after double space")
     }
 
     func testComputeDiff_tabAndNewline_handlesCorrectly() {

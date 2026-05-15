@@ -60,38 +60,48 @@ struct CorrectionResult: Identifiable, Sendable, Codable {
     static func computeDiff(original: String, corrected: String) -> [DiffOp]? {
         guard original != corrected else { return nil }
 
-        let origWords = original.split(separator: " ", omittingEmptySubsequences: true)
-        let corrWords = corrected.split(separator: " ", omittingEmptySubsequences: true)
+        struct Token { let text: Substring; let charOffset: Int }
 
-        let diff = corrWords.difference(from: origWords)
-        guard !diff.isEmpty else { return nil }
-
-        var charOffsets: [Int] = []
-        var scanner = original.startIndex
-        for word in origWords {
-            charOffsets.append(original.distance(from: original.startIndex, to: scanner))
-            let wordEnd = original.index(scanner, offsetBy: word.count)
-            scanner = wordEnd < original.endIndex ? original.index(after: wordEnd) : original.endIndex
+        func tokenize(_ s: String) -> [Token] {
+            var tokens: [Token] = []
+            var i = s.startIndex
+            while i < s.endIndex {
+                while i < s.endIndex && s[i].isWhitespace { i = s.index(after: i) }
+                guard i < s.endIndex else { break }
+                let start = i
+                let charOffset = s.distance(from: s.startIndex, to: start)
+                while i < s.endIndex && !s[i].isWhitespace { i = s.index(after: i) }
+                tokens.append(Token(text: s[start..<i], charOffset: charOffset))
+            }
+            return tokens
         }
 
-        var ops: [DiffOp] = []
-        var origIdx = 0
+        let origTokens = tokenize(original)
+        let corrTokens = tokenize(corrected)
 
+        let diff = corrTokens.map(\.text).difference(from: origTokens.map(\.text))
+        guard !diff.isEmpty else { return nil }
+
+        var ops: [DiffOp] = []
         for change in diff {
             switch change {
             case .remove(let wordOffset, let word, _):
-                while origIdx < wordOffset && origIdx < charOffsets.count {
-                    origIdx += 1
+                let offset = wordOffset < origTokens.count
+                    ? origTokens[wordOffset].charOffset
+                    : (origTokens.last.map { $0.charOffset + $0.text.count } ?? 0)
+                ops.append(DiffOp(type: .delete, offset: offset, length: word.count, replacement: nil))
+            case .insert(let resultOffset, let word, _):
+                let offset: Int
+                if resultOffset < origTokens.count {
+                    offset = origTokens[resultOffset].charOffset
+                } else if let last = origTokens.last {
+                    offset = last.charOffset + last.text.count
+                } else {
+                    offset = 0
                 }
-                let charOffset = origIdx < charOffsets.count ? charOffsets[origIdx] : charOffsets.last ?? 0
-                ops.append(DiffOp(type: .delete, offset: charOffset, length: word.count, replacement: nil))
-                origIdx += 1
-            case .insert(_, let word, _):
-                let charOffset = origIdx < charOffsets.count ? charOffsets[origIdx] : charOffsets.last ?? 0
-                ops.append(DiffOp(type: .insert, offset: charOffset, length: word.count, replacement: String(word)))
+                ops.append(DiffOp(type: .insert, offset: offset, length: word.count, replacement: String(word)))
             }
         }
-
         return ops.isEmpty ? nil : ops
     }
 
