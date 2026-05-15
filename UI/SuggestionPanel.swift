@@ -136,6 +136,7 @@ final class SuggestionPanelController {
             guard let self else { return }
             do {
                 try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText)
+                Task { await HistoryStore.shared.add(result: result) }
                 self.showOrUpdate(result: result, state: .applied(result))
                 self.undoTask = Task { [weak self] in
                     try? await Task.sleep(for: .seconds(5))

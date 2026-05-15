@@ -36,6 +36,11 @@ struct SettingsView: View {
                 .tabItem { Label("Avanzate", systemImage: "wrench.adjustable") }
                 .tag(5)
                 .accessibilityElement(children: .contain)
+
+            HistoryTab()
+                .tabItem { Label("Storia", systemImage: "clock") }
+                .tag(6)
+                .accessibilityElement(children: .contain)
         }
         .frame(minWidth: 500, minHeight: 400)
         .animation(.easeInOut(duration: 0.2), value: selectedTab)

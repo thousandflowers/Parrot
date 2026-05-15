@@ -631,6 +631,27 @@ final class LLMAPITypesTests: XCTestCase {
     }
 }
 
+final class HistoryStoreTests: XCTestCase {
+    func testAdd_storesEntry() async {
+        let store = HistoryStore.shared
+        await store.clear()
+        let result = CorrectionResult(original: "hello", corrected: "Hello world!", modelID: "test")
+        await store.add(result: result)
+        let entries = await store.all()
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.original, "hello")
+    }
+
+    func testAdd_noChanges_doesNotStore() async {
+        let store = HistoryStore.shared
+        await store.clear()
+        let result = CorrectionResult(original: "hello", corrected: "hello", modelID: "test")
+        await store.add(result: result)
+        let entries = await store.all()
+        XCTAssertEqual(entries.count, 0)
+    }
+}
+
 final class DiffHighlightTests: XCTestCase {
     func testDiffHighlight_detectsInsertedWord() {
         let original = "Il testo è corretto"
