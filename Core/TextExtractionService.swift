@@ -29,6 +29,7 @@ actor TextExtractionService: Sendable {
                 text = try await AccessibilityBridge.shared.fetchSelectedText()
             } catch CorrectionError.noTextSelected {
                 let lastPID = await AccessibilityBridge.shared.lastKnownFrontAppPID()
+                guard lastPID != 0 else { throw CorrectionError.noTextSelected }
                 let (fallbackText, range) = try await AccessibilityBridge.shared.fetchTextOrLineAtCursor(fromPID: lastPID)
                 text = fallbackText
                 replacementRange = range
