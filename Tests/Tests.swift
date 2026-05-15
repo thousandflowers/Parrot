@@ -597,3 +597,29 @@ final class FeedbackLoggerTests: XCTestCase {
         FeedbackLogger.log(original: longText, corrected: "short", reason: "test", modelID: "test")
     }
 }
+
+final class LLMAPITypesTests: XCTestCase {
+    func testChatRequestEncodesCorrectly() throws {
+        let req = ChatRequest(
+            model: "gpt-4o-mini",
+            messages: [ChatMessage(role: "user", content: "test")],
+            temperature: 0.1,
+            max_tokens: 1024,
+            stream: false
+        )
+        let data = try JSONEncoder().encode(req)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(json["model"] as? String, "gpt-4o-mini")
+        XCTAssertEqual(json["temperature"] as? Double, 0.1)
+        let messages = json["messages"] as! [[String: Any]]
+        XCTAssertEqual(messages.first?["role"] as? String, "user")
+    }
+
+    func testChatResponseDecodesCorrectly() throws {
+        let json = """
+        {"choices":[{"message":{"content":"corrected text"}}]}
+        """.data(using: .utf8)!
+        let response = try JSONDecoder().decode(ChatResponse.self, from: json)
+        XCTAssertEqual(response.choices.first?.message.content, "corrected text")
+    }
+}

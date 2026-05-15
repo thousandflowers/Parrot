@@ -3,27 +3,20 @@ import OSLog
 
 extension LLMService {
     func parseResponse(data: Data) throws -> String {
-        let json: [String: Any]
         do {
-            guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            let response = try JSONDecoder().decode(ChatResponse.self, from: data)
+            guard let content = response.choices.first?.message.content, !content.isEmpty else {
                 throw CorrectionError.outputParsingFailed(raw: String(data: data, encoding: .utf8) ?? "nil")
             }
-            json = parsed
+            return content.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch is CorrectionError {
             throw CorrectionError.outputParsingFailed(raw: String(data: data, encoding: .utf8) ?? "nil")
         } catch {
             throw CorrectionError.outputParsingFailed(raw: String(data: data, encoding: .utf8) ?? error.localizedDescription)
         }
-        guard let choices = json["choices"] as? [[String: Any]],
-              let first = choices.first,
-              let message = first["message"] as? [String: Any],
-              let content = message["content"] as? String else {
-            throw CorrectionError.outputParsingFailed(raw: String(data: data, encoding: .utf8) ?? "nil")
-        }
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    func buildLLMRequest(url: URL, apiKey: String?, body: [String: Any]) throws -> URLRequest {
+    func buildLLMRequest(url: URL, apiKey: String?, body: ChatRequest) throws -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -31,12 +24,12 @@ extension LLMService {
         if let key = apiKey {
             request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         }
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        request.httpBody = try JSONEncoder().encode(body)
         return request
     }
 
     func performOpenAIRequest(
-        body: [String: Any],
+        body: ChatRequest,
         url: URL,
         apiKey: String?,
         extraHeaders: [String: String] = [:]
@@ -144,19 +137,19 @@ extension LLMService {
 
     func chatBody(model: String, prompt: String,
                   systemPrompt: String? = "You are a helpful writing assistant. Follow the user instructions exactly.",
-                  temperature: Double, maxTokens: Int = 1024, stream: Bool = false) -> [String: Any] {
-        var messages: [[String: String]]
+                  temperature: Double, maxTokens: Int = 1024, stream: Bool = false) -> ChatRequest {
+        var messages: [ChatMessage]
         if let sys = systemPrompt {
-            messages = [["role": "system", "content": sys], ["role": "user", "content": prompt]]
+            messages = [ChatMessage(role: "system", content: sys), ChatMessage(role: "user", content: prompt)]
         } else {
-            messages = [["role": "user", "content": prompt]]
+            messages = [ChatMessage(role: "user", content: prompt)]
         }
-        return ["model": model, "messages": messages, "temperature": temperature,
-                "max_tokens": maxTokens, "stream": stream]
+        return ChatRequest(model: model, messages: messages, temperature: temperature,
+                           max_tokens: maxTokens, stream: stream)
     }
 
     func performOpenAIStreamRequest(
-        body: [String: Any],
+        body: ChatRequest,
         url: URL,
         apiKey: String?,
         extraHeaders: [String: String] = [:]
@@ -166,8 +159,9 @@ extension LLMService {
                 let session = URLSession(configuration: .default)
                 defer { session.invalidateAndCancel() }
                 do {
-                    var streamBody = body
-                    streamBody["stream"] = true
+                    let streamBody = ChatRequest(model: body.model, messages: body.messages,
+                                                temperature: body.temperature, max_tokens: body.max_tokens,
+                                                stream: true)
                     var request = try buildLLMRequest(url: url, apiKey: apiKey, body: streamBody)
                     for (key, value) in extraHeaders {
                         request.setValue(value, forHTTPHeaderField: key)
