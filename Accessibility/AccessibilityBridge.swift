@@ -244,45 +244,59 @@ actor AccessibilityBridge {
 
     private func injectViaClipboard(correctedText: String) async throws {
         let pasteboard = NSPasteboard.general
-        let originalItems = pasteboard.pasteboardItems ?? []
-        
-        let pending = PendingClipboardRestore(
-            items: originalItems,
-            originalChangeCount: pasteboard.changeCount
-        )
-        
-        // Se c'era già un ripristino in sospeso, forzalo ora
+
+        // Deep-copy original items before we touch the clipboard
+        let originalItems: [NSPasteboardItem] = pasteboard.pasteboardItems?.compactMap { item in
+            let copy = NSPasteboardItem()
+            for type in item.types {
+                if let data = item.data(forType: type) { copy.setData(data, forType: type) }
+            }
+            return copy
+        } ?? []
+
+        // If a restore was pending from a previous injection, do it now
         if let existing = self.pendingClipboardRestore {
             restoreClipboard(existing)
+            self.pendingClipboardRestore = nil
         }
-        
+
         pasteboard.clearContents()
         pasteboard.setString(correctedText, forType: .string)
-        let newContentChangeCount = pasteboard.changeCount
-        
+        let sentinelCount = pasteboard.changeCount  // changeCount AFTER we wrote
+
+        // Synthesize Cmd+V
         let source = CGEventSource(stateID: .hidSystemState)
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: false) else {
-            restoreClipboard(pending)
+            if !originalItems.isEmpty {
+                restoreClipboard(PendingClipboardRestore(items: originalItems, originalChangeCount: sentinelCount))
+            }
             return
         }
-        keyDown.flags = CGEventFlags.maskCommand
-        keyUp.flags = CGEventFlags.maskCommand
-        keyDown.post(tap: CGEventTapLocation.cghidEventTap)
-        keyUp.post(tap: CGEventTapLocation.cghidEventTap)
-        
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+
         guard !originalItems.isEmpty else { return }
-        
+
+        let pending = PendingClipboardRestore(items: originalItems, originalChangeCount: sentinelCount)
         self.pendingClipboardRestore = pending
-        
-        // Aspettiamo che l'app target incolli. Poll di 500ms totali.
-        for _ in 0..<10 {
+
+        // Poll up to 1.5s for changeCount to change FROM sentinel (paste happened)
+        for _ in 0..<30 {
             try? await Task.sleep(for: .milliseconds(50))
-            if self.pendingClipboardRestore?.originalChangeCount != pending.originalChangeCount {
-                return // Un altro task ha preso il controllo
+            if pasteboard.changeCount != sentinelCount {
+                // Something changed clipboard (paste or user copy) — restore original
+                if self.pendingClipboardRestore?.originalChangeCount == pending.originalChangeCount {
+                    restoreClipboard(pending)
+                    self.pendingClipboardRestore = nil
+                }
+                return
             }
         }
-        
+
+        // Timeout — restore anyway to not leave clipboard dirty
         if self.pendingClipboardRestore?.originalChangeCount == pending.originalChangeCount {
             restoreClipboard(pending)
             self.pendingClipboardRestore = nil
