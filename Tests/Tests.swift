@@ -9,7 +9,7 @@ final class PromptEngineTests: XCTestCase {
         XCTAssertTrue(prompt.contains("<TEXT>"))
         XCTAssertTrue(prompt.contains("</TEXT>"))
         XCTAssertTrue(prompt.contains("Use formal, professional tone."))
-        XCTAssertTrue(prompt.contains("Output only the corrected text; no notes. Do not include <TEXT>/<CUSTOM> tags."))
+        XCTAssertTrue(prompt.contains("Output only the corrected text; no notes or explanations. Do not include <TEXT>/<CUSTOM> tags."))
     }
 
     func testLanguageFamily_latin() {
@@ -167,6 +167,21 @@ final class ResultCacheTests: XCTestCase {
         await cache.set(result, for: "a", modelID: "x")
         let retrieved = await cache.get(for: "a", modelID: "y")
         XCTAssertNil(retrieved)
+    }
+
+    func testSet_updatingExistingKey_doesNotDoublecountMemory() async {
+        let cache = ResultCache.shared
+        await cache.invalidateAll()
+
+        let result1 = CorrectionResult(original: "hello world", corrected: "hello world!", modelID: "m1")
+        let result2 = CorrectionResult(original: "hello world", corrected: "hi world!", modelID: "m1")
+
+        await cache.set(result1, for: "hello world", modelID: "m1")
+        await cache.set(result2, for: "hello world", modelID: "m1")
+        let bytesAfter = await cache.currentMemoryBytesForTesting
+
+        let expectedBytes = "hello world".utf8.count + "hi world!".utf8.count
+        XCTAssertEqual(bytesAfter, expectedBytes)
     }
 }
 

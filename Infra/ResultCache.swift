@@ -8,6 +8,7 @@ actor ResultCache: Sendable {
     private let ttl = Constants.cacheTTL
     private let maxMemoryBytes = Constants.cacheMaxMemoryBytes
     private var currentMemoryBytes = 0
+    var currentMemoryBytesForTesting: Int { currentMemoryBytes }
 
     struct CacheEntry {
         let result: CorrectionResult
@@ -27,6 +28,10 @@ actor ResultCache: Sendable {
 
     func set(_ result: CorrectionResult, for text: String, modelID: String) {
         let byteSize = (result.originalText.utf8.count + result.correctedText.utf8.count)
+
+        if let existing = cache[text] {
+            currentMemoryBytes = max(0, currentMemoryBytes - existing.byteSize)
+        }
 
         if cache.count >= maxEntries || (currentMemoryBytes + byteSize) > maxMemoryBytes {
             evictUntilUnderLimit(neededBytes: byteSize)
