@@ -8,6 +8,8 @@ enum SuggestionState: Sendable {
     case noErrors
     case error(CorrectionError)
     case textTooLong(length: Int, maxLength: Int)
+    case applied(CorrectionResult)
+    case modelMissing
 }
 
 @MainActor
@@ -19,10 +21,41 @@ final class SuggestionPanelController {
     private var currentResult: CorrectionResult?
     private var currentState: SuggestionState?
     private var explanationTask: Task<Void, Never>?
+    private var undoTask: Task<Void, Never>?
 
     private init() {}
 
-    // ... (animateIn, animateOut, clampToScreen stay same)
+    private var reduceMotion: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
+    private func animateIn(_ panel: NSPanel) {
+        guard !reduceMotion else { return }
+        panel.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().alphaValue = 1.0
+        }
+    }
+
+    private func animateOut(_ panel: NSPanel, completion: @escaping () -> Void) {
+        guard !reduceMotion else { completion(); return }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            ctx.completionHandler = completion
+            panel.animator().alphaValue = 0
+        }
+    }
+
+    private func clampToScreen(_ origin: NSPoint, size: NSSize) -> NSPoint {
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return origin }
+        let frame = screen.visibleFrame
+        let clampedX = max(frame.minX, min(frame.maxX - size.width, origin.x))
+        let clampedY = max(frame.minY, min(frame.maxY - size.height, origin.y))
+        return NSPoint(x: clampedX, y: clampedY)
+    }
 
     private func showOrUpdate(result: CorrectionResult?, state: SuggestionState) {
         self.currentResult = result
@@ -33,7 +66,8 @@ final class SuggestionPanelController {
             state: state,
             onApply: { [weak self] in self?.applyCorrection() },
             onExplain: { [weak self] in self?.requestExplanation() },
-            onDismiss: { [weak self] in self?.close() }
+            onDismiss: { [weak self] in self?.close() },
+            onUndo: { [weak self] in self?.undoCorrection() }
         )
 
         if let hv = hostingView {
@@ -65,7 +99,11 @@ final class SuggestionPanelController {
     }
 
     func showError(_ error: CorrectionError) {
-        showOrUpdate(result: nil, state: .error(error))
+        if case .modelNotLoaded = error {
+            showOrUpdate(result: nil, state: .modelMissing)
+        } else {
+            showOrUpdate(result: nil, state: .error(error))
+        }
     }
 
     private func createPanel(with view: SuggestionView) -> NSPanel {
@@ -92,14 +130,34 @@ final class SuggestionPanelController {
 
     private func applyCorrection() {
         guard let result = currentResult else { return }
-
         Task { [weak self] in
             guard let self else { return }
             do {
                 try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText)
-                self.close()
+                self.showOrUpdate(result: result, state: .applied(result))
+                self.undoTask = Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(5))
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run { self?.close() }
+                }
             } catch {
                 self.showError(error as? CorrectionError ?? .textExtractionFailed(appName: "unknown"))
+            }
+        }
+    }
+
+    private func undoCorrection() {
+        undoTask?.cancel()
+        undoTask = nil
+        guard let result = currentResult else { close(); return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await AccessibilityBridge.shared.replaceSelectedText(with: result.originalText)
+                let state: SuggestionState = result.hasChanges ? .suggestion(result) : .noErrors
+                self.showOrUpdate(result: result, state: state)
+            } catch {
+                self.close()
             }
         }
     }
@@ -147,6 +205,8 @@ final class SuggestionPanelController {
     }
 
     func close() {
+        undoTask?.cancel()
+        undoTask = nil
         explanationTask?.cancel()
         guard let panel = panel else { return }
         self.panel = nil

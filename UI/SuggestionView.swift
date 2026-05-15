@@ -6,6 +6,7 @@ struct SuggestionView: View {
     let onApply: () -> Void
     let onExplain: () -> Void
     let onDismiss: () -> Void
+    let onUndo: () -> Void
     @State private var noErrorsShown = false
 
     private static let loadingMessages = [
@@ -122,6 +123,12 @@ struct SuggestionView: View {
         case .textTooLong:
             Image(systemName: "text.alignleft")
                 .foregroundColor(.statusWarning)
+        case .applied:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(.statusOk)
+        case .modelMissing:
+            Image(systemName: "cpu.fill")
+                .foregroundColor(.statusWarning)
         }
     }
 
@@ -133,6 +140,8 @@ struct SuggestionView: View {
         case .noErrors:        return String(localized: "panel.noErrors")
         case .error:           return String(localized: "panel.error")
         case .textTooLong:     return String(localized: "panel.error")
+        case .applied:         return "Testo applicato"
+        case .modelMissing:    return "Modello non trovato"
         }
     }
 
@@ -247,6 +256,27 @@ struct SuggestionView: View {
                 .foregroundColor(.textSecondary)
             }
             .frame(height: 80)
+        case .applied:
+            VStack(spacing: 12) {
+                Image(systemName: "checkmark.circle")
+                    .font(.largeTitle)
+                    .foregroundColor(.statusOk)
+                Text("Il testo è stato sostituito correttamente.")
+                    .foregroundColor(.textSecondary)
+                    .font(.subheadline)
+            }
+            .frame(height: 80)
+        case .modelMissing:
+            VStack(spacing: 12) {
+                Text("Nessun modello AI è installato.")
+                    .foregroundColor(.textSecondary)
+                Button("Vai ai Modelli") {
+                    onDismiss()
+                    NSApp.sendAction(Selector(("showSettings:")), to: nil, from: nil)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .frame(height: 80)
         }
     }
 
@@ -275,6 +305,16 @@ struct SuggestionView: View {
             case .loading:
                 Button("Annulla controllo") { onDismiss() }
                     .accessibilityHint("Annulla l'elaborazione in corso")
+                Spacer()
+
+            case .applied:
+                Spacer()
+                Button("Annulla") { onUndo() }
+                    .accessibilityHint("Ripristina il testo originale")
+                Spacer()
+
+            case .modelMissing:
+                Button("Chiudi") { onDismiss() }
                 Spacer()
 
             default:
