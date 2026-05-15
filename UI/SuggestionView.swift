@@ -307,12 +307,16 @@ struct SuggestionView: View {
     private var footerView: some View {
         HStack {
             switch state {
-            case .suggestion, .fluencySuggestion:
+            case .suggestion(let r, _, _), .fluencySuggestion(let r, _, _):
                 Button(String(localized: "panel.ignore")) { onDismiss() }
                     .accessibilityHint("Scarta il suggerimento senza applicarlo")
                 Spacer()
                 Button(String(localized: "panel.explain")) { onExplain() }
                     .accessibilityHint("Richiedi una spiegazione delle correzioni")
+                Button(isSpeaking ? "Stop" : "Ascolta") {
+                    speakCorrected(r.correctedText)
+                }
+                .accessibilityLabel(isSpeaking ? "Ferma lettura" : "Leggi il testo corretto")
                 Button(String(localized: "panel.apply")) {
                     onApply()
                 }
