@@ -68,7 +68,8 @@ final class SuggestionPanelController {
             onExplain: { [weak self] in self?.requestExplanation() },
             onDismiss: { [weak self] in self?.close() },
             onUndo: { [weak self] in self?.undoCorrection() },
-            onTranslate: { [weak self] lang in self?.translate(to: lang) }
+            onTranslate: { [weak self] lang in self?.translate(to: lang) },
+            onCustomAction: { [weak self] promptText in self?.applyCustomAction(promptText: promptText) }
         )
 
         if let hv = hostingView {
@@ -225,6 +226,33 @@ final class SuggestionPanelController {
                     promptType: "translation"
                 )
                 self.showOrUpdate(result: finalResult, state: .suggestion(finalResult))
+            } catch {
+                self.showError(error as? CorrectionError ?? .outputParsingFailed(raw: error.localizedDescription))
+            }
+        }
+    }
+
+    private func applyCustomAction(promptText: String) {
+        guard let result = currentResult else { return }
+        showOrUpdate(result: nil, state: .loading)
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let customPrompt = CustomPrompt(id: UUID(), name: "Azione rapida", template: promptText, checkType: .custom)
+                let newResult = try await RequestQueue.shared.enqueue(
+                    text: result.originalText,
+                    type: .grammar,
+                    priority: .manual,
+                    overrideServiceType: nil,
+                    overrideCustomPrompt: customPrompt
+                )
+                let finalResult = CorrectionResult(
+                    original: result.originalText,
+                    corrected: newResult.correctedText,
+                    modelID: newResult.modelID,
+                    customInstruction: promptText
+                )
+                self.showOrUpdate(result: finalResult, state: finalResult.hasChanges ? .suggestion(finalResult) : .noErrors)
             } catch {
                 self.showError(error as? CorrectionError ?? .outputParsingFailed(raw: error.localizedDescription))
             }

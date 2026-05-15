@@ -9,6 +9,7 @@ struct SuggestionView: View {
     let onDismiss: () -> Void
     let onUndo: () -> Void
     let onTranslate: (String) -> Void
+    let onCustomAction: (String) -> Void
     @State private var noErrorsShown = false
     @State private var synthesizer = AVSpeechSynthesizer()
     @State private var isSpeaking = false
@@ -327,6 +328,14 @@ struct SuggestionView: View {
                 }
                 .menuStyle(.button)
                 .accessibilityLabel("Traduci il testo corretto")
+                Menu("Azioni") {
+                    Button("Rendi formale") { onCustomAction("Rendi il testo più formale e professionale.") }
+                    Button("Accorcia") { onCustomAction("Accorcia il testo mantenendo il senso principale.") }
+                    Button("Semplifica") { onCustomAction("Semplifica il testo per renderlo più chiaro e diretto.") }
+                    Button("Rendi informale") { onCustomAction("Rendi il testo più informale e conversazionale.") }
+                }
+                .menuStyle(.button)
+                .accessibilityLabel("Azioni rapide sul testo")
                 Button(String(localized: "panel.apply")) {
                     onApply()
                 }
