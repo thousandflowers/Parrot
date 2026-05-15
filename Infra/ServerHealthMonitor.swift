@@ -53,13 +53,18 @@ actor ServerHealthMonitor: Sendable {
 
     private func restartServer() async {
         await ServerManager.shared.stop()
-        if let modelPath = ModelManager.shared.currentModelPath {
+        guard let modelPath = ModelManager.shared.currentModelPath else { return }
+        Task {
             do {
                 try await ServerManager.shared.start(modelPath: modelPath)
                 startMonitoring()
+                Logger.server.info("ServerHealthMonitor: server restarted successfully")
             } catch {
                 Logger.server.error("ServerHealthMonitor: restart failed — \(error.localizedDescription, privacy: .public)")
             }
+        }
+        await MainActor.run {
+            SuggestionPanelController.shared.showError(.serverTimeout)
         }
     }
 }
