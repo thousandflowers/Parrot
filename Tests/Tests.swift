@@ -514,6 +514,40 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertEqual(rec.sizeLabel, "~2 GB")
         XCTAssertTrue(rec.isOnboardingCandidate)
     }
+
+    func testOnboardingCandidates_hasThreeModels() {
+        XCTAssertEqual(ModelCatalog.onboardingCandidates.count, 3)
+    }
+
+    func testRecommended_16GBRAMEnglish_returnsGemmaE4B() {
+        UserDefaults.standard.removeObject(forKey: "lightweightMode")
+        let rec = ModelCatalog.recommended(ramGB: 16, language: "en")
+        XCTAssertEqual(rec.id, "gemma-4-E4B-it-q4_k_m")
+    }
+
+    func testRecommended_8GBRAMEnglish_returnsGemmaE2B() {
+        UserDefaults.standard.removeObject(forKey: "lightweightMode")
+        let rec = ModelCatalog.recommended(ramGB: 8, language: "en")
+        XCTAssertEqual(rec.id, "gemma-4-E2B-it-q4_k_m")
+    }
+
+    func testRecommended_chineseLanguage_returnsQwen() {
+        UserDefaults.standard.removeObject(forKey: "lightweightMode")
+        let rec = ModelCatalog.recommended(ramGB: 16, language: "zh")
+        XCTAssertEqual(rec.id, "qwen2.5-1.5b-instruct-q4_k_m")
+    }
+
+    func testAllModels_haveNonEmptySizeLabel() {
+        for model in ModelCatalog.all {
+            XCTAssertFalse(model.sizeLabel.isEmpty, "\(model.id) missing sizeLabel")
+        }
+    }
+
+    func testAllModels_haveValidURLs() {
+        for model in ModelCatalog.all {
+            XCTAssertNotNil(model.url.host, "\(model.id) has invalid URL")
+        }
+    }
 }
 
 final class RuleBasedEngineTests: XCTestCase {
