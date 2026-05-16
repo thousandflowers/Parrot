@@ -10,6 +10,7 @@ struct OnboardingView: View {
     @State private var downloadComplete = false
     @State private var downloadError: String?
     @State private var selectedModel: ModelRecommendation?
+    @State private var availableModels: [ModelRecommendation] = []
     @State private var llamaServerReady = false
 
     private let steps = ["Benvenuto", "Accessibilità", "Modello AI", "Pronto"]
@@ -37,6 +38,7 @@ struct OnboardingView: View {
         .task {
             accessibilityGranted = PreferencesStore.probeAccessibility()
             selectedModel = await ModelManager.shared.recommendedDefaultModel()
+            availableModels = ModelCatalog.onboardingCandidates
             llamaServerReady = ModelManager.shared.resolvedLlamaServerURL() != nil
         }
     }
@@ -131,6 +133,38 @@ struct OnboardingView: View {
         .padding(.horizontal, 32)
     }
 
+    // MARK: - Model Picker Button
+
+    private var modelPickerButton: some View {
+        Menu {
+            ForEach(availableModels, id: \.id) { model in
+                Button {
+                    selectedModel = model
+                    downloadComplete = false
+                    downloadError = nil
+                } label: {
+                    Text("\(model.name)  \(model.sizeLabel)")
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(selectedModel?.name ?? "Seleziona modello")
+                    .font(.body.weight(.medium))
+                Image(systemName: "chevron.down")
+                    .imageScale(.small)
+                    .fontWeight(.medium)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(Color.secondary.opacity(0.4), lineWidth: 1)
+            )
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Step 2: Model Download
 
     private var modelDownloadStep: some View {
@@ -142,12 +176,17 @@ struct OnboardingView: View {
             Text("Download Modello AI")
                 .font(.title2.weight(.semibold))
 
+            modelPickerButton
+
             if let model = selectedModel {
-                Text("\(model.name)")
-                    .font(.body.weight(.medium))
                 Text(model.reason)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 8)
+                Text("\(model.sizeLabel) · min. \(model.ramRequired) GB RAM")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
 
             if isDownloading {
