@@ -499,6 +499,23 @@ final class CorrectionResultMetaTests: XCTestCase {
     }
 }
 
+final class ModelCatalogTests: XCTestCase {
+    func testModelRecommendation_hasSizeLabel() {
+        let rec = ModelRecommendation(
+            id: "test-model",
+            name: "Test Model",
+            reason: "Test reason",
+            sizeLabel: "~2 GB",
+            ramRequired: 4,
+            url: URL(string: "https://example.com/model.gguf")!,
+            expectedSHA256: nil,
+            isOnboardingCandidate: true
+        )
+        XCTAssertEqual(rec.sizeLabel, "~2 GB")
+        XCTAssertTrue(rec.isOnboardingCandidate)
+    }
+}
+
 final class RuleBasedEngineTests: XCTestCase {
     func testQualE_fixes() async {
         let engine = RuleBasedEngine.shared

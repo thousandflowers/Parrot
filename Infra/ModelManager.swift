@@ -6,10 +6,34 @@ struct ModelRecommendation: Sendable {
     let id: String
     let name: String
     let reason: String
+    let sizeLabel: String
     let ramRequired: Int
     let url: URL
     let expectedSHA256: String?
     var warning: String?
+    let isOnboardingCandidate: Bool
+
+    init(
+        id: String,
+        name: String,
+        reason: String,
+        sizeLabel: String = "",
+        ramRequired: Int,
+        url: URL,
+        expectedSHA256: String?,
+        warning: String? = nil,
+        isOnboardingCandidate: Bool = true
+    ) {
+        self.id = id
+        self.name = name
+        self.reason = reason
+        self.sizeLabel = sizeLabel
+        self.ramRequired = ramRequired
+        self.url = url
+        self.expectedSHA256 = expectedSHA256
+        self.warning = warning
+        self.isOnboardingCandidate = isOnboardingCandidate
+    }
 }
 
 struct ModelInfo: Codable {
