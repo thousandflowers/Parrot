@@ -115,6 +115,52 @@ return "auto"
 
 ---
 
+---
+
+## Part 3: Language-Universal Rule Engine
+
+### Goal
+Le funzionalità di correzione (grammatica, fluidità) devono funzionare per qualsiasi lingua. Le regole semplici e universali si applicano a tutti i testi indipendentemente dalla lingua; le regole specifiche (italiano, inglese) si applicano solo quando la lingua è quella.
+
+### Stato attuale
+`GrammarRule` ha `languages: Set<String>`. La doppio-spazio rule è taggata `["it", "en", "es", "fr", "de", "pt"]` — non si applica a cinese, danese, greco, croato ecc.
+
+### Modifica: flag `isUniversal`
+
+`GrammarRule` guadagna un campo:
+```swift
+let isUniversal: Bool  // default: false
+```
+
+`RuleBasedEngine.check()` cambia il filtro:
+```swift
+// prima
+for (rule, regex) in compiledRules where rule.languages.contains(language)
+// dopo
+for (rule, regex) in compiledRules where rule.isUniversal || rule.languages.contains(language)
+```
+
+### Regole da marcare `isUniversal: true`
+- `double-space` (doppio spazio → spazio singolo)
+- `trailing-space` (spazio finale di riga)
+
+### Regole che restano language-specific
+- Tutte le regole italiane (`it-qual-e`, `it-un-po`, ecc.) — `languages: ["it"]`, `isUniversal: false`
+- Regole inglesi (`en-their-theyre`, ecc.) — `languages: ["en"]`, `isUniversal: false`
+
+### Pipeline completa per qualsiasi lingua
+```
+testo selezionato
+  → LanguageDetector.detect() [se "auto"]
+  → RuleBasedEngine: universal rules (doppio spazio ecc.) + language-specific rules se matching
+  → HarperEngine [solo se en-*]
+  → LLM con language parameter → corregge grammatica/fluidità in quella lingua
+```
+
+Il LLM gestisce grammatica e fluidità per qualsiasi lingua. Le regole sono solo un pre-processing leggero.
+
+---
+
 ## Invarianti
 - `PromptEngine.swift` non cambia — riceve sempre una stringa lingua risolta, non sa nulla di "auto"
 - I test esistenti non cambiano — testano con lingue fisse
