@@ -79,62 +79,11 @@ actor ModelManager: Sendable {
     func recommendedDefaultModel() -> ModelRecommendation? {
         let lang = Locale.preferredLanguages.first
             .flatMap { Locale(identifier: $0).language.languageCode?.identifier } ?? "en"
-        let ramGB = getSystemRAM()
-
-        // Lightweight mode: forza modello 1.5B
-        if UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.lightweightMode) {
-            return ModelRecommendation(
-                id: "qwen2.5-1.5b-instruct-q4_k_m",
-                name: "Qwen 2.5 1.5B Instruct",
-                reason: "Lightweight mode: minimo consumo RAM",
-                ramRequired: 2,
-                url: URL(string: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf")!,
-                expectedSHA256: nil
-            )
+        var rec = ModelCatalog.recommended(ramGB: getSystemRAM(), language: lang)
+        if getSystemRAM() < 12 && rec.id == "gemma-4-E2B-it-q4_k_m" {
+            rec.warning = "Questo modello richiede ~3.5 GB RAM. Chiudi altre app per migliori prestazioni."
         }
-
-        func makeRec(id: String, name: String, reason: String, ramRequired: Int, urlString: String) -> ModelRecommendation? {
-            guard let url = URL(string: urlString) else {
-                os_log(.error, "Invalid model URL: %{public}@", urlString)
-                return nil
-            }
-            return ModelRecommendation(
-                id: id, name: name, reason: reason, ramRequired: ramRequired, url: url, expectedSHA256: nil
-            )
-        }
-
-        if ["zh", "zh-Hans", "zh-Hant", "zh-HK"].contains(lang) {
-            return makeRec(
-                id: "qwen2.5-1.5b-instruct-q4_k_m",
-                name: "Qwen 2.5 1.5B Instruct",
-                reason: "Ottimizzato per lingua cinese",
-                ramRequired: 2,
-                urlString: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
-            )
-        } else {
-            if ramGB >= 16 {
-                return makeRec(
-                    id: "gemma-4-E4B-it-q4_k_m",
-                    name: "Gemma 4 E4B IT (8B)",
-                    reason: "Massima qualità per lingue occidentali (Mac 16GB+)",
-                    ramRequired: 6,
-                    urlString: "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf"
-                )
-            } else {
-                guard let rec = makeRec(
-                    id: "gemma-4-E2B-it-q4_k_m",
-                    name: "Gemma 4 E2B IT (5B)",
-                    reason: "Ottimizzato per lingue occidentali",
-                    ramRequired: 4,
-                    urlString: "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf"
-                ) else { return nil }
-                var mutableRec = rec
-                if ramGB < 12 {
-                    mutableRec.warning = "Questo modello richiede ~3.5GB RAM. Chiudi altre app per migliori prestazioni."
-                }
-                return mutableRec
-            }
-        }
+        return rec
     }
 
     private func getSystemRAM() -> Int {
