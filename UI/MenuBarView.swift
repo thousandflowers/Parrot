@@ -116,6 +116,19 @@ struct MenuBarView: View {
                 .accessibilityHint("Cmd+,")
             }
 
+            Group {
+                Button(action: { AppUpdater.shared.checkForUpdates() }) {
+                    HStack {
+                        Image(systemName: "arrow.down.circle")
+                        Text("Cerca aggiornamenti...")
+                    }
+                }
+                .buttonStyle(PressableButtonStyle())
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .accessibilityLabel("Cerca aggiornamenti")
+            }
+
             Divider()
 
             Group {

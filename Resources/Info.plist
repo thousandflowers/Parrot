@@ -28,5 +28,7 @@
     <string>RefineClone needs permission to interact with other applications.</string>
     <key>NSHumanReadableCopyright</key>
     <string>MIT License</string>
+    <key>SUFeedURL</key>
+    <string>https://raw.githubusercontent.com/thousandflowers/refineclone/main/appcast.xml</string>
 </dict>
 </plist>

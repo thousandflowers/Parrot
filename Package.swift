@@ -7,9 +7,15 @@ let package = Package(
     products: [
         .executable(name: "RefineClone", targets: ["RefineClone"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
+    ],
     targets: [
         .executableTarget(
             name: "RefineClone",
+            dependencies: [
+                .product(name: "Sparkle", package: "Sparkle"),
+            ],
             path: ".",
             exclude: [
                 "Resources/Info.plist",
