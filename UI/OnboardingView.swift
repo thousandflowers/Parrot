@@ -12,6 +12,7 @@ struct OnboardingView: View {
     @State private var selectedModel: ModelRecommendation?
     @State private var availableModels: [ModelRecommendation] = []
     @State private var llamaServerReady = false
+    @State private var downloadTask: Task<Void, Never>?
 
     private let steps = ["Benvenuto", "Accessibilità", "Modello AI", "Pronto"]
 
@@ -139,6 +140,10 @@ struct OnboardingView: View {
         Menu {
             ForEach(availableModels, id: \.id) { model in
                 Button {
+                    downloadTask?.cancel()
+                    downloadTask = nil
+                    isDownloading = false
+                    downloadProgress = 0
                     selectedModel = model
                     downloadComplete = false
                     downloadError = nil
@@ -295,7 +300,7 @@ struct OnboardingView: View {
         downloadProgress = 0
         downloadError = nil
 
-        Task {
+        downloadTask = Task {
             do {
                 let stream = await ModelManager.shared.downloadModelWithProgress(from: model.url)
                 for try await progress in stream {
