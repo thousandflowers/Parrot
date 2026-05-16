@@ -42,10 +42,10 @@ enum ModelCatalog {
         let chineseLanguages = ["zh", "zh-Hans", "zh-Hant", "zh-HK"]
         if UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.lightweightMode)
             || chineseLanguages.contains(language) {
-            return all.first { $0.id == "qwen2.5-1.5b-instruct-q4_k_m" }!
+            return all.first { $0.id == "qwen2.5-1.5b-instruct-q4_k_m" } ?? all[0]
         }
         return ramGB >= 16
-            ? all.first { $0.id == "gemma-4-E4B-it-q4_k_m" }!
-            : all.first { $0.id == "gemma-4-E2B-it-q4_k_m" }!
+            ? (all.first { $0.id == "gemma-4-E4B-it-q4_k_m" } ?? all[2])
+            : (all.first { $0.id == "gemma-4-E2B-it-q4_k_m" } ?? all[1])
     }
 }
