@@ -21,6 +21,7 @@ struct GrammarRule: Sendable {
     let replacement: RegexReplacement
     let reason: String
     let languages: Set<String>
+    let isUniversal: Bool
 }
 
 actor RuleBasedEngine {
@@ -43,7 +44,7 @@ actor RuleBasedEngine {
         var fixes: [RuleBasedFix] = []
         var result = text
 
-        for (rule, regex) in compiledRules where rule.languages.contains(language) {
+        for (rule, regex) in compiledRules where rule.isUniversal || rule.languages.contains(language) {
             let range = NSRange(result.startIndex..., in: result)
             let matches = regex.matches(in: result, range: range)
 
@@ -72,11 +73,10 @@ actor RuleBasedEngine {
                 id: "it-qual-e",
                 pattern: "(?i)qual'è",
                 options: [],
-                replacement: { match in
-                    match.hasPrefix("Q") ? "Qual è" : "qual è"
-                },
+                replacement: { match in match.hasPrefix("Q") ? "Qual è" : "qual è" },
                 reason: "«Qual è» si scrive senza apostrofo (troncamento, non elisione)",
-                languages: ["it"]
+                languages: ["it"],
+                isUniversal: false
             ),
             GrammarRule(
                 id: "it-un-po",
@@ -84,7 +84,8 @@ actor RuleBasedEngine {
                 options: [],
                 replacement: { _ in "un po'" },
                 reason: "«Po'» è troncamento di «poco», vuole l'apostrofo non l'accento",
-                languages: ["it"]
+                languages: ["it"],
+                isUniversal: false
             ),
             GrammarRule(
                 id: "it-e-accento",
@@ -92,7 +93,8 @@ actor RuleBasedEngine {
                 options: [],
                 replacement: { _ in "è" },
                 reason: "«È» verbo vuole l'accento, non l'apostrofo",
-                languages: ["it"]
+                languages: ["it"],
+                isUniversal: false
             ),
             GrammarRule(
                 id: "it-ne-accento",
@@ -100,7 +102,8 @@ actor RuleBasedEngine {
                 options: [],
                 replacement: { _ in "né" },
                 reason: "«Né» congiunzione vuole l'accento, non l'apostrofo",
-                languages: ["it"]
+                languages: ["it"],
+                isUniversal: false
             ),
             GrammarRule(
                 id: "it-se-accento",
@@ -108,7 +111,8 @@ actor RuleBasedEngine {
                 options: [],
                 replacement: { _ in "sé" },
                 reason: "«Sé» pronome vuole l'accento, non l'apostrofo",
-                languages: ["it"]
+                languages: ["it"],
+                isUniversal: false
             ),
             GrammarRule(
                 id: "it-da-accento",
@@ -116,7 +120,8 @@ actor RuleBasedEngine {
                 options: [],
                 replacement: { _ in "dà" },
                 reason: "«Dà» voce del verbo dare vuole l'accento",
-                languages: ["it"]
+                languages: ["it"],
+                isUniversal: false
             ),
             GrammarRule(
                 id: "it-li-accento",
@@ -124,7 +129,8 @@ actor RuleBasedEngine {
                 options: [],
                 replacement: { _ in "lì" },
                 reason: "«Lì» avverbio vuole l'accento, non l'apostrofo",
-                languages: ["it"]
+                languages: ["it"],
+                isUniversal: false
             ),
             GrammarRule(
                 id: "it-la-accento",
@@ -132,7 +138,8 @@ actor RuleBasedEngine {
                 options: [],
                 replacement: { _ in "là" },
                 reason: "«Là» avverbio vuole l'accento, non l'apostrofo",
-                languages: ["it"]
+                languages: ["it"],
+                isUniversal: false
             ),
             GrammarRule(
                 id: "it-si-accento",
@@ -140,7 +147,8 @@ actor RuleBasedEngine {
                 options: [],
                 replacement: { _ in "sì" },
                 reason: "«Sì» affermativo vuole l'accento, non l'apostrofo",
-                languages: ["it"]
+                languages: ["it"],
+                isUniversal: false
             ),
             GrammarRule(
                 id: "double-space",
@@ -148,7 +156,8 @@ actor RuleBasedEngine {
                 options: [],
                 replacement: { _ in " " },
                 reason: "Spazio doppio",
-                languages: ["it", "en", "es", "fr", "de", "pt"]
+                languages: [],
+                isUniversal: true
             ),
             GrammarRule(
                 id: "space-before-punctuation",
@@ -161,17 +170,17 @@ actor RuleBasedEngine {
                     return match
                 },
                 reason: "Niente spazio prima della punteggiatura",
-                languages: ["it", "en", "es", "fr", "de", "pt"]
+                languages: [],
+                isUniversal: true
             ),
             GrammarRule(
                 id: "en-their-theyre",
                 pattern: "(?i)\\btheir\\b(?=\\s+(?:going|coming|running|walking|doing|making|trying|looking|working|playing|saying|thinking|getting|giving|taking|leaving|putting|bringing|asking|helping|talking|turning|starting|showing|moving|living|believing|holding|writing|providing|sitting|standing|losing|paying|meeting|including|continuing|setting|learning|leading|understanding|watching|following|creating|speaking|spending|growing|opening|winning|teaching|offering|remembering|considering|appearing|buying|serving|achieving|dying|developing|sending|building|staying|falling|cutting|reaching|killing|remaining|suggesting|raising|passing|selling|requiring|reporting|deciding|pulling))",
                 options: [],
-                replacement: { match in
-                    match.hasPrefix("T") ? "They're" : "they're"
-                },
+                replacement: { match in match.hasPrefix("T") ? "They're" : "they're" },
                 reason: "«They're» = they are; «their» = possessivo",
-                languages: ["en"]
+                languages: ["en"],
+                isUniversal: false
             ),
             GrammarRule(
                 id: "en-your-vs-youre",
@@ -181,7 +190,8 @@ actor RuleBasedEngine {
                     match.hasPrefix("Y") && match.hasPrefix("Your") ? "You're" : "you're"
                 },
                 reason: "«You're» = you are; «your» = possessivo",
-                languages: ["en"]
+                languages: ["en"],
+                isUniversal: false
             ),
         ]
     }

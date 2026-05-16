@@ -592,3 +592,31 @@ final class RuleBasedEngineTests: XCTestCase {
         XCTAssertTrue(result.fixes.count >= 2)
     }
 }
+
+final class RuleBasedEngineUniversalTests: XCTestCase {
+    func testDoubleSpace_appliesForChineseLanguage() async {
+        let result = await RuleBasedEngine.shared.check("Hello  world", language: "zh")
+        XCTAssertEqual(result.text, "Hello world")
+        XCTAssertTrue(result.hasFixes)
+    }
+
+    func testDoubleSpace_appliesForGreekLanguage() async {
+        let result = await RuleBasedEngine.shared.check("Γεια  σου", language: "el")
+        XCTAssertEqual(result.text, "Γεια σου")
+    }
+
+    func testDoubleSpace_appliesForCroatianLanguage() async {
+        let result = await RuleBasedEngine.shared.check("Dobro  jutro", language: "hr")
+        XCTAssertEqual(result.text, "Dobro jutro")
+    }
+
+    func testItalianRule_doesNotApplyForChinese() async {
+        let result = await RuleBasedEngine.shared.check("qual'è", language: "zh")
+        XCTAssertEqual(result.text, "qual'è")
+    }
+
+    func testSpaceBeforePunctuation_appliesForJapanese() async {
+        let result = await RuleBasedEngine.shared.check("Ciao !", language: "ja")
+        XCTAssertEqual(result.text, "Ciao!")
+    }
+}
