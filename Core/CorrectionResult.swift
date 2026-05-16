@@ -12,13 +12,21 @@ struct CorrectionResult: Identifiable, Sendable, Codable {
     let customInstruction: String?
     let promptType: String
     let detectedTone: String?
+    let source: CorrectionSource
 
     @_documentation(visibility: internal)
     var replacementRange: CFRange? = nil
+    var anchorRect: CGRect? = nil
+
+    enum CorrectionSource: String, Codable, Sendable {
+        case ruleBased = "rule_based"
+        case llm = "llm"
+        case hybrid = "hybrid"
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, originalText, correctedText, explanation, confidence
-        case diffOperations, timestamp, modelID, customInstruction, promptType, detectedTone
+        case diffOperations, timestamp, modelID, customInstruction, promptType, detectedTone, source
     }
 
     struct DiffOp: Codable, Sendable {
@@ -41,7 +49,8 @@ struct CorrectionResult: Identifiable, Sendable, Codable {
         customInstruction: String? = nil,
         promptType: String = "",
         replacementRange: CFRange? = nil,
-        detectedTone: String? = nil
+        detectedTone: String? = nil,
+        source: CorrectionSource = .llm
     ) {
         self.id = UUID()
         self.originalText = original
@@ -55,6 +64,7 @@ struct CorrectionResult: Identifiable, Sendable, Codable {
         self.promptType = promptType
         self.replacementRange = replacementRange
         self.detectedTone = detectedTone
+        self.source = source
     }
 
     static func computeDiff(original: String, corrected: String) -> [DiffOp]? {
@@ -70,7 +80,7 @@ struct CorrectionResult: Identifiable, Sendable, Codable {
         var scanner = original.startIndex
         for word in origWords {
             charOffsets.append(original.distance(from: original.startIndex, to: scanner))
-            let wordEnd = original.index(scanner, offsetBy: word.count)
+            let wordEnd = original.index(scanner, offsetBy: word.count, limitedBy: original.endIndex) ?? original.endIndex
             scanner = wordEnd < original.endIndex ? original.index(after: wordEnd) : original.endIndex
         }
 
@@ -96,4 +106,51 @@ struct CorrectionResult: Identifiable, Sendable, Codable {
     }
 
     var hasChanges: Bool { originalText != correctedText }
+
+    func toAnnotations(baseOffset: Int = 0) -> [ErrorAnnotation] {
+        guard hasChanges else { return [] }
+
+        // Tokenize original text, preserving char offsets
+        var origTokens: [(word: String, offset: Int)] = []
+        var idx = originalText.startIndex
+        while idx < originalText.endIndex {
+            while idx < originalText.endIndex && originalText[idx].isWhitespace {
+                idx = originalText.index(after: idx)
+            }
+            guard idx < originalText.endIndex else { break }
+            let wordStart = idx
+            let offset = originalText.distance(from: originalText.startIndex, to: wordStart)
+            while idx < originalText.endIndex && !originalText[idx].isWhitespace {
+                idx = originalText.index(after: idx)
+            }
+            origTokens.append((String(originalText[wordStart..<idx]), offset))
+        }
+
+        let corrWords = correctedText.split { $0.isWhitespace }.map(String.init)
+        let diff = corrWords.difference(from: origTokens.map { $0.word })
+
+        var removes: [(wordIdx: Int, word: String)] = []
+        var inserts: [String] = []
+        for change in diff {
+            switch change {
+            case .remove(let offset, let word, _): removes.append((offset, word))
+            case .insert(_, let word, _):          inserts.append(word)
+            }
+        }
+
+        var annotations: [ErrorAnnotation] = []
+        for (i, remove) in removes.enumerated() {
+            guard remove.wordIdx < origTokens.count else { continue }
+            let token = origTokens[remove.wordIdx]
+            let fix = i < inserts.count ? inserts[i] : ""
+            annotations.append(ErrorAnnotation(
+                id: UUID(),
+                charRange: CFRange(location: baseOffset + token.offset, length: token.word.count),
+                originalSnippet: token.word,
+                suggestedFix: fix,
+                severity: fix.isEmpty ? .warning : .error
+            ))
+        }
+        return annotations
+    }
 }

@@ -11,7 +11,7 @@ enum DetectedTone: String, Sendable, CaseIterable {
 actor ToneDetector {
     static let shared = ToneDetector()
 
-    private let informalContractionsEN: Set<String> = [
+    private static let informalContractionsEN: Set<String> = [
         "don't", "can't", "it's", "we're", "i'm", "you're", "they're",
         "won't", "shouldn't", "couldn't", "wouldn't", "isn't", "aren't",
         "wasn't", "weren't", "hasn't", "haven't", "hadn't", "let's",
@@ -20,20 +20,20 @@ actor ToneDetector {
         "i've", "you've", "we've", "they've", "i'd", "you'd", "he'd", "she'd",
     ]
 
-    private let informalContractionsIT: Set<String> = [
+    private static let informalContractionsIT: Set<String> = [
         "dell'", "nell'", "sull'", "coll'", "all'", "dall'",
         "c'è", "c'era", "c'erano", "l'ho", "l'hai", "l'ha",
         "m'ha", "t'ho", "s'è", "n'è",
     ]
 
-    private let informalWords: Set<String> = [
+    private static let informalWords: Set<String> = [
         "hey", "yeah", "yep", "nope", "cool", "awesome", "gonna",
         "wanna", "gotta", "kinda", "sorta", "dunno", "lol", "omg",
         "btw", "thx", "pls", "ok", "okay", "nah", "wow", "oops",
-        "ciao", "ok", "wow", "eh", "ah", "oh",
+        "ciao", "eh", "ah", "oh",
     ]
 
-    private let academicMarkers: Set<String> = [
+    private static let academicMarkers: Set<String> = [
         "therefore", "furthermore", "consequently", "nonetheless",
         "moreover", "thus", "hence", "accordingly", "nevertheless",
         "whereas", "hereby", "therein", "thereof", "wherein",
@@ -41,13 +41,21 @@ actor ToneDetector {
         "ciononostante", "tuttavia", "perciò", "nonostante",
     ]
 
-    private lazy var passivePatternEN: NSRegularExpression? = {
-        try? NSRegularExpression(pattern: "\\b(?:is|are|was|were|has been|have been|had been|will be|would be|should be|must be|being|been)\\s+\\w+(?:ed|en|t|d)\\b", options: [.caseInsensitive])
+    private static let passivePatternEN: NSRegularExpression? = {
+        try? NSRegularExpression(
+            pattern: "\\b(?:is|are|was|were|has been|have been|had been|will be|would be|should be|must be|being|been)\\s+\\w+(?:ed|en|t|d)\\b",
+            options: [.caseInsensitive]
+        )
     }()
-    private lazy var passivePatternIT: NSRegularExpression? = {
-        try? NSRegularExpression(pattern: "\\b(?:è|sono|era|erano|fu|furono|sarà|saranno|sia|siano|fosse|fossero|viene|vengono|veniva|venivano|è stato|sono stati|era stato|erano stati)\\s+\\w+(?:ato|uto|ito|to|so|tto)\\b", options: [.caseInsensitive])
+
+    private static let passivePatternIT: NSRegularExpression? = {
+        try? NSRegularExpression(
+            pattern: "\\b(?:è|sono|era|erano|fu|furono|sarà|saranno|sia|siano|fosse|fossero|viene|vengono|veniva|venivano|è stato|sono stati|era stato|erano stati)\\s+\\w+(?:ato|uto|ito|to|so|tto)\\b",
+            options: [.caseInsensitive]
+        )
     }()
-    private lazy var camelCasePattern: NSRegularExpression? = {
+
+    private static let camelCasePattern: NSRegularExpression? = {
         try? NSRegularExpression(pattern: "\\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\\b")
     }()
 
@@ -57,12 +65,10 @@ actor ToneDetector {
         let wordCount = max(words.count, 1)
         let isItalian = language.starts(with: "it")
 
-        let contractions: Set<String> = isItalian ? informalContractionsIT : informalContractionsEN
-        let contractionCount = words.filter { w in
-            contractions.contains { w.hasPrefix($0) }
-        }.count
-        let informalWordCount = words.filter { informalWords.contains(String($0)) }.count
-        let academicCount = words.filter { academicMarkers.contains(String($0)) }.count
+        let contractions = isItalian ? Self.informalContractionsIT : Self.informalContractionsEN
+        let contractionCount = words.filter { w in contractions.contains { w.hasPrefix($0) } }.count
+        let informalWordCount = words.filter { Self.informalWords.contains($0) }.count
+        let academicCount = words.filter { Self.academicMarkers.contains($0) }.count
 
         let exclamationCount = text.filter { $0 == "!" }.count
         let allCapsRatio: Double = {
@@ -70,16 +76,19 @@ actor ToneDetector {
             return Double(capsWords.count) / Double(wordCount)
         }()
 
-        let passivePattern = isItalian ? passivePatternIT : passivePatternEN
-        let passiveCount = passivePattern?.numberOfMatches(in: text, range: NSRange(location: 0, length: text.utf16.count)) ?? 0
+        let passivePattern = isItalian ? Self.passivePatternIT : Self.passivePatternEN
+        let passiveCount = passivePattern?.numberOfMatches(
+            in: text, range: NSRange(location: 0, length: text.utf16.count)
+        ) ?? 0
 
-        let techWordCount = camelCasePattern?.numberOfMatches(in: text, range: NSRange(location: 0, length: text.utf16.count)) ?? 0
+        let techWordCount = Self.camelCasePattern?.numberOfMatches(
+            in: text, range: NSRange(location: 0, length: text.utf16.count)
+        ) ?? 0
         let longWordCount = words.filter { $0.count > 12 }.count
 
         let informalScore = Double(contractionCount + informalWordCount) / Double(wordCount) * 100.0
             + Double(exclamationCount) * 5.0
             + allCapsRatio * 50.0
-
         let formalScore = Double(passiveCount) / Double(wordCount) * 100.0
         let academicScore = Double(academicCount) / Double(wordCount) * 100.0
         let technicalScore = Double(techWordCount + longWordCount) / Double(wordCount) * 100.0

@@ -2,13 +2,13 @@ import SwiftUI
 
 struct MenuBarView: View {
     @State private var prefs = PreferencesStore.shared
-    @State private var isRealtimeEnabled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Group {
                 HStack {
                     Image(systemName: "checkmark.shield")
+                        .accessibilityHidden(true)
                     Text("RefineClone")
                         .font(.headline)
                 }
@@ -23,24 +23,34 @@ struct MenuBarView: View {
                 if prefs.isAccessibilityEnabled {
                     HStack {
                         Image(systemName: "checkmark.circle")
-                            .foregroundColor(.green)
+                            .foregroundColor(.refineSuccess)
                             .frame(width: 16)
-                        Text("Accessibilita: OK")
+                            .accessibilityHidden(true)
+                        Text("Accessibilità: OK")
                             .font(.caption)
                     }
                 } else {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle")
-                            .foregroundColor(.orange)
-                            .frame(width: 16)
-                        Text("Accessibilita: Richiesta")
-                            .font(.caption)
+                    Button {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle")
+                                .foregroundColor(.refineWarning)
+                                .frame(width: 16)
+                                .accessibilityHidden(true)
+                            Text("Accessibilità: Riabilita in Impostazioni →")
+                                .font(.caption)
+                        }
                     }
+                    .buttonStyle(.plain)
                 }
 
                 HStack {
                     Image(systemName: "cpu")
                         .frame(width: 16)
+                        .accessibilityHidden(true)
                     Text("Motore: \(prefs.serviceType.rawValue)")
                         .font(.caption)
                 }
@@ -50,6 +60,7 @@ struct MenuBarView: View {
                     HStack {
                         Image(systemName: "brain")
                             .frame(width: 16)
+                            .accessibilityHidden(true)
                         Text("Modello: \(model)")
                             .font(.caption)
                             .lineLimit(1)
@@ -62,12 +73,13 @@ struct MenuBarView: View {
             Divider()
 
             Group {
-                Toggle("Controllo in Tempo Reale", isOn: $isRealtimeEnabled)
+                Toggle("Controllo in Tempo Reale", isOn: Bindable(prefs).realtimeEnabled)
                     .padding(.horizontal, 12)
 
                 Button(action: { checkGrammar() }) {
                     HStack {
                         Image(systemName: "text.badge.checkmark")
+                            .accessibilityHidden(true)
                         Text("Controlla Grammatica (Cmd+Shift+E)")
                     }
                 }
@@ -78,6 +90,7 @@ struct MenuBarView: View {
                 Button(action: { checkFluency() }) {
                     HStack {
                         Image(systemName: "text.badge.star")
+                            .accessibilityHidden(true)
                         Text("Controlla Fluidità (Cmd+Shift+T)")
                     }
                 }
@@ -88,7 +101,41 @@ struct MenuBarView: View {
                 Button(action: { openEditor() }) {
                     HStack {
                         Image(systemName: "text.cursor")
+                            .accessibilityHidden(true)
                         Text("Apri Editor (Cmd+Shift+F)")
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+
+                Button(action: { TextCheckCoordinator.shared.checkAndReplace() }) {
+                    HStack {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .accessibilityHidden(true)
+                        Text("Sostituisci (Cmd+Shift+R)")
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+
+                Button(action: { TextCheckCoordinator.shared.checkTranslation() }) {
+                    HStack {
+                        Image(systemName: "translate")
+                            .accessibilityHidden(true)
+                        Text("Traduci (Cmd+Shift+Y)")
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+
+                Button(action: { TextCheckCoordinator.shared.checkCoach() }) {
+                    HStack {
+                        Image(systemName: "graduationcap")
+                            .accessibilityHidden(true)
+                        Text("Writing Coach (Cmd+Shift+C)")
                     }
                 }
                 .buttonStyle(.plain)
@@ -98,12 +145,13 @@ struct MenuBarView: View {
                 SettingsLink {
                     HStack {
                         Image(systemName: "gearshape")
+                            .accessibilityHidden(true)
                         Text("Preferenze...")
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
                 }
                 .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
                 .keyboardShortcut(",", modifiers: .command)
             }
 
@@ -113,6 +161,7 @@ struct MenuBarView: View {
                 Button(action: { NSApp.terminate(nil) }) {
                     HStack {
                         Image(systemName: "power")
+                            .accessibilityHidden(true)
                         Text("Esci")
                     }
                 }
@@ -124,131 +173,6 @@ struct MenuBarView: View {
             .padding(.bottom, 8)
         }
         .frame(width: 250)
-        .onChange(of: isRealtimeEnabled) { _, newValue in
-            prefs.realtimeEnabled = newValue
-        }
-        .onAppear {
-            isRealtimeEnabled = prefs.realtimeEnabled
-        }
-    }
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-                .padding(.bottom, 4)
-            }
-
-            Divider()
-
-            Group {
-                if prefs.isAccessibilityEnabled {
-                    HStack {
-                        Image(systemName: "checkmark.circle")
-                            .foregroundColor(.green)
-                            .frame(width: 16)
-                        Text("Accessibilita: OK")
-                            .font(.caption)
-                    }
-                } else {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle")
-                            .foregroundColor(.orange)
-                            .frame(width: 16)
-                        Text("Accessibilita: Richiesta")
-                            .font(.caption)
-                    }
-                }
-
-                HStack {
-                    Image(systemName: "cpu")
-                        .frame(width: 16)
-                    Text("Motore: \(prefs.serviceType.rawValue)")
-                        .font(.caption)
-                }
-
-                let model = prefs.selectedModelID
-                if !model.isEmpty {
-                    HStack {
-                        Image(systemName: "brain")
-                            .frame(width: 16)
-                        Text("Modello: \(model)")
-                            .font(.caption)
-                            .lineLimit(1)
-                    }
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 2)
-
-            Divider()
-
-            Group {
-                Toggle("Controllo in Tempo Reale", isOn: $isRealtimeEnabled)
-                    .padding(.horizontal, 12)
-
-                Button(action: { checkGrammar() }) {
-                    HStack {
-                        Image(systemName: "text.badge.checkmark")
-                        Text("Controlla Grammatica (Cmd+Shift+E)")
-                    }
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-
-                Button(action: { checkFluency() }) {
-                    HStack {
-                        Image(systemName: "text.badge.star")
-                        Text("Controlla Fluidità (Cmd+Shift+T)")
-                    }
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-
-                Button(action: { openEditor() }) {
-                    HStack {
-                        Image(systemName: "text.cursor")
-                        Text("Apri Editor (Cmd+Shift+F)")
-                    }
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-
-                SettingsLink {
-                    HStack {
-                        Image(systemName: "gearshape")
-                        Text("Preferenze...")
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut(",", modifiers: .command)
-            }
-
-            Divider()
-
-            Group {
-                Button(action: { NSApp.terminate(nil) }) {
-                    HStack {
-                        Image(systemName: "power")
-                        Text("Esci")
-                    }
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-                .keyboardShortcut("q", modifiers: .command)
-            }
-            .padding(.bottom, 8)
-        }
-        .frame(width: 250)
-        .onChange(of: isRealtimeEnabled) { _, newValue in
-            prefs.realtimeEnabled = newValue
-        }
-        .onAppear {
-            isRealtimeEnabled = prefs.realtimeEnabled
-        }
     }
 
     private func checkGrammar() {

@@ -12,7 +12,7 @@ actor ServerHealthMonitor: Sendable {
         monitorTask = Task { [weak self] in
             guard let self = self else { return }
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(Constants.healthInterval))
+                try? await Task.sleep(for: .seconds(30))
                 guard !Task.isCancelled else { break }
                 await self.checkHealth()
             }

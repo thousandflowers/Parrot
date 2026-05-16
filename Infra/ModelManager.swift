@@ -46,6 +46,9 @@ actor ModelManager: Sendable {
               let firstModel = contents.first(where: { $0.hasSuffix(".gguf") }) else {
             return nil
         }
+        // Heal stale selectedModelID so the UI reflects what's actually on disk.
+        let fallbackID = String(firstModel.dropLast(5))
+        UserDefaults.standard.set(fallbackID, forKey: Constants.UserDefaultsKey.selectedModelID)
         return modelsDir.appendingPathComponent(firstModel).path(percentEncoded: false)
     }
 
@@ -53,6 +56,18 @@ actor ModelManager: Sendable {
         let lang = Locale.preferredLanguages.first
             .flatMap { Locale(identifier: $0).language.languageCode?.identifier } ?? "en"
         let ramGB = getSystemRAM()
+
+        // Lightweight mode: forza modello 1.5B
+        if UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.lightweightMode) {
+            return ModelRecommendation(
+                id: "qwen2.5-1.5b-instruct-q4_k_m",
+                name: "Qwen 2.5 1.5B Instruct",
+                reason: "Lightweight mode: minimo consumo RAM",
+                ramRequired: 2,
+                url: URL(string: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf")!,
+                expectedSHA256: nil
+            )
+        }
 
         func makeRec(id: String, name: String, reason: String, ramRequired: Int, urlString: String) -> ModelRecommendation? {
             guard let url = URL(string: urlString) else {
@@ -77,7 +92,7 @@ actor ModelManager: Sendable {
                 return makeRec(
                     id: "gemma-4-E4B-it-q4_k_m",
                     name: "Gemma 4 E4B IT (8B)",
-                    reason: "Massima qualita per lingue occidentali (Mac 16GB+)",
+                    reason: "Massima qualità per lingue occidentali (Mac 16GB+)",
                     ramRequired: 6,
                     urlString: "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf"
                 )
@@ -117,7 +132,7 @@ actor ModelManager: Sendable {
             guard let mirror = mirrorURL(for: url) else {
                 throw CorrectionError.modelDownloadFailed(url: url)
             }
-            print("Trying mirror: hf-mirror.com")
+            os_log(.debug, "ModelManager: retrying with hf-mirror.com")
             do {
                 return try await downloadWithProgress(from: mirror, progressHandler: progressHandler)
             } catch {
@@ -127,33 +142,67 @@ actor ModelManager: Sendable {
     }
 
     private func downloadWithProgress(from url: URL, progressHandler: ((Double) -> Void)?) async throws -> URL {
-        let delegate = ProgressDelegate(progressHandler: progressHandler)
-        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
-        defer { session.invalidateAndCancel() }
-
-        let (localURL, response) = try await session.download(from: url)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw URLError(.badServerResponse)
+        final class Box: @unchecked Sendable {
+            var obs: NSKeyValueObservation?
+            var task: URLSessionDownloadTask?
+            func cancel() { obs?.invalidate(); obs = nil; task?.cancel() }
         }
-
-        let tempDir = FileManager.default.temporaryDirectory
-        let destURL = tempDir.appendingPathComponent(url.lastPathComponent)
-        if FileManager.default.fileExists(atPath: destURL.path(percentEncoded: false)) {
-            try FileManager.default.removeItem(at: destURL)
+        let box = Box()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let task = URLSession.shared.downloadTask(with: url) { tempURL, response, error in
+                    box.obs?.invalidate()
+                    box.obs = nil
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    guard let httpResponse = response as? HTTPURLResponse,
+                          (200...299).contains(httpResponse.statusCode),
+                          let tempURL else {
+                        continuation.resume(throwing: URLError(.badServerResponse))
+                        return
+                    }
+                    let destURL = FileManager.default.temporaryDirectory
+                        .appendingPathComponent(url.lastPathComponent)
+                    if FileManager.default.fileExists(atPath: destURL.path) {
+                        try? FileManager.default.removeItem(at: destURL)
+                    }
+                    do {
+                        try FileManager.default.moveItem(at: tempURL, to: destURL)
+                        continuation.resume(returning: destURL)
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+                box.task = task
+                box.obs = task.progress.observe(\.fractionCompleted, options: .new) { progress, _ in
+                    let total = progress.totalUnitCount
+                    let completed = progress.completedUnitCount
+                    if total > 0 {
+                        progressHandler?(progress.fractionCompleted)
+                    } else if completed > 0 {
+                        progressHandler?(-Double(completed))
+                    }
+                }
+                task.resume()
+            }
+        } onCancel: {
+            box.cancel()
         }
-        try FileManager.default.moveItem(at: localURL, to: destURL)
-        return destURL
     }
 
     func downloadModel(from url: URL, expectedSHA256: String? = nil, progressHandler: ((Double) -> Void)? = nil) async throws -> URL {
         try FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
 
+        let filename = url.lastPathComponent
+        // Clean up any leftover partial files from old download sessions
+        let partialPath = modelsDir.appendingPathComponent(filename + ".partial")
+        try? FileManager.default.removeItem(at: partialPath)
+
         let tempURL = try await downloadFile(from: url, progressHandler: progressHandler)
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
-        let filename = url.lastPathComponent
         let destination = modelsDir.appendingPathComponent(filename)
 
         if FileManager.default.fileExists(atPath: destination.path(percentEncoded: false)) {
@@ -174,10 +223,17 @@ actor ModelManager: Sendable {
             try? FileManager.default.removeItem(at: destination)
             throw CorrectionError.modelCorrupted(expectedSHA: "file-validation-failed")
         }
-        guard fileSize > 10_000_000,
-              GGUFVersionCheck.isCompatible(filePath: destination.path(percentEncoded: false)) else {
+        guard fileSize > 10_000_000 else {
+            // Small file: likely an HTML auth/error page, not a model
+            let isHTML = isHTMLFile(at: destination)
             try? FileManager.default.removeItem(at: destination)
-            throw CorrectionError.modelCorrupted(expectedSHA: "file-validation-failed")
+            throw isHTML
+                ? CorrectionError.modelDownloadFailed(url: url)
+                : CorrectionError.modelCorrupted(expectedSHA: "file-too-small")
+        }
+        guard GGUFVersionCheck.isCompatible(filePath: destination.path(percentEncoded: false)) else {
+            try? FileManager.default.removeItem(at: destination)
+            throw CorrectionError.modelCorrupted(expectedSHA: "not-gguf")
         }
 
         if let expected = expectedSHA256 {
@@ -188,6 +244,14 @@ actor ModelManager: Sendable {
         }
 
         return destination
+    }
+
+    private func isHTMLFile(at url: URL) -> Bool {
+        guard let handle = FileHandle(forReadingAtPath: url.path(percentEncoded: false)),
+              let data = try? handle.read(upToCount: 512) else { return false }
+        defer { try? handle.close() }
+        let prefix = (String(data: data, encoding: .utf8) ?? "").lowercased()
+        return prefix.contains("<!doctype") || prefix.contains("<html")
     }
 
     private func verifySHA256(filePath: String, expectedSHA: String) -> Bool {
@@ -205,6 +269,77 @@ actor ModelManager: Sendable {
     }
 
 
+
+    // MARK: - llama-server binary
+
+    /// Canonical path where the app stores its own llama-server copy.
+    nonisolated var llamaServerDestination: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("RefineClone/llama-server")
+    }
+
+    /// Returns the URL of a usable llama-server binary, checking several locations.
+    nonisolated func resolvedLlamaServerURL() -> URL? {
+        var candidates: [String] = [
+            Bundle.main.bundlePath + "/Contents/MacOS/llama-server",
+            llamaServerDestination.path(percentEncoded: false),
+            "/opt/homebrew/bin/llama-server",
+            "/opt/homebrew/opt/llama.cpp/bin/llama-server",
+            "/usr/local/bin/llama-server",
+        ]
+        if let pathEnv = ProcessInfo.processInfo.environment["PATH"] {
+            for dir in pathEnv.split(separator: ":").map(String.init) {
+                candidates.append(dir + "/llama-server")
+            }
+        }
+        return candidates
+            .first { FileManager.default.fileExists(atPath: $0) }
+            .map { URL(fileURLWithPath: $0) }
+    }
+
+    /// Returns the path to Homebrew's brew binary, or nil if not installed.
+    nonisolated func resolvedBrewPath() -> String? {
+        ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"]
+            .first { FileManager.default.fileExists(atPath: $0) }
+    }
+
+    func downloadLlamaServerWithProgress() -> AsyncThrowingStream<Double, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    guard let brew = resolvedBrewPath() else {
+                        throw CorrectionError.serverNotRunning   // brew not found
+                    }
+
+                    // Run: brew install llama.cpp
+                    // terminationHandler fires on a background queue
+                    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                        continuation.yield(0.1)
+                        let process = Process()
+                        process.executableURL = URL(fileURLWithPath: brew)
+                        process.arguments = ["install", "llama.cpp"]
+                        process.standardOutput = Pipe()
+                        process.standardError = Pipe()
+                        process.terminationHandler = { p in
+                            if p.terminationStatus == 0 {
+                                cont.resume()
+                            } else {
+                                cont.resume(throwing: CorrectionError.serverNotRunning)
+                            }
+                        }
+                        do { try process.run() } catch { cont.resume(throwing: error) }
+                    }
+
+                    continuation.yield(1.0)
+                    continuation.finish()
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
 
     func downloadModelWithProgress(from url: URL, expectedSHA256: String? = nil) -> AsyncThrowingStream<Double, Error> {
         AsyncThrowingStream { continuation in
@@ -231,19 +366,3 @@ actor ModelManager: Sendable {
     }
 }
 
-private final class ProgressDelegate: NSObject, URLSessionDownloadDelegate {
-    let progressHandler: ((Double) -> Void)?
-
-    init(progressHandler: ((Double) -> Void)?) {
-        self.progressHandler = progressHandler
-    }
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        guard totalBytesExpectedToWrite > 0, let handler = progressHandler else { return }
-        handler(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
-    }
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
-
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {}
-}

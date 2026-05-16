@@ -38,13 +38,12 @@ actor AppDetector {
 
         guard result == .success,
               let app = frontAppRef,
-              CFGetTypeID(app) == AXUIElementGetTypeID() else {
+              let appElement = AccessibilityBridge.asElementPublic(app) else {
             let fallback = await MainActor.run { NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
             cachedBundleID = fallback
             cachedBundleIDTimestamp = Date()
             return fallback
         }
-        let appElement = app as! AXUIElement
 
         var bundleIDRef: CFTypeRef?
         let bundleResult = AXUIElementCopyAttributeValue(
@@ -65,8 +64,7 @@ actor AppDetector {
     }
 
     func frontAppName(from ref: CFTypeRef?) -> String {
-        guard let element = ref, CFGetTypeID(element) == AXUIElementGetTypeID() else { return "unknown" }
-        let axElement = element as! AXUIElement
+        guard let element = ref, let axElement = AccessibilityBridge.asElementPublic(element) else { return "unknown" }
         var name: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(
             axElement,

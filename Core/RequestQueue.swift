@@ -74,12 +74,11 @@ actor RequestQueue {
     private func processQueue() async {
         guard !isProcessing, let request = queue.first else { return }
         isProcessing = true
+        defer { isProcessing = false; Task { await processQueue() } }
 
         if Date() > request.deadline {
             queue.removeFirst()
-            isProcessing = false
             request.box.resume(throwing: CorrectionError.serverTimeout)
-            Task { await processQueue() }
             return
         }
 
@@ -98,9 +97,7 @@ actor RequestQueue {
             let modelID = resolveModelID(for: serviceType)
 
             if let cached = await ResultCache.shared.get(for: request.text, modelID: modelID) {
-                isProcessing = false
                 request.box.resume(returning: cached)
-                Task { await processQueue() }
                 return
             }
 
@@ -113,19 +110,11 @@ actor RequestQueue {
 
             let result = try await service.correct(text: request.text, promptType: promptType)
             await ResultCache.shared.set(result, for: request.text, modelID: modelID)
-            isProcessing = false
             request.box.resume(returning: result)
         } catch {
-            isProcessing = false
-            guard Date() <= request.deadline else {
-                request.box.resume(throwing: CorrectionError.serverTimeout)
-                Task { await processQueue() }
-                return
-            }
-            request.box.resume(throwing: error)
+            let err: Error = Date() > request.deadline ? CorrectionError.serverTimeout : error
+            request.box.resume(throwing: err)
         }
-
-        Task { await processQueue() }
     }
 
     private nonisolated func resolveModelID(for serviceType: ServiceType) -> String {

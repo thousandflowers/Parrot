@@ -1,0 +1,13 @@
+{
+  "identifier": "com.thousandflowers.refineclone.popclip",
+  "name": "RefineClone",
+  "description": "Correggi il testo selezionato con RefineClone",
+  "icon": "RefineClone.png",
+  "entitlements": ["dynamic-urls"],
+  "actions": [
+    {
+      "title": "Correggi",
+      "url": "refineclone://correct?text={popclip text url}"
+    }
+  ]
+}

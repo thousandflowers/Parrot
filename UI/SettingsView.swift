@@ -4,6 +4,7 @@ struct SettingsView: View {
     @State private var prefs = PreferencesStore.shared
     @State private var serverIsRunning = false
     @State private var selectedTab = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -32,31 +33,30 @@ struct SettingsView: View {
                 .tag(4)
                 .accessibilityElement(children: .contain)
 
-            AdvancedTab()
-                .tabItem { Label("Avanzate", systemImage: "wrench.adjustable") }
+            ShortcutsTab(prefs: prefs)
+                .tabItem { Label("Scorciatoie", systemImage: "keyboard") }
                 .tag(5)
                 .accessibilityElement(children: .contain)
+
+            AdvancedTab()
+                .tabItem { Label("Avanzate", systemImage: "wrench.adjustable") }
+                .tag(6)
+                .accessibilityElement(children: .contain)
+
+            CustomRulesView()
+                .tabItem { Label("Regole Custom", systemImage: "list.bullet.clipboard") }
+                .tag(7)
+                .accessibilityElement(children: .contain)
         }
-        .frame(minWidth: 500, minHeight: 400)
-        .animation(.easeInOut(duration: 0.2), value: selectedTab)
+        .frame(minWidth: 540, minHeight: 540)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: selectedTab)
         .task {
             serverIsRunning = await ServerManager.shared.currentPort > 0
-            let stream = AsyncStream<Void> { continuation in
-                let task = Task {
-                    while !Task.isCancelled {
-                        try? await Task.sleep(for: .seconds(3))
-                        if Task.isCancelled { break }
-                        continuation.yield(())
-                    }
-                    continuation.finish()
-                }
-                continuation.onTermination = { _ in task.cancel() }
-            }
-            for await _ in stream {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
                 guard selectedTab <= 1 else { continue }
                 let running = await ServerManager.shared.currentPort > 0
-                guard running != serverIsRunning else { continue }
-                serverIsRunning = running
+                if running != serverIsRunning { serverIsRunning = running }
             }
         }
     }

@@ -28,5 +28,16 @@
     <string>RefineClone needs permission to interact with other applications.</string>
     <key>NSHumanReadableCopyright</key>
     <string>MIT License</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.thousandflowers.refineclone</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>refineclone</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

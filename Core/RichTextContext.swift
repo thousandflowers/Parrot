@@ -74,10 +74,11 @@ struct RichTextContext: @unchecked Sendable {
         guard !formattingMarkers.isEmpty else { return result }
 
         for marker in formattingMarkers {
-            let originalRange = NSRange(location: marker.range.location, length: min(marker.range.length, (correctedText as NSString).length - marker.range.location))
-            guard originalRange.location >= 0,
-                  originalRange.location < (correctedText as NSString).length,
-                  originalRange.length > 0 else { continue }
+            let correctedLen = (correctedText as NSString).length
+            guard marker.range.location < correctedLen else { continue }
+            let clampedLength = min(marker.range.length, correctedLen - marker.range.location)
+            let originalRange = NSRange(location: marker.range.location, length: clampedLength)
+            guard originalRange.length > 0 else { continue }
 
             let originalSubstring = (plainText as NSString).substring(with: marker.range)
             let currentSubstring = (correctedText as NSString).substring(with: originalRange)

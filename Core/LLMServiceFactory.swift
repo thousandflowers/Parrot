@@ -23,6 +23,25 @@ struct LLMServiceFactory {
         resolveServiceType(for: Constants.UserDefaultsKey.fluencyServiceType)
     }
 
+    static func resolveServiceType(forPromptType promptType: PromptType) -> ServiceType {
+        switch promptType {
+        case .grammar:
+            let key = Constants.UserDefaultsKey.grammarServiceType
+            guard let raw = UserDefaults.standard.string(forKey: key),
+                  let type = ServiceType(rawValue: raw) else { return resolveDefaultServiceType() }
+            return type
+        case .fluency:
+            return resolveFluencyServiceType()
+        case .explain:
+            let key = Constants.UserDefaultsKey.explainServiceType
+            guard let raw = UserDefaults.standard.string(forKey: key),
+                  let type = ServiceType(rawValue: raw) else { return resolveDefaultServiceType() }
+            return type
+        default:
+            return resolveDefaultServiceType()
+        }
+    }
+
     private static func resolveServiceType(for key: String) -> ServiceType {
         guard let raw = UserDefaults.standard.string(forKey: key),
               let type = ServiceType(rawValue: raw) else { return .stub }

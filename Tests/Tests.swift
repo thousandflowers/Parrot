@@ -6,10 +6,10 @@ final class PromptEngineTests: XCTestCase {
         let engine = PromptEngine(language: "en", style: "formale")
         let prompt = engine.buildGrammarPrompt(for: "This is a test")
         XCTAssertTrue(prompt.contains("This is a test"))
-        XCTAssertTrue(prompt.contains("<TEXT>"))
-        XCTAssertTrue(prompt.contains("</TEXT>"))
+        XCTAssertTrue(prompt.contains("TESTO:"))
+        XCTAssertTrue(prompt.contains("CORREZIONE:"))
         XCTAssertTrue(prompt.contains("Use formal, professional tone."))
-        XCTAssertTrue(prompt.contains("Output only the corrected text; no notes. Do not include <TEXT>/<CUSTOM> tags."))
+        XCTAssertTrue(prompt.contains("lingua di output deve essere inglese"))
     }
 
     func testLanguageFamily_latin() {
@@ -440,5 +440,104 @@ final class StreamCancellationTests: XCTestCase {
         }
         cancelled.cancel()
         _ = await cancelled.value
+    }
+}
+
+final class ToneDetectorTests: XCTestCase {
+    func testFormalEnglish_textWithPassiveVoice_detectedAsFormal() async {
+        let tone = await ToneDetector.shared.detect(text: "It has been demonstrated that the results are significant and were analyzed thoroughly.", language: "en")
+        XCTAssertEqual(tone, .formal)
+    }
+
+    func testInformalEnglish_textWithContractions_detectedAsInformal() async {
+        let tone = await ToneDetector.shared.detect(text: "hey what's up!!! don't worry about it lol", language: "en")
+        XCTAssertEqual(tone, .informal)
+    }
+
+    func testAcademicEnglish_textWithMarkers_detectedAsAcademic() async {
+        let tone = await ToneDetector.shared.detect(text: "Therefore, furthermore, and consequently, the hypothesis is supported.", language: "en")
+        XCTAssertNotEqual(tone, .informal)
+    }
+
+    func testNeutralEnglish_plainText_returnsNeutral() async {
+        let tone = await ToneDetector.shared.detect(text: "The cat sat on the mat.", language: "en")
+        XCTAssertEqual(tone, .neutral)
+    }
+
+    func testItalianInformal_textWithContractions_detectedAsInformal() async {
+        let tone = await ToneDetector.shared.detect(text: "c'è una cosa che non va nell'idea, secondo me è sbagliata", language: "it")
+        XCTAssertEqual(tone, .informal)
+    }
+
+    func testDetectedTone_isSendableAndCaseIterable() {
+        let all = DetectedTone.allCases
+        XCTAssertEqual(all.count, 5)
+    }
+}
+
+final class CorrectionResultMetaTests: XCTestCase {
+    func testResult_hasDetectedToneField() {
+        let result = CorrectionResult(original: "hello", corrected: "hello", modelID: "test", detectedTone: "formal")
+        XCTAssertEqual(result.detectedTone, "formal")
+    }
+
+    func testResult_hasReplacementRangeField() {
+        var result = CorrectionResult(original: "hello", corrected: "hello", modelID: "test")
+        result.replacementRange = CFRange(location: 0, length: 5)
+        XCTAssertEqual(result.replacementRange?.location, 0)
+        XCTAssertEqual(result.replacementRange?.length, 5)
+    }
+
+    func testResult_defaultDetectedToneIsNil() {
+        let result = CorrectionResult(original: "hello", corrected: "hello", modelID: "test")
+        XCTAssertNil(result.detectedTone)
+    }
+
+    func testResult_defaultReplacementRangeIsNil() {
+        let result = CorrectionResult(original: "hello", corrected: "hello", modelID: "test")
+        XCTAssertNil(result.replacementRange)
+    }
+}
+
+final class RuleBasedEngineTests: XCTestCase {
+    func testQualE_fixes() async {
+        let engine = RuleBasedEngine.shared
+        let result = await engine.check("Qual'è il problema?", language: "it")
+        XCTAssertTrue(result.hasFixes)
+        XCTAssertEqual(result.text, "Qual è il problema?")
+    }
+
+    func testUnPo_fixes() async {
+        let engine = RuleBasedEngine.shared
+        let result = await engine.check("Voglio un pò di acqua", language: "it")
+        XCTAssertTrue(result.hasFixes)
+        XCTAssertEqual(result.text, "Voglio un po' di acqua")
+    }
+
+    func testEApostofo_fixes() async {
+        let engine = RuleBasedEngine.shared
+        let result = await engine.check("Oggi e' bel tempo.", language: "it")
+        XCTAssertTrue(result.hasFixes)
+        XCTAssertTrue(result.text.contains("è"))
+    }
+
+    func testDoubleSpace_fixes() async {
+        let engine = RuleBasedEngine.shared
+        let result = await engine.check("Hello  world", language: "en")
+        XCTAssertTrue(result.hasFixes)
+        XCTAssertEqual(result.text, "Hello world")
+    }
+
+    func testNoFixes_cleanText() async {
+        let engine = RuleBasedEngine.shared
+        let result = await engine.check("Qual è il problema", language: "it")
+        XCTAssertFalse(result.hasFixes)
+        XCTAssertEqual(result.text, "Qual è il problema")
+    }
+
+    func testMultipleFixes() async {
+        let engine = RuleBasedEngine.shared
+        let result = await engine.check("qual'è  il problema", language: "it")
+        XCTAssertTrue(result.fixes.count >= 2)
     }
 }

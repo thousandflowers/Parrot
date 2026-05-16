@@ -12,6 +12,8 @@ enum PromptType: Sendable {
     case grammar
     case fluency
     case explain
+    case coach
+    case translation(targetLanguage: String)
     case custom(name: String, template: String)
 
     var label: String {
@@ -19,6 +21,8 @@ enum PromptType: Sendable {
         case .grammar: "grammar"
         case .fluency: "fluency"
         case .explain: "explain"
+        case .coach: "coach"
+        case .translation: "translation"
         case .custom: "custom"
         }
     }
@@ -43,19 +47,19 @@ enum CorrectionError: Error, LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .accessibilityPermissionDenied:
-            return "Accessibilita non abilitata. Vai in Preferenze di Sistema > Privacy e sicurezza > Accessibilita."
+            return "Accessibilità non abilitata. Vai in Preferenze di Sistema > Privacy e sicurezza > Accessibilità."
         case .noTextSelected:
             return "Nessun testo selezionato. Seleziona del testo e riprova."
         case .textExtractionFailed(let appName):
             return "Impossibile leggere il testo da \(appName)."
         case .serverNotRunning:
-            return "Il motore AI e offline. Riavvio in corso..."
+            return "Il motore AI è offline. Controlla il servizio selezionato nelle impostazioni."
         case .serverTimeout:
             return "Timeout del server. Riprova tra qualche secondo."
         case .modelNotLoaded:
             return "Modello non caricato. Verifica che sia installato correttamente."
         case .modelDownloadFailed(let url):
-            return "Download del modello fallito da \(url.host ?? url.absoluteString)."
+            return "Download fallito da \(url.host ?? url.absoluteString). Il modello potrebbe richiedere autenticazione — prova un modello diverso dal catalogo."
         case .modelCorrupted(let sha):
             return "Modello corrotto (SHA: \(sha.prefix(12))...). Scarica di nuovo il modello."
         case .outOfMemory:
@@ -80,4 +84,14 @@ protocol LLMService: AnyObject, Sendable {
     func explain(original: String, corrected: String) async throws -> String
     func streamCorrect(text: String, promptType: PromptType) -> AsyncThrowingStream<String, Error>
     func handleOpenAIHTTPStatus(_ statusCode: Int, data: Data) throws
+}
+
+/// Sottoprotocoolo per i servizi reali (Local, Remote, Ollama, OpenRouter).
+/// Implementando i 4 metodi di configurazione si ottengono gratis
+/// correct/correctFluency/explain/streamCorrect via extension default.
+protocol LLMServiceBase: LLMService {
+    func resolveURL() async throws -> URL
+    func resolveAPIKey() async throws -> String?
+    var resolvedModel: String { get }
+    var extraServiceHeaders: [String: String] { get }
 }

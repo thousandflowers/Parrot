@@ -1,10 +1,10 @@
 import Cocoa
 import Carbon
 
-/// Manages global keyboard shortcuts via Carbon Event Manager.
-/// Delegates business logic to TextCheckCoordinator.
 @MainActor
 final class GlobalHotkeyManager {
+    nonisolated(unsafe) private(set) static weak var current: GlobalHotkeyManager?
+
     private var eventHandler: EventHandlerRef?
     private var hotKeyRefs: [EventHotKeyRef] = []
     private var actions: [UInt32: () -> Void] = [:]
@@ -12,31 +12,85 @@ final class GlobalHotkeyManager {
     private var nextID: UInt32 = 1
     private(set) var failedShortcuts: [String] = []
 
+    init() { Self.current = self }
+
     func registerHotkeys() {
+        installEventHandlerIfNeeded()
+        unregisterAll()
+        registerFromPrefs()
+    }
+
+    func updateHotkeys() {
+        unregisterAll()
+        registerFromPrefs()
+    }
+
+    private func registerFromPrefs() {
+        let prefs = PreferencesStore.shared
+        failedShortcuts = []
+
+        register(
+            keyCode: prefs.shortcutGrammar.keyCode,
+            modifiers: prefs.shortcutGrammar.modifiers,
+            label: prefs.shortcutGrammar.displayString,
+            action: { TextCheckCoordinator.shared.checkSelectedText() }
+        )
+        register(
+            keyCode: prefs.shortcutFluency.keyCode,
+            modifiers: prefs.shortcutFluency.modifiers,
+            label: prefs.shortcutFluency.displayString,
+            action: { TextCheckCoordinator.shared.checkFluency() }
+        )
+        register(
+            keyCode: prefs.shortcutEditor.keyCode,
+            modifiers: prefs.shortcutEditor.modifiers,
+            label: prefs.shortcutEditor.displayString,
+            action: { Task { await TextCheckCoordinator.shared.openFloatingEditor() } }
+        )
+        register(
+            keyCode: prefs.shortcutReplace.keyCode,
+            modifiers: prefs.shortcutReplace.modifiers,
+            label: prefs.shortcutReplace.displayString,
+            action: { TextCheckCoordinator.shared.checkAndReplace() }
+        )
+        register(
+            keyCode: prefs.shortcutTranslate.keyCode,
+            modifiers: prefs.shortcutTranslate.modifiers,
+            label: prefs.shortcutTranslate.displayString,
+            action: { TextCheckCoordinator.shared.checkTranslation() }
+        )
+        register(
+            keyCode: prefs.shortcutApplyDirect.keyCode,
+            modifiers: prefs.shortcutApplyDirect.modifiers,
+            label: prefs.shortcutApplyDirect.displayString,
+            action: { TextCheckCoordinator.shared.checkAndApplyDirect() }
+        )
+        register(
+            keyCode: prefs.shortcutCoach.keyCode,
+            modifiers: prefs.shortcutCoach.modifiers,
+            label: prefs.shortcutCoach.displayString,
+            action: { TextCheckCoordinator.shared.checkCoach() }
+        )
+    }
+
+    private func installEventHandlerIfNeeded() {
+        guard eventHandler == nil else { return }
         let eventSpec = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
         )
-
-        // Singleton lifetime: never use takeRetainedValue() here (causes EXC_BAD_ACCESS on 2nd press)
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-
         let callback: EventHandlerUPP = { _, eventRef, userData -> OSStatus in
-            guard let eventRef = eventRef, let userData = userData else { return noErr }
-
+            guard let eventRef, let userData else { return noErr }
             var hotKeyID = EventHotKeyID()
             let result = GetEventParameter(
                 eventRef,
                 EventParamName(kEventParamDirectObject),
                 EventParamType(typeEventHotKeyID),
-                nil,
-                MemoryLayout<EventHotKeyID>.size,
-                nil,
+                nil, MemoryLayout<EventHotKeyID>.size, nil,
                 &hotKeyID
             )
-
             guard result == noErr else { return noErr }
-
             let manager = Unmanaged<GlobalHotkeyManager>.fromOpaque(userData).takeUnretainedValue()
             manager.actionsLock.lock()
             let action = manager.actions[hotKeyID.id]
@@ -44,78 +98,40 @@ final class GlobalHotkeyManager {
             action?()
             return noErr
         }
-
-        InstallEventHandler(
-            GetEventDispatcherTarget(),
-            callback,
-            1,
-            [eventSpec],
-            selfPtr,
-            &eventHandler
-        )
-
-        register(
-            keyCode: UInt32(kVK_ANSI_E),
-            modifiers: UInt32(cmdKey | shiftKey),
-            action: { TextCheckCoordinator.shared.checkSelectedText() }
-        )
-
-        register(
-            keyCode: UInt32(kVK_ANSI_T),
-            modifiers: UInt32(cmdKey | shiftKey),
-            action: { TextCheckCoordinator.shared.checkFluency() }
-        )
-
-        register(
-            keyCode: UInt32(kVK_ANSI_F),
-            modifiers: UInt32(cmdKey | shiftKey),
-            action: { Task { await TextCheckCoordinator.shared.openFloatingEditor() } }
-        )
+        InstallEventHandler(GetEventDispatcherTarget(), callback, 1, [eventSpec], selfPtr, &eventHandler)
     }
 
-    private func register(keyCode: UInt32, modifiers: UInt32, action: @escaping () -> Void) {
+    private func unregisterAll() {
+        hotKeyRefs.forEach { UnregisterEventHotKey($0) }
+        hotKeyRefs.removeAll()
+        actionsLock.lock()
+        actions.removeAll()
+        actionsLock.unlock()
+    }
+
+    private func register(keyCode: UInt32, modifiers: UInt32, label: String, action: @escaping () -> Void) {
         let id = EventHotKeyID(signature: OSType(0x5246434C), id: nextID)
         nextID += 1
 
         var hotKeyRef: EventHotKeyRef?
         let status = RegisterEventHotKey(
-            keyCode,
-            modifiers,
-            id,
-            GetEventDispatcherTarget(),
-            0,
-            &hotKeyRef
+            keyCode, modifiers, id,
+            GetEventDispatcherTarget(), 0, &hotKeyRef
         )
 
         guard status == noErr, let ref = hotKeyRef else {
-            let label = shortcutLabel(keyCode: keyCode, modifiers: modifiers)
             failedShortcuts.append(label)
             return
         }
 
         hotKeyRefs.append(ref)
+        actionsLock.lock()
         actions[id.id] = action
-    }
-
-    private func shortcutLabel(keyCode: UInt32, modifiers: UInt32) -> String {
-        var parts: [String] = []
-        if modifiers & UInt32(cmdKey) != 0 { parts.append("Cmd") }
-        if modifiers & UInt32(shiftKey) != 0 { parts.append("Shift") }
-        let keyMap: [UInt32: String] = [
-            UInt32(kVK_ANSI_E): "E",
-            UInt32(kVK_ANSI_T): "T",
-            UInt32(kVK_ANSI_F): "F"
-        ]
-        if let key = keyMap[keyCode] { parts.append(key) }
-        else { parts.append("Key\(keyCode)") }
-        return parts.joined(separator: "+")
+        actionsLock.unlock()
     }
 
     deinit {
         hotKeyRefs.forEach { UnregisterEventHotKey($0) }
-        if let handler = eventHandler {
-            RemoveEventHandler(handler)
-        }
+        if let handler = eventHandler { RemoveEventHandler(handler) }
     }
 }
-

@@ -11,32 +11,35 @@ actor ResultCache: Sendable {
 
     struct CacheEntry {
         let result: CorrectionResult
-        let timestamp: Date
+        let createdAt: Date
+        var lastAccessed: Date
         let modelID: String
         let byteSize: Int
     }
 
     func get(for text: String, modelID: String) -> CorrectionResult? {
-        guard let entry = cache[text],
+        guard var entry = cache[text],
               entry.modelID == modelID,
-              Date().timeIntervalSince(entry.timestamp) < ttl else {
+              Date().timeIntervalSince(entry.createdAt) < ttl else {
             return nil
         }
+        entry.lastAccessed = Date()
+        cache[text] = entry
         return entry.result
     }
 
     func set(_ result: CorrectionResult, for text: String, modelID: String) {
-        let byteSize = (result.originalText.utf8.count + result.correctedText.utf8.count)
-
+        let byteSize = result.originalText.utf8.count + result.correctedText.utf8.count
         if cache.count >= maxEntries || (currentMemoryBytes + byteSize) > maxMemoryBytes {
             evictUntilUnderLimit(neededBytes: byteSize)
         }
-        cache[text] = CacheEntry(result: result, timestamp: Date(), modelID: modelID, byteSize: byteSize)
+        let now = Date()
+        cache[text] = CacheEntry(result: result, createdAt: now, lastAccessed: now, modelID: modelID, byteSize: byteSize)
         currentMemoryBytes += byteSize
     }
 
     private func evictUntilUnderLimit(neededBytes: Int) {
-        let sorted = cache.sorted { $0.value.timestamp < $1.value.timestamp }
+        let sorted = cache.sorted { $0.value.lastAccessed < $1.value.lastAccessed }
         for (key, entry) in sorted {
             guard cache.count >= maxEntries || (currentMemoryBytes + neededBytes) > maxMemoryBytes else { break }
             cache.removeValue(forKey: key)
@@ -50,7 +53,7 @@ actor ResultCache: Sendable {
     }
 
     func setIfNewer(_ result: CorrectionResult, for text: String, modelID: String) {
-        if let existing = cache[text], existing.timestamp >= result.timestamp { return }
+        if let existing = cache[text], existing.createdAt >= result.timestamp { return }
         set(result, for: text, modelID: modelID)
     }
 }

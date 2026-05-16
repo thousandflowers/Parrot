@@ -46,7 +46,6 @@ actor RealtimeMonitor {
     private func poll() async {
         let pid = AccessibilityBridge.lastKnownFrontAppPID
         guard pid != 0 else { return }
-        guard UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.realtimeEnabled) else { return }
 
         let bundleID = await AppDetector.shared.frontAppBundleID(forPID: pid)
         if let id = bundleID {
@@ -61,7 +60,9 @@ actor RealtimeMonitor {
 
         debounceTask?.cancel()
         debounceTask = Task {
-            try? await Task.sleep(for: .milliseconds(500))
+            do {
+                try await Task.sleep(for: .seconds(Constants.debounceInterval))
+            } catch { return }
             guard !Task.isCancelled else { return }
             await performCheck(text: text)
         }
@@ -86,9 +87,12 @@ actor RealtimeMonitor {
                 priority: .autoCheck
             )
             if result.originalText != result.correctedText {
-                await RealtimeIndicatorController.shared.show(errors: true)
+                let origWords = result.originalText.split(separator: " ")
+                let corrWords = result.correctedText.split(separator: " ")
+                let errorCount = max(1, origWords.filter { !corrWords.contains($0) }.count)
+                await RealtimeIndicatorController.shared.show(errors: true, errorCount: errorCount)
             } else {
-                await RealtimeIndicatorController.shared.show(errors: false)
+                await RealtimeIndicatorController.shared.show(errors: false, errorCount: 0)
             }
         } catch {
             await RealtimeIndicatorController.shared.hide()

@@ -32,7 +32,13 @@ final class FloatingEditorController {
 
         newWindow.contentView = hostingView
         window = newWindow
+        newWindow.alphaValue = 0
         newWindow.makeKeyAndOrderFront(nil)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            newWindow.animator().alphaValue = 1
+        }
     }
 
     private func close() {
@@ -67,6 +73,9 @@ struct FloatingEditorView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 200)
                 Spacer()
+                Text("Servizio: \(LLMServiceFactory.resolveDefaultServiceType().rawValue)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -77,14 +86,15 @@ struct FloatingEditorView: View {
                 VStack {
                     Text("Originale")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .padding(.top, 4)
 
                     TextEditor(text: $inputText)
                         .font(.body)
                         .frame(minWidth: 250, minHeight: 200)
+                        .accessibilityLabel("Testo originale da correggere")
                         .border(Color.secondary.opacity(0.3))
-                        .cornerRadius(4)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
                         .padding(.horizontal, 8)
                         .padding(.bottom, 8)
                 }
@@ -92,18 +102,26 @@ struct FloatingEditorView: View {
                 VStack {
                     Text("Corretto")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .padding(.top, 4)
 
                     ScrollView {
-                        Text(correctedText)
-                            .font(.body)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if correctedText.isEmpty {
+                            Text("Il testo corretto apparirà qui")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            DiffHighlightView(original: inputText, corrected: correctedText)
+                                .font(.body)
+                                .textSelection(.enabled)
+                                .accessibilityLabel("Testo corretto con differenze evidenziate")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
                     .frame(minWidth: 250, minHeight: 200)
                     .background(Color(.textBackgroundColor))
-                    .cornerRadius(4)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
                     .padding(.horizontal, 8)
                     .padding(.bottom, 8)
                 }
@@ -114,14 +132,23 @@ struct FloatingEditorView: View {
             HStack {
                 if let error = errorMessage {
                     Text(error)
-                        .foregroundColor(.red)
+                        .foregroundColor(.refineError)
                         .font(.caption)
                 }
                 Spacer()
 
-                Button("Controlla") { checkText() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+                Button(action: { checkText() }) {
+                    if isLoading {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .frame(width: 16)
+                        Text("Controllando…")
+                    } else {
+                        Text("Controlla")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
 
                 Button("Copia") {
                     NSPasteboard.general.clearContents()
@@ -133,11 +160,6 @@ struct FloatingEditorView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-
-            if isLoading {
-                ProgressView("Controllando...")
-                    .padding(.bottom, 8)
-            }
         }
         .frame(minWidth: 500, minHeight: 300)
         .onDisappear {
@@ -153,9 +175,7 @@ struct FloatingEditorView: View {
         correctedText = ""
         checkTask?.cancel()
         checkTask = Task { @MainActor in
-            defer {
-                if !Task.isCancelled { self.isLoading = false }
-            }
+            defer { if !Task.isCancelled { self.isLoading = false } }
             do {
                 let bundleID = await AccessibilityBridge.shared.frontAppBundleID()
                 let prefs = PreferencesStore.shared
@@ -165,31 +185,43 @@ struct FloatingEditorView: View {
                     appRules: prefs.appRules
                 )
 
+                let serviceType: ServiceType
+                let basePrompt: PromptType
                 if checkMode == .fluency {
-                    let fluencyType = resolved.serviceType ?? LLMServiceFactory.resolveFluencyServiceType()
-                    let result = try await RequestQueue.shared.enqueue(
-                        text: inputText,
-                        type: .fluency,
-                        priority: .floatingEditor,
-                        overrideServiceType: fluencyType,
-                        overrideCustomPrompt: resolved.prompt
-                    )
-                    guard !Task.isCancelled else { return }
-                    self.correctedText = result.correctedText
+                    serviceType = resolved.serviceType ?? LLMServiceFactory.resolveFluencyServiceType()
+                    basePrompt = .fluency
                 } else {
-                    let result = try await RequestQueue.shared.enqueue(
-                        text: inputText,
-                        type: .grammar,
-                        priority: .floatingEditor,
-                        overrideServiceType: resolved.serviceType,
-                        overrideCustomPrompt: resolved.prompt
-                    )
-                    guard !Task.isCancelled else { return }
-                    self.correctedText = result.correctedText
+                    serviceType = resolved.serviceType ?? LLMServiceFactory.resolveDefaultServiceType()
+                    basePrompt = .grammar
                 }
+                let promptType: PromptType = resolved.prompt.map {
+                    .custom(name: $0.name, template: $0.template)
+                } ?? basePrompt
+
+                let service = LLMServiceFactory.make(with: serviceType)
+                let stream = service.streamCorrect(text: inputText, promptType: promptType)
+                for try await accumulated in stream {
+                    guard !Task.isCancelled else { return }
+                    // streamCorrect yields cumulative text — replace, don't append
+                    correctedText = accumulated.trimmingCharacters(in: .init(charactersIn: " \n\t"))
+                }
+                correctedText = correctedText.trimmingCharacters(in: .whitespacesAndNewlines)
             } catch {
                 guard !Task.isCancelled else { return }
-                self.errorMessage = "Errore: \(error.localizedDescription)"
+                if let corrErr = error as? CorrectionError, case .serverNotRunning = corrErr {
+                    let hint: String
+                    switch LLMServiceFactory.resolveDefaultServiceType() {
+                    case .local:
+                        hint = "llama-server non trovato. Vai nel tab Modelli per installarlo, oppure cambia servizio."
+                    case .ollama:
+                        hint = "Ollama offline. Avvia 'ollama serve' nel terminale, oppure cambia servizio."
+                    default:
+                        hint = error.localizedDescription
+                    }
+                    self.errorMessage = "Errore: \(hint)"
+                } else {
+                    self.errorMessage = "Errore: \(error.localizedDescription)"
+                }
             }
         }
     }

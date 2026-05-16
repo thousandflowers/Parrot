@@ -1,6 +1,7 @@
 import Foundation
 import Darwin
 import Metal
+import os
 
 actor ServerManager: Sendable {
     static let shared = ServerManager()
@@ -34,7 +35,7 @@ actor ServerManager: Sendable {
             let (port, probeSock) = try allocatePort()
             currentPort = port
 
-            guard let serverURL = Bundle.main.url(forAuxiliaryExecutable: "llama-server") else {
+            guard let serverURL = ModelManager.shared.resolvedLlamaServerURL() else {
                 close(probeSock)
                 currentPort = 0
                 throw CorrectionError.serverNotRunning
@@ -42,38 +43,64 @@ actor ServerManager: Sendable {
 
             let process = Process()
             process.executableURL = serverURL
-            process.arguments = [
+            var args: [String] = [
                 "-m", modelPath,
                 "--host", "127.0.0.1",
                 "--port", "\(currentPort)",
-                "-c", "4096",
+                "-c", "1024",
                 "--threads", "\(max(2, ProcessInfo.processInfo.processorCount / 2))",
                 "--n-gpu-layers", gpuLayers(),
-                "--flash-attn"
+                "--no-warmup",
             ]
+            if MTLCreateSystemDefaultDevice() != nil {
+                args += ["--flash-attn", "on"]
+            }
+            process.arguments = args
+
+            // Redirect stdout/stderr to pipes so they don't spam the console
+            // and so we can capture crash output for diagnostics.
+            let stderrPipe = Pipe()
+            process.standardOutput = Pipe()
+            process.standardError = stderrPipe
 
             close(probeSock)
 
             do {
                 try process.run()
             } catch {
+                os_log(.error, "ServerManager: process.run() failed (attempt %d): %{public}@",
+                       attempt, error.localizedDescription)
                 currentPort = 0
                 if attempt < 2 { continue }
                 throw CorrectionError.serverNotRunning
             }
             self.process = process
 
+            // Reset state automatically if the process dies unexpectedly
+            process.terminationHandler = { [weak self] _ in
+                Task { await self?.handleUnexpectedTermination() }
+            }
+
             do {
-                for healthAttempt in 0..<20 {
+                for healthAttempt in 0..<30 {
                     if await checkServerHealth() { return }
+                    // Process exited during startup — read stderr for diagnostics
+                    if !process.isRunning && healthAttempt > 1 {
+                        let stderrData = stderrPipe.fileHandleForReading.availableData
+                        let stderrText = String(data: stderrData, encoding: .utf8) ?? ""
+                        os_log(.error, "ServerManager: llama-server exited early. stderr: %{public}@", stderrText)
+                        break
+                    }
                     let delayMs = min(2000, 250 * Int(pow(2.0, Double(healthAttempt))))
                     try await Task.sleep(for: .milliseconds(delayMs))
                 }
 
+                process.terminationHandler = nil
                 process.terminate()
                 self.process = nil
                 currentPort = 0
             } catch {
+                process.terminationHandler = nil
                 process.terminate()
                 self.process = nil
                 currentPort = 0
@@ -117,6 +144,12 @@ actor ServerManager: Sendable {
         Task { await stop() }
     }
 
+    private func handleUnexpectedTermination() {
+        guard let p = process, !p.isRunning else { return }
+        process = nil
+        currentPort = 0
+    }
+
     private func allocatePort() throws -> (port: Int, socket: Int32) {
         let sock = socket(AF_INET, SOCK_STREAM, 0)
         guard sock >= 0 else { throw CorrectionError.serverNotRunning }
@@ -127,7 +160,7 @@ actor ServerManager: Sendable {
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)
         addr.sin_port = 0
-        addr.sin_addr.s_addr = INADDR_LOOPBACK
+        addr.sin_addr.s_addr = INADDR_ANY  // INADDR_LOOPBACK had wrong byte order on ARM
 
         let result = withUnsafePointer(to: &addr) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {

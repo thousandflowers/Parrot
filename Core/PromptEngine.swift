@@ -25,6 +25,8 @@ struct CustomPrompt: Identifiable, Codable, Sendable, Hashable {
     var name: String
     var template: String
     var checkType: CheckType
+    var icon: String
+    var shortcutKey: String?
 
     enum CheckType: String, Codable, CaseIterable {
         case grammar
@@ -32,11 +34,38 @@ struct CustomPrompt: Identifiable, Codable, Sendable, Hashable {
         case custom
     }
 
-    init(id: UUID = UUID(), name: String, template: String, checkType: CheckType = .custom) {
+    enum CodingKeys: CodingKey {
+        case id, name, template, checkType, icon, shortcutKey
+    }
+
+    init(id: UUID = UUID(), name: String, template: String, checkType: CheckType = .custom,
+         icon: String = "pencil", shortcutKey: String? = nil) {
         self.id = id
         self.name = name
         self.template = template
         self.checkType = checkType
+        self.icon = icon
+        self.shortcutKey = shortcutKey
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(UUID.self, forKey: .id)
+        self.name = try container.decode(String.self, forKey: .name)
+        self.template = try container.decode(String.self, forKey: .template)
+        self.checkType = try container.decodeIfPresent(CheckType.self, forKey: .checkType) ?? .custom
+        self.icon = try container.decodeIfPresent(String.self, forKey: .icon) ?? "pencil"
+        self.shortcutKey = try container.decodeIfPresent(String.self, forKey: .shortcutKey)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(template, forKey: .template)
+        try container.encode(checkType, forKey: .checkType)
+        try container.encode(icon, forKey: .icon)
+        try container.encodeIfPresent(shortcutKey, forKey: .shortcutKey)
     }
 
     func buildPrompt(for text: String, language: String) -> String {
@@ -94,51 +123,81 @@ struct PromptEngine {
     func buildGrammarPrompt(for text: String, customInstruction: String? = nil) -> String {
         let extra = grammarFamilyInstruction
         let styleLine = styleInstruction
+        let langName = localizedLanguageName(for: language)
+        var instruction = "Riscrivi il testo correggendo solo gli errori grammaticali e ortografici. Non modificare significato, stile o lingua. La lingua di output deve essere \(langName)."
+        if !extra.isEmpty { instruction += " \(extra)" }
+        if !styleLine.isEmpty { instruction += " \(styleLine)" }
+        if let custom = customInstruction { instruction += " \(custom)" }
         let safeText = escapeForPrompt(text)
-        var header = "Fix only grammar/spelling for correctness; no style/fluency edits."
-        if !extra.isEmpty { header += "\n\(extra)" }
-        if !styleLine.isEmpty { header += "\n\(styleLine)" }
         return """
-        \(header)
+        \(instruction)
 
-        <TEXT>\(safeText)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
+        TESTO: io volebbi un caffè
+        CORREZIONE: io voglio un caffè
 
-        Output only the corrected text; no notes. Do not include <TEXT>/<CUSTOM> tags.
+        TESTO: \(safeText)
+        CORREZIONE:
         """
     }
 
     func buildFluencyPrompt(for text: String, customInstruction: String? = nil) -> String {
         let styleLine = styleInstruction
+        let langName = localizedLanguageName(for: language)
+        var instruction = "Riscrivi il testo migliorando la fluidità e la naturalezza, mantenendo il significato originale. La lingua di output deve essere \(langName). Non tradurre."
+        if !styleLine.isEmpty { instruction += " \(styleLine)" }
+        if let custom = customInstruction { instruction += " \(custom)" }
         let safeText = escapeForPrompt(text)
-        var header = "Improve fluency and naturalness only; do not fix grammar already correct."
-        if !styleLine.isEmpty { header += "\n\(styleLine)" }
-        return """
-        \(header)
-
-        <TEXT>\(safeText)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
-
-        Output only the corrected text; no notes. Do not include <TEXT>/<CUSTOM> tags.
-        """
+        return "\(instruction)\n\nTESTO: \(safeText)\nCORREZIONE:"
     }
 
     func buildExplainPrompt(original: String, corrected: String, customInstruction: String? = nil) -> String {
         let styleLine = styleInstruction
+        var instruction = "Explain the grammar, spelling, or style errors corrected in this text. Be concise. Explain in \(language)."
+        if !styleLine.isEmpty { instruction += " \(styleLine)" }
+        if let custom = customInstruction { instruction += " \(custom)" }
         let safeOriginal = escapeForPrompt(original)
         let safeCorrected = escapeForPrompt(corrected)
-        var header = "Explain the grammar, spelling, or style errors in the original text."
-        header += "\nBe educational but concise."
-        header += "\nExplain in \(language)."
-        if !styleLine.isEmpty { header += "\n\(styleLine)" }
-        return """
-        \(header)
+        return "\(instruction)\n\nORIGINAL: \(safeOriginal)\nCORRECTED: \(safeCorrected)\nEXPLANATION:"
+    }
 
-        Original:
-        <TEXT>\(safeOriginal)</TEXT>
-        Corrected:
-        <TEXT>\(safeCorrected)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
+    func buildCoachPrompt(for text: String) -> String {
+        let langName = localizedLanguageName(for: language)
+        let family = grammarFamilyInstruction
+        var instruction = """
+        Analizza il seguente testo come un insegnante di scrittura professionista. Fornisci feedback strutturato in 4 categorie:
 
-        Output only your explanation. Do not include <TEXT>/<CUSTOM> tags.
+        1. **Grammatica**: errori ortografici, grammaticali, di punteggiatura
+        2. **Stile**: ripetizioni, frasi troppo lunghe, parole deboli, voce passiva
+        3. **Tono**: coerenza del registro, appropriatezza al contesto
+        4. **Chiarezza**: ambiguità, struttura logica, flusso delle idee
+
+        Per ogni categoria, elenca:
+        - I problemi specifici trovati (con citazioni dal testo)
+        - Suggerimenti concreti per migliorare
+        - Un esempio di come riscrivere
+
+        La lingua di output deve essere \(langName). Sii costruttivo e specifico.
         """
+        if !family.isEmpty { instruction += "\n\n\(family)" }
+        let safeText = escapeForPrompt(text)
+        return "\(instruction)\n\nTESTO DA ANALIZZARE: \(safeText)\n\nANALISI:"
+    }
+
+    private func localizedLanguageName(for code: String) -> String {
+        let primary = code.split(separator: "-").first.map(String.init) ?? code
+        switch primary {
+        case "it": return "italiano"
+        case "en": return "inglese"
+        case "fr": return "francese"
+        case "de": return "tedesco"
+        case "es": return "spagnolo"
+        case "pt": return "portoghese"
+        case "ru": return "russo"
+        case "zh": return "cinese"
+        case "ja": return "giapponese"
+        case "ar": return "arabo"
+        default:   return code
+        }
     }
 
     func buildCustomPrompt(text: String, custom: CustomPrompt) -> String {
@@ -160,6 +219,14 @@ struct PromptEngine {
             <TEXT>\(safeText)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
 
             Output only your explanation. Do not include <TEXT>/<CUSTOM> tags.
+            """
+        case .coach:
+            return buildCoachPrompt(for: text)
+        case .translation(let targetLanguage):
+            let safeText = escapeForPrompt(text)
+            return """
+            Translate the following text to \(targetLanguage). Output only the translation, nothing else.
+            <TEXT>\(safeText)</TEXT>
             """
         case .custom(_, let template):
             var result = template

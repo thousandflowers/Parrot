@@ -11,11 +11,15 @@ final class StubLLMService: LLMService, Sendable {
         case .grammar:
             fakeCorrection = "\(text)\n\n[CORRETTO-STUB: Errori grammaticali corretti]"
         case .fluency:
-            fakeCorrection = "[FLUENCY-STUB] \(text) (fluidita migliorata)"
+            fakeCorrection = "[FLUENCY-STUB] \(text) (fluidità migliorata)"
         case .explain:
             fakeCorrection = "Spiegazione stub: il testo originale contiene potenziali errori grammaticali da analizzare."
         case .custom:
             fakeCorrection = "\(text)\n\n[CUSTOM-STUB: Elaborato con regole personalizzate]"
+        case .translation(let target):
+            fakeCorrection = "[TRADUZIONE: \(text)] (tradotto in \(target) -- stub)"
+        case .coach:
+            fakeCorrection = "[COACH-STUB] Analisi del testo:\n\n1. **Grammatica**: Nessun errore rilevato.\n2. **Stile**: Considera di variare la lunghezza delle frasi.\n3. **Tono**: Appropriato per il contesto.\n4. **Chiarezza**: Testo chiaro e ben strutturato."
         }
 
         return CorrectionResult(
@@ -37,7 +41,7 @@ final class StubLLMService: LLMService, Sendable {
         try await Task.sleep(for: .milliseconds(500))
         return CorrectionResult(
             original: text,
-            corrected: "[FLUENCY-STUB] \(text) (fluidita migliorata)",
+            corrected: "[FLUENCY-STUB] \(text) (fluidità migliorata)",
             modelID: "stub-v1",
             confidence: 0.95,
             promptType: "fluency"
@@ -50,10 +54,14 @@ final class StubLLMService: LLMService, Sendable {
     }
 
     func streamCorrect(text: String, promptType: PromptType) -> AsyncThrowingStream<String, Error> {
-        // Stub implementation: yield input text immediately
-        continuation.yield(text)
-        continuation.finish()
-    }
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                let words = text.components(separatedBy: " ")
+                for (i, word) in words.enumerated() {
+                    guard !Task.isCancelled else { return }
+                    continuation.yield(word + (i < words.count - 1 ? " " : ""))
+                    try? await Task.sleep(for: .milliseconds(30))
+                }
                 guard !Task.isCancelled else { return }
                 continuation.finish()
             }

@@ -5,11 +5,12 @@ import Cocoa
 final class RealtimeIndicatorController {
     static let shared = RealtimeIndicatorController()
 
-    private var window: NSWindow?
+    private var window: NSPanel?
+    private var hostingView: NSHostingView<RealtimeIndicatorView>?
 
     private init() {}
 
-    func show(errors: Bool) {
+    func show(errors: Bool, errorCount: Int = 0) {
         Task { @MainActor in
             let bounds = await AccessibilityBridge.shared.lastSelectionBounds
             let mousePoint = NSEvent.mouseLocation
@@ -25,13 +26,13 @@ final class RealtimeIndicatorController {
 
             if let existing = window {
                 existing.setFrameOrigin(NSPoint(x: x, y: y))
+                updateHostingView(hasErrors: errors, errorCount: errorCount)
                 existing.orderFront(nil)
-                existing.contentView = NSHostingView(rootView: RealtimeIndicatorView(hasErrors: errors))
                 return
             }
 
-            let panel = NSWindow(
-                contentRect: NSRect(x: x, y: y, width: 120, height: 36),
+            let panel = NSPanel(
+                contentRect: NSRect(x: x, y: y, width: 140, height: 36),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -43,9 +44,28 @@ final class RealtimeIndicatorController {
             panel.hasShadow = true
             panel.isReleasedWhenClosed = false
 
-            panel.contentView = NSHostingView(rootView: RealtimeIndicatorView(hasErrors: errors))
+            let hv = NSHostingView(rootView: RealtimeIndicatorView(hasErrors: errors, errorCount: errorCount))
+            hostingView = hv
+            panel.contentView = hv
             window = panel
+            panel.alphaValue = 0
             panel.orderFront(nil)
+            await NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.2
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().alphaValue = 1
+            }
+        }
+    }
+
+    private func updateHostingView(hasErrors: Bool, errorCount: Int) {
+        let view = RealtimeIndicatorView(hasErrors: hasErrors, errorCount: errorCount)
+        if let hv = hostingView {
+            hv.rootView = view
+        } else {
+            let hv = NSHostingView(rootView: view)
+            hostingView = hv
+            window?.contentView = hv
         }
     }
 
@@ -56,21 +76,28 @@ final class RealtimeIndicatorController {
 
 struct RealtimeIndicatorView: View {
     let hasErrors: Bool
+    let errorCount: Int
+
+    init(hasErrors: Bool, errorCount: Int = 0) {
+        self.hasErrors = hasErrors
+        self.errorCount = errorCount
+    }
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: hasErrors ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-                .foregroundColor(hasErrors ? .orange : .green)
+                .foregroundColor(hasErrors ? .refineWarning : .refineSuccess)
                 .font(.system(size: 14))
-            Text(hasErrors ? "Errori" : "OK")
+                .accessibilityHidden(true)
+            Text(hasErrors ? "\(errorCount) errori" : "OK")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.primary)
+                .foregroundStyle(.primary)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
             VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
-                .cornerRadius(8)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color.primary.opacity(0.15), lineWidth: 0.5)

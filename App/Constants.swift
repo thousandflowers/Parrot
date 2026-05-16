@@ -2,7 +2,8 @@ import Cocoa
 
 enum Constants {
     static let bundleID = "com.thousandflowers.refineclone"
-    static let healthInterval: TimeInterval = 5.0
+    static let realtimePollInterval: TimeInterval = 2.0
+    static let debounceInterval: TimeInterval = 0.5
     static let requestTimeout: TimeInterval = 60.0
     static let cacheTTL: TimeInterval = 3600
     static let cacheMaxEntries = 100
@@ -33,15 +34,27 @@ enum Constants {
         static let style = "style"
         static let serviceType = "serviceType"
         static let customPrompts = "customPrompts"
-        static let autoCheckEnabled = "autoCheckEnabled"
         static let openAIBaseURL = "openAIBaseURL"
         static let openAIModel = "openAIModel"
-        static let isFluencyCheckingEnabled = "isFluencyCheckingEnabled"
         static let fluencyServiceType = "fluencyServiceType"
         static let appRules = "appRules"
         static let excludedBundleIDs = "excludedBundleIDs"
         static let ollamaBaseURL = "ollamaBaseURL"
         static let ollamaModel = "ollamaModel"
         static let openRouterModel = "openRouterModel"
+        static let realtimeEnabled = "realtimeEnabled"
+        static let shortcutGrammar = "shortcutGrammar"
+        static let shortcutFluency = "shortcutFluency"
+        static let shortcutEditor  = "shortcutEditor"
+        static let shortcutReplace = "shortcutReplace"
+        static let shortcutTranslate = "shortcutTranslate"
+        static let shortcutApplyDirect = "shortcutApplyDirect"
+        static let shortcutCoach = "shortcutCoach"
+        static let translationLanguage = "translationLanguage"
+        static let lightweightMode = "lightweightMode"
+        static let grammarServiceType = "grammarServiceType"
+        static let explainServiceType = "explainServiceType"
+        static let userDictionaryWords = "userDictionaryWords"
+        static let contextWindowSize = "contextWindowSize"
     }
 }
