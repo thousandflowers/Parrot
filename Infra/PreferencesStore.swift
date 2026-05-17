@@ -306,8 +306,12 @@ final class PreferencesStore {
         return contents.contains { $0.hasSuffix(".gguf") }
     }
 
-    private static func localeDefault() -> String {
-        Locale.current.language.languageCode?.identifier ?? "it"
+    private nonisolated static func localeDefault() -> String {
+        return "auto"
+    }
+
+    nonisolated static func localeDefaultForTesting() -> String {
+        localeDefault()
     }
 
     private func seedSecurityExclusions() {

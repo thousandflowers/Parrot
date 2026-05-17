@@ -593,6 +593,41 @@ final class RuleBasedEngineTests: XCTestCase {
     }
 }
 
+final class LanguageAutoDetectionTests: XCTestCase {
+    func testDetect_englishText_returnsEn() {
+        let lang = LanguageDetector.detect(
+            text: "The quick brown fox jumps over the lazy dog",
+            fallbackLanguage: "it"
+        )
+        XCTAssertEqual(lang, "en")
+    }
+
+    func testDetect_italianText_returnsIt() {
+        let lang = LanguageDetector.detect(
+            text: "Il gatto è sul tavolo e mangia la pasta",
+            fallbackLanguage: "en"
+        )
+        XCTAssertEqual(lang, "it")
+    }
+
+    func testDetect_chineseText_returnsZh() {
+        let lang = LanguageDetector.detect(
+            text: "你好世界，这是一个测试句子。",
+            fallbackLanguage: "en"
+        )
+        XCTAssertTrue(lang.hasPrefix("zh"), "Expected Chinese, got \(lang)")
+    }
+
+    func testDetect_shortText_doesNotCrash() {
+        let lang = LanguageDetector.detect(text: "Hi", fallbackLanguage: "de")
+        XCTAssertFalse(lang.isEmpty)
+    }
+
+    func testLocaleDefault_returnsAuto() {
+        XCTAssertEqual(PreferencesStore.localeDefaultForTesting(), "auto")
+    }
+}
+
 final class RuleBasedEngineUniversalTests: XCTestCase {
     func testDoubleSpace_appliesForChineseLanguage() async {
         let result = await RuleBasedEngine.shared.check("Hello  world", language: "zh")

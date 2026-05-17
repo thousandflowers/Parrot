@@ -47,7 +47,13 @@ struct TextCheckCoordinator: Sendable {
         let checkType: SuggestionPanelController.RetryCheckType
         if case .fluency = type { checkType = .fluency(pid) } else { checkType = .grammar(pid) }
         performCheck(frontAppPID: pid, checkType: checkType) { text, resolved, _, detectedTone in
-            let language = await MainActor.run { PreferencesStore.shared.language }
+            let storedLanguage = await MainActor.run { PreferencesStore.shared.language }
+            let language = storedLanguage == "auto"
+                ? LanguageDetector.detect(
+                    text: text,
+                    fallbackLanguage: Locale.current.language.languageCode?.identifier ?? "en"
+                  )
+                : storedLanguage
 
             let customResult = await CustomRuleStore.shared.apply(to: text, language: language)
             let customText = customResult.text
@@ -121,7 +127,7 @@ struct TextCheckCoordinator: Sendable {
     }
 
     func checkStreaming() {
-        runTask { [pendingState] in
+        runTask {
             let prepared = try await prepareCheck()
 
             let service = LLMServiceFactory.make(with: prepared.serviceType)
@@ -363,12 +369,18 @@ struct TextCheckCoordinator: Sendable {
         action: @escaping @Sendable (String, (serviceType: ServiceType?, prompt: CustomPrompt?), CFRange?, DetectedTone?) async throws -> CorrectionResult,
         onSuccess: @escaping @MainActor (CorrectionResult) -> Void
     ) {
-        runTask { [pendingState] in
+        runTask {
             let prepared = try await self.prepareCheck(frontAppPID: frontAppPID)
             await MainActor.run { SuggestionPanelController.shared.showLoading(checkType: checkType) }
 
             let replacementRange: CFRange = prepared.replacementRange ?? CFRange(location: 0, length: 0)
-            let language = await MainActor.run { PreferencesStore.shared.language }
+            let storedLangForTone = await MainActor.run { PreferencesStore.shared.language }
+            let language = storedLangForTone == "auto"
+                ? LanguageDetector.detect(
+                    text: prepared.text,
+                    fallbackLanguage: Locale.current.language.languageCode?.identifier ?? "en"
+                  )
+                : storedLangForTone
             let detectedTone = await ToneDetector.shared.detect(text: prepared.text, language: language)
 
             let resolved = (serviceType: prepared.customPrompt.map { _ in prepared.serviceType }, prompt: prepared.customPrompt)
@@ -379,17 +391,20 @@ struct TextCheckCoordinator: Sendable {
                 ? await AccessibilityBridge.shared.boundsForRange(anchorRange, pid: prepared.capturedPID)
                 : nil
 
-            var finalResult = CorrectionResult(
-                original: rawResult.originalText,
-                corrected: rawResult.correctedText,
-                modelID: rawResult.modelID,
-                explanation: rawResult.explanation,
-                confidence: rawResult.confidence,
-                customInstruction: rawResult.customInstruction,
-                promptType: rawResult.promptType,
-                detectedTone: detectedTone.rawValue)
-            finalResult.replacementRange = replacementRange
-            finalResult.anchorRect = anchorRect
+            let finalResult: CorrectionResult = {
+                var r = CorrectionResult(
+                    original: rawResult.originalText,
+                    corrected: rawResult.correctedText,
+                    modelID: rawResult.modelID,
+                    explanation: rawResult.explanation,
+                    confidence: rawResult.confidence,
+                    customInstruction: rawResult.customInstruction,
+                    promptType: rawResult.promptType,
+                    detectedTone: detectedTone.rawValue)
+                r.replacementRange = replacementRange
+                r.anchorRect = anchorRect
+                return r
+            }()
 
             try Task.checkCancellation()
             await MainActor.run { onSuccess(finalResult) }
