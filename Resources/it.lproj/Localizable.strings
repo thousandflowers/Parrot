@@ -1,0 +1,84 @@
+/* Onboarding */
+"onboarding.step.0" = "Benvenuto";
+"onboarding.step.1" = "Accessibilità";
+"onboarding.step.2" = "Modello AI";
+"onboarding.step.3" = "Pronto";
+"onboarding.welcome.title" = "Benvenuto in RefineClone";
+"onboarding.welcome.feature.correction.title" = "Correzione rapida";
+"onboarding.welcome.feature.correction.detail" = "Seleziona del testo in qualsiasi app e usa la scorciatoia per correggere grammatica e stile.";
+"onboarding.welcome.feature.models.title" = "Modelli locali e cloud";
+"onboarding.welcome.feature.models.detail" = "Usa Ollama o llama.cpp in locale, oppure connetti OpenAI / OpenRouter per un'esperienza cloud.";
+"onboarding.welcome.feature.shortcuts.title" = "Scorciatoie personalizzabili";
+"onboarding.welcome.feature.shortcuts.detail" = "Apri le Preferenze (icona menu bar) per configurare grammatica, fluenza e spiegazioni.";
+"onboarding.accessibility.title" = "Accesso per l'Accessibilità";
+"onboarding.accessibility.body" = "RefineClone ha bisogno dell'accesso per l'accessibilità per leggere e correggere il testo in altre app.";
+"onboarding.accessibility.granted" = "Accesso concesso";
+"onboarding.accessibility.instructions" = "Apri Impostazioni di Sistema → Privacy e Sicurezza → Accessibilità e abilita RefineClone.";
+"onboarding.accessibility.open_settings" = "Apri Impostazioni";
+"onboarding.model.title" = "Download Modello AI";
+"onboarding.model.select_placeholder" = "Seleziona modello";
+"onboarding.model.ready" = "Modello pronto";
+"onboarding.model.retry" = "Riprova";
+"onboarding.model.download_prompt" = "Scarichiamo il modello consigliato per la correzione offline. Richiede ~2-4 GB.";
+"onboarding.ready.title" = "Tutto pronto!";
+"onboarding.nav.back" = "Indietro";
+"onboarding.nav.next" = "Avanti";
+"onboarding.nav.start" = "Inizia";
+"onboarding.nav.download" = "Scarica e continua";
+"onboarding.nav.downloading" = "Download in corso...";
+
+/* Menu Bar */
+"menu.accessibility.ok" = "Accessibilità: OK";
+"menu.accessibility.reenable" = "Accessibilità: Riabilita in Impostazioni →";
+"menu.realtime" = "Controllo in Tempo Reale";
+"menu.grammar" = "Controlla Grammatica (Cmd+Shift+E)";
+"menu.fluency" = "Controlla Fluidità (Cmd+Shift+T)";
+"menu.editor" = "Apri Editor (Cmd+Shift+F)";
+"menu.replace" = "Sostituisci (Cmd+Shift+R)";
+"menu.translate" = "Traduci (Cmd+Shift+Y)";
+"menu.coach" = "Writing Coach (Cmd+Shift+C)";
+"menu.preferences" = "Preferenze...";
+"menu.quit" = "Esci";
+
+/* Suggestion & Floating Editor */
+"suggestion.tone.formal" = "Formale";
+"suggestion.tone.informal" = "Informale";
+"suggestion.tone.neutral" = "Neutrale";
+"suggestion.tone.academic" = "Accademico";
+"suggestion.tone.technical" = "Tecnico";
+"suggestion.tone.detected_prefix" = "Tono rilevato:";
+"suggestion.header.analyzing" = "Analizzando...";
+"suggestion.header.correcting" = "Correggendo...";
+"suggestion.header.suggestion" = "Suggerimento";
+"suggestion.header.fluency" = "Fluidità";
+"suggestion.header.no_errors" = "Nessun errore";
+"suggestion.header.error" = "Errore";
+"suggestion.header.too_long" = "Testo troppo lungo";
+"editor.panel.original" = "Originale";
+"editor.panel.corrected" = "Corretto";
+"editor.placeholder" = "Il testo corretto apparirà qui";
+"editor.button.check" = "Controlla";
+"editor.button.checking" = "Controllando\u{2026}";
+"editor.button.copy" = "Copia";
+"editor.mode.grammar" = "Grammatica";
+"editor.mode.fluency" = "Fluidità";
+
+/* Preferences */
+"prefs.language.auto" = "Automatico (rileva dal testo)";
+"prefs.section.corrector" = "Correttore (Cmd+Shift+E)";
+"prefs.section.fluency_service" = "Fluency (Cmd+Shift+T)";
+"prefs.server.running" = "llama-server: attivo";
+"prefs.server.stopped" = "llama-server: fermo";
+
+/* Alerts (AppDelegate) */
+"alert.ollama.title" = "Ollama non rilevato";
+"alert.ollama.body" = "Il service è configurato per usare Ollama (localhost:11434), ma il server non risulta in esecuzione. Avvia Ollama o modifica il service nelle Preferenze.";
+"alert.shortcuts.title" = "Scorciatoie non disponibili";
+"alert.shortcuts.body_format" = "Le seguenti scorciatoie sono già in uso:\n%@\n\nModificale nelle Preferenze.";
+"alert.ok" = "OK";
+"alert.window.welcome" = "Benvenuto";
+
+/* Model reasons (ModelCatalog) */
+"model.qwen.reason" = "Minimo consumo RAM — ideale per testi brevi e lingua cinese";
+"model.gemma2b.reason" = "Buona qualità per lingue occidentali — Mac con meno di 16 GB";
+"model.gemma4b.reason" = "Massima qualità per lingue occidentali — richiede Mac con 16 GB RAM o più";

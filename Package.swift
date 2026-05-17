@@ -14,13 +14,22 @@ let package = Package(
             exclude: [
                 "Resources/Info.plist",
                 "Resources/RefineClone.entitlements",
+                "Resources/en.lproj",
+                "Resources/it.lproj",
+                "Resources/zh-Hans.lproj",
+                "Resources/hr.lproj",
+                "Resources/da.lproj",
+                "Resources/nb.lproj",
+                "Resources/el.lproj",
                 "PopClip",
                 "Package.swift",
                 "README.md",
+                "CHANGELOG.md",
                 ".gitignore",
                 "Tests",
                 ".build",
-                "setup-dev.sh"
+                "setup-dev.sh",
+                "build-app.sh"
             ]
         ),
         .testTarget(

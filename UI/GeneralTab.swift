@@ -85,6 +85,8 @@ struct GeneralTab: View {
 
             Section("Lingua") {
                 Picker("Lingua", selection: $prefs.language) {
+                    Text(String(localized: "prefs.language.auto")).tag("auto")
+                    Divider()
                     Text("Europee").font(.caption).foregroundStyle(.secondary).disabled(true)
                     Text("Italiano").tag("it")
                     Text("English (US)").tag("en-US")
