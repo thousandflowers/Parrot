@@ -125,7 +125,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let hostingCtrl = NSHostingController(rootView: OnboardingView())
         let window = NSWindow(contentViewController: hostingCtrl)
-        window.title = "Benvenuto"
+        window.title = String(localized: "alert.window.welcome")
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
         window.center()
@@ -156,10 +156,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if !detected, LLMServiceFactory.resolveDefaultServiceType() == .ollama {
             await MainActor.run {
                 let alert = NSAlert()
-                alert.messageText = "Ollama non rilevato"
-                alert.informativeText = "Il service è configurato per usare Ollama (localhost:11434), ma il server non risulta in esecuzione. Avvia Ollama o modifica il service nelle Preferenze."
+                alert.messageText = String(localized: "alert.ollama.title")
+                alert.informativeText = String(localized: "alert.ollama.body")
                 alert.alertStyle = .warning
-                alert.addButton(withTitle: "OK")
+                alert.addButton(withTitle: String(localized: "alert.ok"))
                 alert.runModal()
             }
         }
@@ -169,10 +169,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func warnFailedShortcuts() {
         guard let failed = hotkeyManager?.failedShortcuts, !failed.isEmpty else { return }
         let alert = NSAlert()
-        alert.messageText = "Scorciatoie non disponibili"
-        alert.informativeText = "Le seguenti scorciatoie sono già in uso:\n\(failed.joined(separator: ", "))\n\nModificale nelle Preferenze."
+        alert.messageText = String(localized: "alert.shortcuts.title")
+        alert.informativeText = String(format: String(localized: "alert.shortcuts.body_format"), failed.joined(separator: ", "))
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: String(localized: "alert.ok"))
         alert.runModal()
     }
 }

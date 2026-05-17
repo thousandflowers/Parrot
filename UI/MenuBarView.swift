@@ -26,7 +26,7 @@ struct MenuBarView: View {
                             .foregroundColor(.refineSuccess)
                             .frame(width: 16)
                             .accessibilityHidden(true)
-                        Text("Accessibilità: OK")
+                        Text(String(localized: "menu.accessibility.ok"))
                             .font(.caption)
                     }
                 } else {
@@ -40,7 +40,7 @@ struct MenuBarView: View {
                                 .foregroundColor(.refineWarning)
                                 .frame(width: 16)
                                 .accessibilityHidden(true)
-                            Text("Accessibilità: Riabilita in Impostazioni →")
+                            Text(String(localized: "menu.accessibility.reenable"))
                                 .font(.caption)
                         }
                     }
@@ -73,14 +73,14 @@ struct MenuBarView: View {
             Divider()
 
             Group {
-                Toggle("Controllo in Tempo Reale", isOn: Bindable(prefs).realtimeEnabled)
+                Toggle(String(localized: "menu.realtime"), isOn: Bindable(prefs).realtimeEnabled)
                     .padding(.horizontal, 12)
 
                 Button(action: { checkGrammar() }) {
                     HStack {
                         Image(systemName: "text.badge.checkmark")
                             .accessibilityHidden(true)
-                        Text("Controlla Grammatica (Cmd+Shift+E)")
+                        Text(String(localized: "menu.grammar"))
                     }
                 }
                 .buttonStyle(.plain)
@@ -91,7 +91,7 @@ struct MenuBarView: View {
                     HStack {
                         Image(systemName: "text.badge.star")
                             .accessibilityHidden(true)
-                        Text("Controlla Fluidità (Cmd+Shift+T)")
+                        Text(String(localized: "menu.fluency"))
                     }
                 }
                 .buttonStyle(.plain)
@@ -102,7 +102,7 @@ struct MenuBarView: View {
                     HStack {
                         Image(systemName: "text.cursor")
                             .accessibilityHidden(true)
-                        Text("Apri Editor (Cmd+Shift+F)")
+                        Text(String(localized: "menu.editor"))
                     }
                 }
                 .buttonStyle(.plain)
@@ -113,7 +113,7 @@ struct MenuBarView: View {
                     HStack {
                         Image(systemName: "arrow.triangle.2.circlepath")
                             .accessibilityHidden(true)
-                        Text("Sostituisci (Cmd+Shift+R)")
+                        Text(String(localized: "menu.replace"))
                     }
                 }
                 .buttonStyle(.plain)
@@ -124,7 +124,7 @@ struct MenuBarView: View {
                     HStack {
                         Image(systemName: "translate")
                             .accessibilityHidden(true)
-                        Text("Traduci (Cmd+Shift+Y)")
+                        Text(String(localized: "menu.translate"))
                     }
                 }
                 .buttonStyle(.plain)
@@ -135,7 +135,7 @@ struct MenuBarView: View {
                     HStack {
                         Image(systemName: "graduationcap")
                             .accessibilityHidden(true)
-                        Text("Writing Coach (Cmd+Shift+C)")
+                        Text(String(localized: "menu.coach"))
                     }
                 }
                 .buttonStyle(.plain)
@@ -146,7 +146,7 @@ struct MenuBarView: View {
                     HStack {
                         Image(systemName: "gearshape")
                             .accessibilityHidden(true)
-                        Text("Preferenze...")
+                        Text(String(localized: "menu.preferences"))
                     }
                 }
                 .buttonStyle(.plain)
@@ -162,7 +162,7 @@ struct MenuBarView: View {
                     HStack {
                         Image(systemName: "power")
                             .accessibilityHidden(true)
-                        Text("Esci")
+                        Text(String(localized: "menu.quit"))
                     }
                 }
                 .buttonStyle(.plain)

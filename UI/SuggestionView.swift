@@ -113,14 +113,14 @@ struct SuggestionView: View {
         guard let tone = result?.detectedTone, !tone.isEmpty else { return nil }
         let display: String
         switch tone {
-        case "formal": display = "Formale"
-        case "informal": display = "Informale"
-        case "neutral": display = "Neutrale"
-        case "academic": display = "Accademico"
-        case "technical": display = "Tecnico"
-        default: display = tone.capitalized
+        case "formal":   display = String(localized: "suggestion.tone.formal")
+        case "informal": display = String(localized: "suggestion.tone.informal")
+        case "neutral":  display = String(localized: "suggestion.tone.neutral")
+        case "academic": display = String(localized: "suggestion.tone.academic")
+        case "technical":display = String(localized: "suggestion.tone.technical")
+        default:         display = tone.capitalized
         }
-        return "Tono rilevato: \(display)"
+        return "\(String(localized: "suggestion.tone.detected_prefix")) \(display)"
     }
 
     @ViewBuilder
@@ -161,13 +161,13 @@ struct SuggestionView: View {
 
     private var headerTitle: String {
         switch state {
-        case .loading:         return "Analizzando..."
-        case .streaming:       return "Correggendo..."
-        case .suggestion:      return "Suggerimento"
-        case .fluencySuggestion: return "Fluidità"
-        case .noErrors:        return "Nessun errore"
-        case .error:           return "Errore"
-        case .textTooLong:     return "Testo troppo lungo"
+        case .loading:           return String(localized: "suggestion.header.analyzing")
+        case .streaming:         return String(localized: "suggestion.header.correcting")
+        case .suggestion:        return String(localized: "suggestion.header.suggestion")
+        case .fluencySuggestion: return String(localized: "suggestion.header.fluency")
+        case .noErrors:          return String(localized: "suggestion.header.no_errors")
+        case .error:             return String(localized: "suggestion.header.error")
+        case .textTooLong:       return String(localized: "suggestion.header.too_long")
         }
     }
 

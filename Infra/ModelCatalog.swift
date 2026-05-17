@@ -5,7 +5,7 @@ enum ModelCatalog {
         ModelRecommendation(
             id: "qwen2.5-1.5b-instruct-q4_k_m",
             name: "Qwen 2.5 1.5B",
-            reason: "Minimo consumo RAM — ideale per testi brevi e lingua cinese",
+            reason: String(localized: "model.qwen.reason"),
             sizeLabel: "~1.3 GB",
             ramRequired: 2,
             url: URL(string: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf")!,
@@ -15,7 +15,7 @@ enum ModelCatalog {
         ModelRecommendation(
             id: "gemma-4-E2B-it-q4_k_m",
             name: "Gemma 4 E2B IT (5B)",
-            reason: "Buona qualità per lingue occidentali — Mac con meno di 16 GB",
+            reason: String(localized: "model.gemma2b.reason"),
             sizeLabel: "~2.5 GB",
             ramRequired: 4,
             url: URL(string: "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf")!,
@@ -25,7 +25,7 @@ enum ModelCatalog {
         ModelRecommendation(
             id: "gemma-4-E4B-it-q4_k_m",
             name: "Gemma 4 E4B IT (8B)",
-            reason: "Massima qualità per lingue occidentali — richiede Mac con 16 GB RAM o più",
+            reason: String(localized: "model.gemma4b.reason"),
             sizeLabel: "~4 GB",
             ramRequired: 6,
             url: URL(string: "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf")!,

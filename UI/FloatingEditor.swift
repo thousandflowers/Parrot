@@ -58,8 +58,15 @@ struct FloatingEditorView: View {
     @State private var checkTask: Task<Void, Never>?
 
     enum CheckMode: String, CaseIterable {
-        case grammar = "Grammatica"
-        case fluency = "Fluidità"
+        case grammar = "grammar"
+        case fluency = "fluency"
+
+        var localizedName: String {
+            switch self {
+            case .grammar: return String(localized: "editor.mode.grammar")
+            case .fluency: return String(localized: "editor.mode.fluency")
+            }
+        }
     }
 
     var body: some View {
@@ -67,7 +74,7 @@ struct FloatingEditorView: View {
             HStack {
                 Picker("", selection: $checkMode) {
                     ForEach(CheckMode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue).tag(mode)
+                        Text(mode.localizedName).tag(mode)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -84,7 +91,7 @@ struct FloatingEditorView: View {
 
             HSplitView {
                 VStack {
-                    Text("Originale")
+                    Text(String(localized: "editor.panel.original"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.top, 4)
@@ -100,14 +107,14 @@ struct FloatingEditorView: View {
                 }
 
                 VStack {
-                    Text("Corretto")
+                    Text(String(localized: "editor.panel.corrected"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.top, 4)
 
                     ScrollView {
                         if correctedText.isEmpty {
-                            Text("Il testo corretto apparirà qui")
+                            Text(String(localized: "editor.placeholder"))
                                 .font(.body)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -142,15 +149,15 @@ struct FloatingEditorView: View {
                         ProgressView()
                             .scaleEffect(0.8)
                             .frame(width: 16)
-                        Text("Controllando…")
+                        Text(String(localized: "editor.button.checking"))
                     } else {
-                        Text("Controlla")
+                        Text(String(localized: "editor.button.check"))
                     }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
 
-                Button("Copia") {
+                Button(String(localized: "editor.button.copy")) {
                     NSPasteboard.general.clearContents()
                     let item = NSPasteboardItem()
                     item.setString(correctedText, forType: .string)

@@ -14,7 +14,12 @@ struct OnboardingView: View {
     @State private var llamaServerReady = false
     @State private var downloadTask: Task<Void, Never>?
 
-    private let steps = ["Benvenuto", "Accessibilità", "Modello AI", "Pronto"]
+    private let steps = [
+        String(localized: "onboarding.step.0"),
+        String(localized: "onboarding.step.1"),
+        String(localized: "onboarding.step.2"),
+        String(localized: "onboarding.step.3")
+    ]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -74,20 +79,20 @@ struct OnboardingView: View {
                 .padding(.bottom, 16)
                 .accessibilityHidden(true)
 
-            Text("Benvenuto in RefineClone")
+            Text(String(localized: "onboarding.welcome.title"))
                 .font(.title2.weight(.semibold))
                 .padding(.bottom, 24)
 
             VStack(alignment: .leading, spacing: 16) {
                 OnboardRow(icon: "text.badge.checkmark",
-                           title: "Correzione rapida",
-                           detail: "Seleziona del testo in qualsiasi app e usa la scorciatoia per correggere grammatica e stile.")
+                           title: String(localized: "onboarding.welcome.feature.correction.title"),
+                           detail: String(localized: "onboarding.welcome.feature.correction.detail"))
                 OnboardRow(icon: "character.book.closed",
-                           title: "Modelli locali e cloud",
-                           detail: "Usa Ollama o llama.cpp in locale, oppure connetti OpenAI / OpenRouter per un'esperienza cloud.")
+                           title: String(localized: "onboarding.welcome.feature.models.title"),
+                           detail: String(localized: "onboarding.welcome.feature.models.detail"))
                 OnboardRow(icon: "keyboard",
-                           title: "Scorciatoie personalizzabili",
-                           detail: "Apri le Preferenze (icona menu bar) per configurare grammatica, fluenza e spiegazioni.")
+                           title: String(localized: "onboarding.welcome.feature.shortcuts.title"),
+                           detail: String(localized: "onboarding.welcome.feature.shortcuts.detail"))
             }
             .padding(.horizontal, 32)
         }
@@ -101,28 +106,28 @@ struct OnboardingView: View {
                 .font(.system(size: 40))
                 .foregroundStyle(accessibilityGranted ? .green : .orange)
 
-            Text("Accesso per l'Accessibilità")
+            Text(String(localized: "onboarding.accessibility.title"))
                 .font(.title2.weight(.semibold))
 
-            Text("RefineClone ha bisogno dell'accesso per l'accessibilità per leggere e correggere il testo in altre app.")
+            Text(String(localized: "onboarding.accessibility.body"))
                 .font(.body)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 32)
 
             if accessibilityGranted {
-                Label("Accesso concesso", systemImage: "checkmark.circle.fill")
+                Label(String(localized: "onboarding.accessibility.granted"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.body.weight(.medium))
             } else {
                 VStack(spacing: 8) {
-                    Text("Apri Impostazioni di Sistema → Privacy e Sicurezza → Accessibilità e abilita RefineClone.")
+                    Text(String(localized: "onboarding.accessibility.instructions"))
                         .font(.caption)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 24)
 
-                    Button("Apri Impostazioni") {
+                    Button(String(localized: "onboarding.accessibility.open_settings")) {
                         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
                             NSWorkspace.shared.open(url)
                         }
@@ -153,7 +158,7 @@ struct OnboardingView: View {
             }
         } label: {
             HStack(spacing: 6) {
-                Text(selectedModel?.name ?? "Seleziona modello")
+                Text(selectedModel?.name ?? String(localized: "onboarding.model.select_placeholder"))
                     .font(.body.weight(.medium))
                 Image(systemName: "chevron.down")
                     .imageScale(.small)
@@ -178,7 +183,7 @@ struct OnboardingView: View {
                 .font(.system(size: 40))
                 .foregroundStyle(downloadComplete ? .green : .blue)
 
-            Text("Download Modello AI")
+            Text(String(localized: "onboarding.model.title"))
                 .font(.title2.weight(.semibold))
 
             modelPickerButton
@@ -202,7 +207,7 @@ struct OnboardingView: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             } else if downloadComplete {
-                Label("Modello pronto", systemImage: "checkmark.circle.fill")
+                Label(String(localized: "onboarding.model.ready"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.body.weight(.medium))
             } else if let error = downloadError {
@@ -212,13 +217,13 @@ struct OnboardingView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
 
-                Button("Riprova") {
+                Button(String(localized: "onboarding.model.retry")) {
                     downloadError = nil
                     startDownload()
                 }
                 .buttonStyle(.bordered)
             } else {
-                Text("Scarichiamo il modello consigliato per la correzione offline. Richiede ~2-4 GB.")
+                Text(String(localized: "onboarding.model.download_prompt"))
                     .font(.caption)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
@@ -237,7 +242,7 @@ struct OnboardingView: View {
                 .foregroundStyle(.tint)
                 .accessibilityHidden(true)
 
-            Text("Tutto pronto!")
+            Text(String(localized: "onboarding.ready.title"))
                 .font(.title2.weight(.semibold))
 
             VStack(alignment: .leading, spacing: 10) {
@@ -260,7 +265,7 @@ struct OnboardingView: View {
     private var navigationButtons: some View {
         HStack(spacing: 16) {
             if step > 0 {
-                Button("Indietro") {
+                Button(String(localized: "onboarding.nav.back")) {
                     step -= 1
                 }
                 .buttonStyle(.bordered)
@@ -271,7 +276,13 @@ struct OnboardingView: View {
 
             if step < 3 {
                 let canAdvance = step != 1 || accessibilityGranted
-                Button(step == 2 ? (isDownloading ? "Download in corso..." : (downloadComplete ? "Avanti" : "Scarica e continua")) : "Avanti") {
+                Button(step == 2
+                    ? (isDownloading
+                        ? String(localized: "onboarding.nav.downloading")
+                        : (downloadComplete
+                            ? String(localized: "onboarding.nav.next")
+                            : String(localized: "onboarding.nav.download")))
+                    : String(localized: "onboarding.nav.next")) {
                     if step == 2 && !isDownloading && !downloadComplete {
                         startDownload()
                     } else {
@@ -282,7 +293,7 @@ struct OnboardingView: View {
                 .controlSize(.large)
                 .disabled(!canAdvance || (step == 2 && isDownloading))
             } else {
-                Button("Inizia") {
+                Button(String(localized: "onboarding.nav.start")) {
                     onDismiss?()
                 }
                 .buttonStyle(.borderedProminent)

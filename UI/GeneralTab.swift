@@ -6,7 +6,7 @@ struct GeneralTab: View {
 
     var body: some View {
         Form {
-            Section("Correttore (Cmd+Shift+E)") {
+            Section(String(localized: "prefs.section.corrector")) {
                 Picker("Servizio", selection: $prefs.serviceType) {
                     Text("Stub (test)").tag(ServiceType.stub)
                     Text("Locale (llama.cpp)").tag(ServiceType.local)
@@ -22,7 +22,7 @@ struct GeneralTab: View {
                 }
             }
 
-            Section("Fluency (Cmd+Shift+T)") {
+            Section(String(localized: "prefs.section.fluency_service")) {
                 Picker("Servizio Fluency", selection: $prefs.fluencyServiceType) {
                     Text("Stub (test)").tag(ServiceType.stub)
                     Text("Locale (llama.cpp)").tag(ServiceType.local)
@@ -198,7 +198,7 @@ struct GeneralTab: View {
                     Circle()
                         .fill(serverIsRunning ? Color.refineSuccess : Color.refineError)
                         .frame(width: 8, height: 8)
-                    Text(serverIsRunning ? "llama-server: attivo" : "llama-server: fermo")
+                    Text(serverIsRunning ? String(localized: "prefs.server.running") : String(localized: "prefs.server.stopped"))
                         .font(.caption)
                 }
             }
