@@ -247,8 +247,9 @@ actor ModelManager: Sendable {
 
     /// Canonical path where the app stores its own llama-server copy.
     nonisolated var llamaServerDestination: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("RefineClone/llama-server")
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return base.appendingPathComponent("RefineClone/llama-server")
     }
 
     /// Returns the URL of a usable llama-server binary, checking several locations.

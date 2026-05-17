@@ -61,7 +61,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             didReply = true
             DispatchQueue.main.async { NSApp.reply(toApplicationShouldTerminate: true) }
         }
-        let timeout = Task { try? await Task.sleep(for: .seconds(10)); replyOnce() }
+        let timeout = Task {
+            try? await Task.sleep(for: .seconds(10))
+            guard !Task.isCancelled else { return }
+            replyOnce()
+        }
         Task {
             await RealtimeMonitor.shared.stop()
             await ServerManager.shared.stop()

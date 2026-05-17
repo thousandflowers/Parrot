@@ -29,7 +29,8 @@ let package = Package(
                 "Tests",
                 ".build",
                 "setup-dev.sh",
-                "build-app.sh"
+                "build-app.sh",
+                "RefineClone.app"
             ]
         ),
         .testTarget(

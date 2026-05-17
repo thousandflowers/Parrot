@@ -187,7 +187,7 @@ actor RuleBasedEngine {
                 pattern: "(?i)\\byour\\b(?=\\s+(?:welcome|right|wrong|absolutely|correct|kidding|joking|being|doing|going|coming|looking|trying|making|very))",
                 options: [],
                 replacement: { match in
-                    match.hasPrefix("Y") && match.hasPrefix("Your") ? "You're" : "you're"
+                    match.first?.isUppercase == true ? "You're" : "you're"
                 },
                 reason: "«You're» = you are; «your» = possessivo",
                 languages: ["en"],

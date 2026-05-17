@@ -65,20 +65,22 @@ actor ServerManager: Sendable {
 
             close(probeSock)
 
+            // Assign before run() so the handler can clean up even on immediate exit.
+            self.process = process
+            process.terminationHandler = { [weak self] _ in
+                Task { await self?.handleUnexpectedTermination() }
+            }
+
             do {
                 try process.run()
             } catch {
                 os_log(.error, "ServerManager: process.run() failed (attempt %d): %{public}@",
                        attempt, error.localizedDescription)
+                process.terminationHandler = nil
+                self.process = nil
                 currentPort = 0
                 if attempt < 2 { continue }
                 throw CorrectionError.serverNotRunning
-            }
-            self.process = process
-
-            // Reset state automatically if the process dies unexpectedly
-            process.terminationHandler = { [weak self] _ in
-                Task { await self?.handleUnexpectedTermination() }
             }
 
             do {

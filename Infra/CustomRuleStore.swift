@@ -7,11 +7,16 @@ actor CustomRuleStore {
     private let fileURL: URL
 
     private init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("RefineClone")
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let appSupport = base.appendingPathComponent("RefineClone")
         try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
-        fileURL = appSupport.appendingPathComponent("custom_rules.json")
-        loadSync()
+        let url = appSupport.appendingPathComponent("custom_rules.json")
+        fileURL = url
+        if let data = try? Data(contentsOf: url),
+           let decoded = try? JSONDecoder().decode([CustomRule].self, from: data) {
+            rules = decoded
+        }
     }
 
     func allRules() -> [CustomRule] { rules }
@@ -51,12 +56,11 @@ actor CustomRuleStore {
                     for match in matches.reversed() {
                         guard let range = Range(match.range, in: result) else { continue }
                         let original = String(result[range])
-                        let replaced = regex.stringByReplacingMatches(
+                        result = regex.stringByReplacingMatches(
                             in: result, options: [], range: match.range,
                             withTemplate: rule.replacement
                         )
-                        fixes.append(CustomRuleFix(ruleName: rule.name, original: original, corrected: String(replaced[Range(match.range, in: replaced)!])))
-                        result = replaced
+                        fixes.append(CustomRuleFix(ruleName: rule.name, original: original, corrected: rule.replacement))
                     }
                 } catch {
                     continue
@@ -75,22 +79,6 @@ actor CustomRuleStore {
         }
 
         return (result, fixes)
-    }
-
-    private func loadSync() {
-        guard let data = try? Data(contentsOf: fileURL),
-              let decoded = try? JSONDecoder().decode([CustomRule].self, from: data) else {
-            return
-        }
-        rules = decoded
-    }
-
-    private func load() {
-        guard let data = try? Data(contentsOf: fileURL),
-              let decoded = try? JSONDecoder().decode([CustomRule].self, from: data) else {
-            return
-        }
-        rules = decoded
     }
 
     private func save() {
