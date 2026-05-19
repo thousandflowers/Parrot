@@ -242,20 +242,114 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# DMG packaging
+# DMG packaging — styled with drag-to-Applications background
 # ---------------------------------------------------------------------------
-echo "[*] Creating ${APP_DIR%.app}.dmg..."
 DMG_NAME="${APP_DIR%.app}.dmg"
+DMG_TMP="${APP_DIR%.app}-rw.dmg"
+DMG_VOL="Parrot"
+
+echo "[*] Creating ${DMG_NAME} (styled drag-to-Applications)..."
+
+# Detach any previous mount with the same name
+hdiutil detach "/Volumes/${DMG_VOL}" -quiet 2>/dev/null || true
+
+# Calculate size with 30 MB headroom for .DS_Store / Finder metadata
+APP_MB=$(du -sm "${APP_DIR}" | awk '{print $1}')
+DMG_MB=$((APP_MB + 30))
+
+# Generate background image (1120×680 px, 2× Retina — displayed at 560×340)
+# Arrow: bar x=440-660 y=325-355, head x=660-740 tapering at y=340
+python3 - /tmp/parrot_dmg_bg.png << 'PYEOF'
+import struct, zlib, sys
+W, H = 1120, 680
+BG    = (246, 246, 248)   # macOS window background
+ARROW = (174, 174, 178)   # systemGray2
+rows = []
+for y in range(H):
+    row = bytearray([0])
+    for x in range(W):
+        r, g, b = BG
+        if 440 <= x < 660 and 325 <= y < 355:
+            r, g, b = ARROW
+        elif 660 <= x < 740:
+            t = (x - 660) / 80.0
+            half = int(30 * (1 - t))
+            if 340 - half <= y < 340 + half:
+                r, g, b = ARROW
+        row.extend([r, g, b])
+    rows.append(bytes(row))
+raw  = b''.join(rows)
+comp = zlib.compress(raw, 6)
+def chunk(n, d):
+    c = n + d
+    return struct.pack('>I', len(d)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+png = (b'\x89PNG\r\n\x1a\n'
+     + chunk(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 2, 0, 0, 0))
+     + chunk(b'IDAT', comp)
+     + chunk(b'IEND', b''))
+open(sys.argv[1], 'wb').write(png)
+PYEOF
+
+# Create blank writable DMG
+rm -f "${DMG_TMP}"
+hdiutil create -size "${DMG_MB}m" -volname "${DMG_VOL}" \
+    -fs HFS+ "${DMG_TMP}" > /dev/null
+
+# Mount at a fixed path to avoid races
+hdiutil attach -readwrite -noverify -noautoopen \
+    -mountpoint "/Volumes/${DMG_VOL}" "${DMG_TMP}" > /dev/null
+
+MOUNT="/Volumes/${DMG_VOL}"
+
+# Populate
+cp -r "${APP_DIR}" "${MOUNT}/"
+ln -s /Applications "${MOUNT}/Applications"
+mkdir -p "${MOUNT}/.background"
+cp /tmp/parrot_dmg_bg.png "${MOUNT}/.background/background.png"
+chflags hidden "${MOUNT}/.background" 2>/dev/null || true
+
+# Configure window appearance and icon positions via Finder
+osascript << APPLESCRIPT
+tell application "Finder"
+    tell disk "${DMG_VOL}"
+        open
+        delay 1
+        set current view of container window to icon view
+        set toolbar visible of container window to false
+        set statusbar visible of container window to false
+        set the bounds of container window to {100, 100, 660, 440}
+        set viewOptions to the icon view options of container window
+        set arrangement of viewOptions to not arranged
+        set icon size of viewOptions to 128
+        set background picture of viewOptions to file ".background:background.png"
+        set position of item "Parrot.app" of container window to {140, 170}
+        set position of item "Applications" of container window to {420, 170}
+        close
+        open
+        update without registering applications
+        delay 3
+        close
+    end tell
+end tell
+APPLESCRIPT
+
+sync
+
+# Unmount
+hdiutil detach "${MOUNT}" -quiet
+
+# Convert to final compressed read-only DMG
 rm -f "${DMG_NAME}"
-hdiutil create -volname "Parrot" \
-    -srcfolder "${APP_DIR}" \
-    -ov -format UDZO \
-    "${DMG_NAME}" > /dev/null
+hdiutil convert "${DMG_TMP}" -format UDZO -imagekey zlib-level=9 \
+    -o "${DMG_NAME}" > /dev/null
+rm -f "${DMG_TMP}"
+rm -f /tmp/parrot_dmg_bg.png
+
 echo "[✓] ${DMG_NAME} ready."
 
 echo ""
 echo "[✓] Build complete: ${APP_DIR} + ${DMG_NAME}"
 if [ "${SIGNING_IDENTITY}" = "-" ]; then
-    echo "    Testers: right-click the .app → Open on first launch to bypass Gatekeeper."
-    echo "    For proper distribution: set SIGNING_IDENTITY + NOTARIZE_* and rebuild."
+    echo "    First-launch: right-click Parrot.app → Open to bypass Gatekeeper."
+    echo "    For distribution without warnings: set SIGNING_IDENTITY + NOTARIZE_* and rebuild."
 fi

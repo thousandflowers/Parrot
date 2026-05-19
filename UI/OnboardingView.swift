@@ -51,7 +51,7 @@ struct OnboardingView: View {
     @State private var step = 0
     @State private var prefs = PreferencesStore.shared
 
-    private let totalSteps = 6
+    private let totalSteps = 7
 
     var body: some View {
         VStack(spacing: 0) {
@@ -71,11 +71,12 @@ struct OnboardingView: View {
     @ViewBuilder
     private var stepContent: some View {
         switch step {
-        case 0: WelcomeStep()
-        case 1: AccessibilityStep()
-        case 2: ServiceStep(prefs: prefs)
-        case 3: LanguageStyleStep()
-        case 4: ShortcutsStep()
+        case 0: InstallStep()
+        case 1: WelcomeStep()
+        case 2: AccessibilityStep()
+        case 3: ServiceStep(prefs: prefs)
+        case 4: LanguageStyleStep()
+        case 5: ShortcutsStep()
         default: ReadyStep(prefs: prefs)
         }
     }
@@ -129,7 +130,106 @@ struct OnboardingView: View {
     }
 }
 
-// MARK: - Step 0: Welcome
+// MARK: - Step 0: Install
+
+private struct InstallStep: View {
+    @State private var isInApplications = Bundle.main.bundlePath.hasPrefix("/Applications")
+
+    var body: some View {
+        VStack(spacing: 22) {
+            Spacer()
+
+            VStack(spacing: 6) {
+                Image(systemName: "arrow.down.app.fill")
+                    .font(.system(size: 44))
+                    .foregroundStyle(Color.accentColor)
+                    .symbolRenderingMode(.hierarchical)
+
+                Text("Install Parrot")
+                    .font(.title2.bold())
+
+                if isInApplications {
+                    Label("Parrot is installed in your Applications folder", systemImage: "checkmark.circle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.green)
+                } else {
+                    Text("Drag Parrot to Applications to complete installation.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+
+            // Drag diagram
+            HStack(spacing: 0) {
+                VStack(spacing: 8) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.accentColor.opacity(0.12))
+                            .frame(width: 76, height: 76)
+                        Text("🦜").font(.system(size: 42))
+                    }
+                    Text("Parrot.app")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Image(systemName: "arrow.right")
+                    .font(.title.weight(.medium))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 80)
+
+                VStack(spacing: 8) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.blue.opacity(0.10))
+                            .frame(width: 76, height: 76)
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 42))
+                            .foregroundStyle(.blue)
+                            .symbolRenderingMode(.hierarchical)
+                    }
+                    Text("Applications")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(20)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(.separator.opacity(0.4), lineWidth: 0.5)
+            )
+
+            if !isInApplications {
+                Button("Open Applications Folder") {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications"))
+                }
+                .buttonStyle(.bordered)
+            }
+
+            // Gatekeeper note
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "lock.shield.fill")
+                    .foregroundStyle(.orange)
+                    .font(.callout)
+                    .padding(.top, 1)
+                Text("If macOS shows **\"Apple cannot verify…\"**: right-click Parrot → **Open** → **Open** in the dialog. This only happens once.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 32)
+
+            Spacer()
+        }
+        .padding()
+    }
+}
+
+// MARK: - Step 1: Welcome
 
 private struct WelcomeStep: View {
     var body: some View {
