@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Parrot}",
+            "name": "Debug Parrot",
+            "target": "Parrot",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug Parrot"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Parrot}",
+            "name": "Release Parrot",
+            "target": "Parrot",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release Parrot"
+        }
+    ]
+}

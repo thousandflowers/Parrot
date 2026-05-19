@@ -1,0 +1,13 @@
+{
+  "identifier": "com.thousandflowers.parrot.popclip",
+  "name": "Parrot",
+  "description": "Correggi il testo selezionato con Parrot",
+  "icon": "Parrot.png",
+  "entitlements": ["dynamic-urls"],
+  "actions": [
+    {
+      "title": "Correggi",
+      "url": "parrot://correct?text={popclip text url}"
+    }
+  ]
+}
