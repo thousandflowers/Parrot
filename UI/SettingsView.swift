@@ -7,31 +7,31 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             GeneralTab(prefs: prefs, serverIsRunning: serverIsRunning)
-                .tabItem { Label("Generale", systemImage: "gearshape") }
+                .tabItem { Label("General", systemImage: "gearshape") }
 
             ModelsTab(prefs: prefs, serverIsRunning: serverIsRunning)
-                .tabItem { Label("Modelli", systemImage: "brain") }
+                .tabItem { Label("Models", systemImage: "brain") }
 
             PromptTab(prefs: prefs)
                 .tabItem { Label("Prompt", systemImage: "text.quote") }
 
             AppRulesTab(prefs: prefs)
-                .tabItem { Label("Regole App", systemImage: "apps.iphone") }
+                .tabItem { Label("App Rules", systemImage: "apps.iphone") }
 
             ExclusionsTab(prefs: prefs)
-                .tabItem { Label("Esclusioni", systemImage: "eye.slash") }
+                .tabItem { Label("Exclusions", systemImage: "eye.slash") }
 
             ShortcutsTab(prefs: prefs)
-                .tabItem { Label("Scorciatoie", systemImage: "keyboard") }
+                .tabItem { Label("Shortcuts", systemImage: "keyboard") }
 
             PresetsTab(prefs: prefs)
-                .tabItem { Label("Preset", systemImage: "star") }
+                .tabItem { Label("Presets", systemImage: "star") }
 
             AdvancedTab()
-                .tabItem { Label("Avanzate", systemImage: "wrench.adjustable") }
+                .tabItem { Label("Advanced", systemImage: "wrench.adjustable") }
 
             HistoryTab()
-                .tabItem { Label("Cronologia", systemImage: "clock") }
+                .tabItem { Label("History", systemImage: "clock") }
         }
         .frame(minWidth: 560, minHeight: 420)
         .task {

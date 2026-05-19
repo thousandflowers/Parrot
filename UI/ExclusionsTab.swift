@@ -26,12 +26,12 @@ struct ExclusionsTab: View {
             Divider()
 
             HStack {
-                Button("Aggiungi app…") {
+                Button("Add app…") {
                     let panel = NSOpenPanel()
                     panel.allowedContentTypes = [.application]
                     panel.canChooseDirectories = false
                     panel.allowsMultipleSelection = false
-                    panel.message = "Seleziona un'app da escludere dal controllo automatico"
+                    panel.message = "Select an app to exclude from automatic checks"
                     if panel.runModal() == .OK,
                        let url = panel.url,
                        let bundle = Bundle(url: url),

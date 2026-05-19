@@ -30,12 +30,12 @@ struct PromptTab: View {
             Divider()
 
             HStack(spacing: 8) {
-                TextField("Nome prompt", text: $newPromptName)
+                TextField("Prompt name", text: $newPromptName)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 160)
-                TextField("Template ({{TEXT}} = testo selezionato)", text: $newPromptTemplate)
+                TextField("Template ({{TEXT}} = selected text)", text: $newPromptTemplate)
                     .textFieldStyle(.roundedBorder)
-                Button("Aggiungi") {
+                Button("Add") {
                     guard !newPromptName.isEmpty, !newPromptTemplate.isEmpty else { return }
                     prefs.addCustomPrompt(CustomPrompt(name: newPromptName, template: newPromptTemplate))
                     newPromptName = ""

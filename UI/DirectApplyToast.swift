@@ -55,7 +55,7 @@ final class DirectApplyToast {
         }
         currentWindow?.orderOut(nil)
         currentWindow = nil
-        show(message: "Correzione annullata")
+        show(message: "Correction undone")
     }
 
     private static func buildPanel(message: String, showUndo: Bool, undoButton: inout NSButton?) -> NSPanel {
@@ -98,7 +98,7 @@ final class DirectApplyToast {
         NSLayoutConstraint.activate(labelConstraints)
 
         if showUndo {
-            let btn = NSButton(title: "Annulla", target: nil, action: nil)
+            let btn = NSButton(title: "Undo", target: nil, action: nil)
             btn.bezelStyle = .regularSquare
             btn.isBordered = false
             btn.contentTintColor = NSColor.systemBlue

@@ -7,9 +7,9 @@ struct HistoryTab: View {
         VStack(alignment: .leading, spacing: 0) {
             if entries.isEmpty {
                 ContentUnavailableView(
-                    "Nessuna correzione",
+                    "No corrections yet",
                     systemImage: "clock",
-                    description: Text("Le correzioni applicate appariranno qui.")
+                    description: Text("Applied corrections will appear here.")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -37,7 +37,7 @@ struct HistoryTab: View {
             Divider()
             HStack {
                 Spacer()
-                Button("Cancella storia") {
+                Button("Clear history") {
                     Task {
                         await HistoryStore.shared.clear()
                         entries = []

@@ -20,11 +20,11 @@ struct ModelsTab: View {
                 Circle()
                     .fill(serverIsRunning ? Color.statusOk : Color.statusError)
                     .frame(width: 8, height: 8)
-                Text(serverIsRunning ? "Server attivo" : "Server fermo")
+                Text(serverIsRunning ? "Server running" : "Server stopped")
                     .font(.caption)
                 Spacer()
                 if !externalModels.isEmpty {
-                    Text("\(externalModels.count) trovati")
+                    Text("\(externalModels.count) found")
                         .font(.caption2)
                         .foregroundColor(.statusOk)
                 }
@@ -47,7 +47,7 @@ struct ModelsTab: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     if !externalModels.isEmpty {
-                        Text("Modelli Trovati sul Computer")
+                        Text("Models Found on this Mac")
                             .font(.headline)
                             .padding(.top, 8)
                         
@@ -62,7 +62,7 @@ struct ModelsTab: View {
                         Divider().padding(.vertical, 4)
                     }
 
-                    Text("Modelli Disponibili")
+                    Text("Available Models")
                         .font(.headline)
                         .padding(.top, 4)
 
@@ -122,7 +122,7 @@ struct ModelsTab: View {
         activeDownloadID = rec.id
         downloadProgress = 0
         downloadError = nil
-        downloadStatus = "Download in corso..."
+        downloadStatus = "Downloading..."
         downloadTask?.cancel()
         downloadTask = Task {
             do {
@@ -138,10 +138,10 @@ struct ModelsTab: View {
                         downloadStatus = "Download \(Int(fraction * 100))%"
                     case .verifying(let fraction):
                         downloadProgress = fraction
-                        downloadStatus = "Verifica \(Int(fraction * 100))%"
+                        downloadStatus = "Verifying \(Int(fraction * 100))%"
                     case .complete:
                         downloadProgress = 1.0
-                        downloadStatus = "Completato"
+                        downloadStatus = "Complete"
                     }
                 }
                 guard !Task.isCancelled else { return }
@@ -214,11 +214,11 @@ private struct ModelRow: View {
                         .foregroundColor(.textSecondary)
                 }
             } else if isDownloaded {
-                Text("Scaricato")
+                Text("Downloaded")
                     .font(.caption)
                     .foregroundColor(.statusOk)
             } else {
-                Button("Scarica") { onDownload() }
+                Button("Download") { onDownload() }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
             }
@@ -256,11 +256,11 @@ private struct ExternalModelRow: View {
             Spacer()
 
             if isAdopted {
-                Text("In uso")
+                Text("In use")
                     .font(.caption)
                     .foregroundColor(.statusOk)
             } else {
-                Button("Usa") { onAdopt() }
+                Button("Use") { onAdopt() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
             }

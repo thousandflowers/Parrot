@@ -32,7 +32,7 @@ struct AppRulesTab: View {
                         }
 
                         HStack(spacing: 8) {
-                            Picker("Servizio", selection: Binding(
+                            Picker("Service", selection: Binding(
                                 get: { rule.serviceType },
                                 set: { newValue in
                                     var updated = rule
@@ -79,11 +79,11 @@ struct AppRulesTab: View {
 
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
-                    TextField("Bundle ID (es. com.apple.Safari)", text: $newBundleID)
+                    TextField("Bundle ID (e.g. com.apple.Safari)", text: $newBundleID)
                         .textFieldStyle(.roundedBorder)
-                    TextField("Nome (es. Safari)", text: $newDisplayName)
+                    TextField("Name (e.g. Safari)", text: $newDisplayName)
                         .textFieldStyle(.roundedBorder)
-                    Button("Aggiungi") {
+                    Button("Add") {
                         guard !newBundleID.isEmpty, !newDisplayName.isEmpty else { return }
                         prefs.addAppRule(AppRule(bundleID: newBundleID, displayName: newDisplayName))
                         newBundleID = ""
@@ -94,7 +94,7 @@ struct AppRulesTab: View {
                     .disabled(newBundleID.isEmpty || newDisplayName.isEmpty)
                 }
 
-                Button("Aggiungi app in primo piano") {
+                Button("Add frontmost app") {
                     Task {
                         if let bundleID = await AppDetector.shared.frontAppBundleID(),
                            bundleID != Bundle.main.bundleIdentifier,
@@ -106,7 +106,7 @@ struct AppRulesTab: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .accessibilityHint("Aggiunge l'app attualmente in primo piano alla lista delle regole")
+                .accessibilityHint("Adds the currently frontmost app to the rules list")
             }
             .padding(12)
         }

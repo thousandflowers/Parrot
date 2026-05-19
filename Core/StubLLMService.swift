@@ -15,12 +15,12 @@ final class StubLLMService: LLMService, Sendable {
         case .coach:
             fakeCorrection = "[STUB · Writing coach]: \(applyGrammarCorrections(text))"
         case .explain:
-            fakeCorrection = "Spiegazione stub: il testo originale contiene potenziali errori grammaticali da analizzare."
+            fakeCorrection = "Stub explanation: the original text contains potential grammar errors to analyze."
         case .custom:
             fakeCorrection = applyGrammarCorrections(text)
-                + "\n\n---\n[STUB · Regole personalizzate applicate]"
+                + "\n\n---\n[STUB · Custom rules applied]"
         case .translation(let lang):
-            fakeCorrection = "[STUB · Traduzione in \(lang)]: \(text)"
+            fakeCorrection = "[STUB · Translation to \(lang)]: \(text)"
         }
 
         return CorrectionResult(
@@ -29,7 +29,7 @@ final class StubLLMService: LLMService, Sendable {
             modelID: "stub-v1",
             explanation: {
                 if case .explain = promptType {
-                    return "Spiegazione stub: il verbo era coniugato male. Prova a riformulare usando il tempo corretto."
+                    return "Stub explanation: the verb was conjugated incorrectly. Try rephrasing using the correct tense."
                 }
                 return nil
             }(),
@@ -51,7 +51,7 @@ final class StubLLMService: LLMService, Sendable {
 
     func explain(original: String, corrected: String) async throws -> String {
         try await Task.sleep(for: .milliseconds(300))
-        return "Spiegazione stub: analisi grammaticale completata."
+        return "Stub explanation: grammar analysis complete."
     }
 
     func streamCorrect(text: String, promptType: PromptType) -> AsyncThrowingStream<String, Error> {
@@ -60,8 +60,8 @@ final class StubLLMService: LLMService, Sendable {
             case .grammar, .custom: applyGrammarCorrections(text)
             case .fluency: applyFluencyCorrections(text)
             case .coach: "[STUB · Coach]: \(applyGrammarCorrections(text))"
-            case .explain: "Spiegazione stub..."
-            case .translation(let lang): "[STUB · Traduzione in \(lang)]: \(text)"
+            case .explain: "Stub explanation..."
+            case .translation(let lang): "[STUB · Translation to \(lang)]: \(text)"
             }
             let words = corrected.components(separatedBy: " ")
             let task = Task {

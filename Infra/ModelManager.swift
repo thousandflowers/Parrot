@@ -287,7 +287,7 @@ actor ModelManager: Sendable {
         guard httpResponse.statusCode == 200 || httpResponse.statusCode == 206 else {
             switch httpResponse.statusCode {
             case 401, 403:
-                Logger.infra.error("Model download: auth required (HTTP \(httpResponse.statusCode, privacy: .public)). Set HF token in Impostazioni > Avanzate.")
+                Logger.infra.error("Model download: auth required (HTTP \(httpResponse.statusCode, privacy: .public)). Set HF token in Settings > Advanced.")
                 throw CorrectionError.modelDownloadFailed(url: url)
             case 404:
                 Logger.infra.error("Model file not found (HTTP 404): \(url.absoluteString, privacy: .public)")

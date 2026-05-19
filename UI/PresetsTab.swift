@@ -13,9 +13,9 @@ struct PresetsTab: View {
                         .font(.largeTitle)
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
-                    Text("Nessun preset salvato")
+                    Text("No saved presets")
                         .foregroundStyle(.secondary)
-                    Text("Crea preset con template, lingua e modello personalizzati")
+                    Text("Create presets with custom templates, language and model")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -45,7 +45,7 @@ struct PresetsTab: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Button("Modifica") { editingPreset = preset }
+                            Button("Edit") { editingPreset = preset }
                                 .buttonStyle(.borderless)
                                 .controlSize(.small)
                         }
@@ -61,11 +61,11 @@ struct PresetsTab: View {
             Divider()
 
             HStack {
-                Text("I preset salvano lingua, temperatura e modello")
+                Text("Presets save language, temperature and model")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("Nuovo preset") { showingAddSheet = true }
+                Button("New preset") { showingAddSheet = true }
                     .buttonStyle(.borderedProminent)
             }
             .padding(.horizontal, 16)
@@ -105,15 +105,15 @@ struct PresetEditSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(preset == nil ? "Nuovo Preset" : "Modifica Preset")
+            Text(preset == nil ? "New Preset" : "Edit Preset")
                 .font(.title2.bold())
 
-            TextField("Nome del preset", text: $name)
-            TextField("Template (usa {{TEXT}} per il testo)", text: $template, axis: .vertical)
+            TextField("Preset name", text: $name)
+            TextField("Template (use {{TEXT}} for the text)", text: $template, axis: .vertical)
                 .lineLimit(4...8)
 
             HStack {
-                Picker("Lingua", selection: $language) {
+                Picker("Language", selection: $language) {
                     Text("Italiano").tag("it")
                     Text("English (US)").tag("en-US")
                     Text("Français").tag("fr")
@@ -125,14 +125,14 @@ struct PresetEditSheet: View {
                 }
             }
 
-            TextField("Icona SF Symbol (es. star, wand.and.stars)", text: $icon)
-            TextField("Tasto scorciatoia (es. 1, 2, 3)", text: $shortcutKey)
-                .help("Cmd+Shift+[tasto] per attivare il preset")
+            TextField("SF Symbol icon (e.g. star, wand.and.stars)", text: $icon)
+            TextField("Shortcut key (e.g. 1, 2, 3)", text: $shortcutKey)
+                .help("Cmd+Shift+[key] to activate the preset")
 
             HStack {
-                Button("Annulla") { dismiss() }
+                Button("Cancel") { dismiss() }
                 Spacer()
-                Button(preset == nil ? "Crea" : "Salva") {
+                Button(preset == nil ? "Create" : "Save") {
                     let p = Preset(
                         id: preset?.id ?? UUID(),
                         name: name, template: template,

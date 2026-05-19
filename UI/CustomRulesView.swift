@@ -8,7 +8,7 @@ struct CustomRulesView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Regole Personalizzate")
+                Text("Custom Rules")
                     .font(.headline)
                 Spacer()
                 Button(action: { showingAddRule = true }) {
@@ -23,9 +23,9 @@ struct CustomRulesView: View {
                     Image(systemName: "list.bullet.clipboard")
                         .font(.system(size: 40))
                         .foregroundStyle(.secondary)
-                    Text("Nessuna regola personalizzata")
+                    Text("No custom rules")
                         .font(.title3)
-                    Text("Aggiungi regole per correggere pattern specifici nel tuo testo")
+                    Text("Add rules to correct specific patterns in your text")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -76,10 +76,10 @@ struct CustomRuleRow: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(rule.name.isEmpty ? "Senza nome" : rule.name)
+                    Text(rule.name.isEmpty ? "Unnamed" : rule.name)
                         .font(.system(.body, design: .rounded).weight(.medium))
                     if !rule.isEnabled {
-                        Text("Disabilitata")
+                        Text("Disabled")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 6)
@@ -105,13 +105,13 @@ struct CustomRuleRow: View {
                     Image(systemName: "pencil")
                 }
                 .buttonStyle(.borderless)
-                .help("Modifica")
+                .help("Edit")
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
                 .foregroundStyle(.red)
-                .help("Elimina")
+                .help("Delete")
             }
         }
         .padding(.vertical, 4)
@@ -158,13 +158,13 @@ struct EditRuleView: View {
         .frame(width: 420)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("Salva") {
+                Button("Save") {
                     onSave(rule)
                 }
                 .disabled(rule.pattern.isEmpty)
             }
             ToolbarItem(placement: .cancellationAction) {
-                Button("Annulla") { dismiss() }
+                Button("Cancel") { dismiss() }
             }
         }
     }
