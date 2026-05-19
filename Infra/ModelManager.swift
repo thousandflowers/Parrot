@@ -34,9 +34,10 @@ struct ModelInfo: Codable {
 
 actor ModelManager: Sendable {
     static let shared = ModelManager()
-    
+
     private var _cachedModelPath: String?
     private var _lastCacheTime: Date = .distantPast
+    private var _activeDownloadSession: URLSession?
 
     private let modelsDir: URL = {
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
@@ -93,6 +94,17 @@ actor ModelManager: Sendable {
     func invalidateCache() {
         _cachedModelPath = nil
         _lastCacheTime = .distantPast
+    }
+
+    func cancelActiveDownload() {
+        _activeDownloadSession?.invalidateAndCancel()
+        _activeDownloadSession = nil
+    }
+
+    nonisolated var modelsDirPath: String {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return appSupport.appendingPathComponent("Parrot/Models").path(percentEncoded: false)
     }
 
     private nonisolated func resolveCurrentModelPath() -> String? {
@@ -231,8 +243,8 @@ actor ModelManager: Sendable {
         let config = URLSessionConfiguration.ephemeral
         config.waitsForConnectivity = true
         config.timeoutIntervalForResource = Constants.downloadTimeout
-        config.timeoutIntervalForRequest = 60
-        config.httpMaximumConnectionsPerHost = 1
+        config.timeoutIntervalForRequest = 20  // detect stalls after 20s, not 60s
+        config.httpMaximumConnectionsPerHost = 2
         return URLSession(configuration: config)
     }
 
@@ -277,7 +289,11 @@ actor ModelManager: Sendable {
         }
 
         let session = downloadSession()
-        defer { session.invalidateAndCancel() }
+        _activeDownloadSession = session
+        defer {
+            _activeDownloadSession = nil
+            session.invalidateAndCancel()
+        }
 
         let (asyncBytes, response) = try await session.bytes(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {

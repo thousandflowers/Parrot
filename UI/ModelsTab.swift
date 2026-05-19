@@ -81,6 +81,27 @@ struct ModelsTab: View {
             }
             .accessibilityElement(children: .contain)
         }
+        // Footer toolbar: folder access + add file
+        Divider()
+        HStack(spacing: 8) {
+            Button(action: openModelsFolder) {
+                Label("Open Models Folder", systemImage: "folder")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("Opens ~/Library/Application Support/Parrot/Models/ — drop .gguf files here")
+
+            Button(action: addModelFromFile) {
+                Label("Add from file…", systemImage: "plus")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("Pick any .gguf file from anywhere on your Mac")
+
+            Spacer()
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 6)
         .task {
             models = await ModelManager.shared.recommendedModels()
             downloadedModels = await detectDownloadedModels()
@@ -95,12 +116,43 @@ struct ModelsTab: View {
     private func adoptExternal(_ discovered: DiscoveredModel) {
         Task {
             await ModelManager.shared.adoptModel(path: discovered.path)
+            await ModelManager.shared.invalidateCache()
             await MainActor.run {
                 adoptedPaths.insert(discovered.path)
                 let name = discovered.name
                 prefs.selectedModelID = name
                 prefs.serviceType = .local
             }
+            await LocalLLMService.shared.warmup()
+        }
+    }
+
+    private func openModelsFolder() {
+        let path = ModelManager.shared.modelsDirPath
+        try? FileManager.default.createDirectory(atPath: path,
+                                                 withIntermediateDirectories: true)
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
+
+    private func addModelFromFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.init(filenameExtension: "gguf")!]
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.message = "Select a GGUF model file to add to Parrot"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task {
+            await ModelManager.shared.adoptModel(path: url.path(percentEncoded: false))
+            await ModelManager.shared.invalidateCache()
+            let name = url.deletingPathExtension().lastPathComponent
+            await MainActor.run {
+                prefs.selectedModelID = name
+                prefs.serviceType = .local
+                externalModels = []  // trigger refresh
+            }
+            externalModels = await ModelManager.shared.discoverExternalModels()
+            adoptedPaths = Set(ModelManager.shared.adoptedModelPaths())
+            await LocalLLMService.shared.warmup()
         }
     }
 
@@ -126,6 +178,9 @@ struct ModelsTab: View {
         downloadStatus = "Downloading..."
         downloadTask?.cancel()
         downloadTask = Task {
+            // Force-close any stalled URLSession from the previous download
+            await ModelManager.shared.cancelActiveDownload()
+
             do {
                 let stream = ModelManager.shared.downloadModelWithProgress(
                     from: rec.url,
@@ -154,6 +209,9 @@ struct ModelsTab: View {
                     downloadStatus = ""
                     downloadedModels.insert(rec.id)
                 }
+                // Invalidate model path cache then start the server immediately
+                await ModelManager.shared.invalidateCache()
+                await LocalLLMService.shared.warmup()
             } catch {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
