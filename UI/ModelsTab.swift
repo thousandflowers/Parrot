@@ -112,8 +112,9 @@ struct ModelsTab: View {
         guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir.path(percentEncoded: false)) else {
             return []
         }
+        let completedFiles = files.filter { !$0.hasSuffix(".partial") }
         return Set(models.filter { model in
-            files.contains { $0.contains(model.id) || model.id.hasSuffix($0.replacingOccurrences(of: ".gguf", with: "")) }
+            completedFiles.contains { $0.contains(model.id) || model.id.hasSuffix($0.replacingOccurrences(of: ".gguf", with: "")) }
         }.map(\.id))
     }
 

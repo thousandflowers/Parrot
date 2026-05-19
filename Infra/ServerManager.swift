@@ -108,7 +108,7 @@ actor ServerManager: Sendable {
                 "-c", "4096",
                 "--threads", "\(max(2, ProcessInfo.processInfo.processorCount / 2))",
                 "--n-gpu-layers", gpuLayers(),
-                "--flash-attn"
+                "--flash-attn", "auto"
             ]
 
             close(probeSock)
