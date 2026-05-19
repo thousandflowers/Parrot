@@ -11,8 +11,6 @@ struct ModelsTab: View {
     @State private var downloadTask: Task<Void, Never>?
     @State private var downloadStatus: String = ""
     @State private var downloadedModels: Set<String> = []
-    @State private var externalModels: [DiscoveredModel] = []
-    @State private var adoptedPaths: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -23,11 +21,6 @@ struct ModelsTab: View {
                 Text(serverIsRunning ? "Server running" : "Server stopped")
                     .font(.caption)
                 Spacer()
-                if !externalModels.isEmpty {
-                    Text("\(externalModels.count) found")
-                        .font(.caption2)
-                        .foregroundColor(.statusOk)
-                }
             }
             .padding(.horizontal)
             .padding(.top, 8)
@@ -46,34 +39,16 @@ struct ModelsTab: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
-                    if !externalModels.isEmpty {
-                        Text("Models Found on this Mac")
-                            .font(.headline)
-                            .padding(.top, 8)
-                        
-                        ForEach(externalModels) { discovered in
-                            ExternalModelRow(
-                                model: discovered,
-                                isAdopted: adoptedPaths.contains(discovered.path),
-                                onAdopt: { adoptExternal(discovered) }
-                            )
-                        }
-                        
-                        Divider().padding(.vertical, 4)
-                    }
-
-                    Text("Available Models")
-                        .font(.headline)
-                        .padding(.top, 4)
-
                     ForEach(models, id: \.id) { model in
                         ModelRow(
                             model: model,
                             isDownloaded: downloadedModels.contains(model.id),
+                            isSelected: prefs.selectedModelID == model.id && prefs.serviceType == .local,
                             isDownloading: activeDownloadID == model.id,
                             progress: activeDownloadID == model.id ? downloadProgress : 0,
                             status: activeDownloadID == model.id ? downloadStatus : "",
-                            onDownload: { downloadModel(model) }
+                            onDownload: { downloadModel(model) },
+                            onSelect: { selectModel(model) }
                         )
                     }
                 }
@@ -81,7 +56,6 @@ struct ModelsTab: View {
             }
             .accessibilityElement(children: .contain)
         }
-        // Footer toolbar: folder access + add file
         Divider()
         HStack(spacing: 8) {
             Button(action: openModelsFolder) {
@@ -105,24 +79,19 @@ struct ModelsTab: View {
         .task {
             models = await ModelManager.shared.recommendedModels()
             downloadedModels = await detectDownloadedModels()
-            externalModels = await ModelManager.shared.discoverExternalModels()
-            adoptedPaths = Set(ModelManager.shared.adoptedModelPaths())
         }
         .onDisappear {
             downloadTask?.cancel()
         }
     }
 
-    private func adoptExternal(_ discovered: DiscoveredModel) {
+    private func selectModel(_ rec: ModelRecommendation) {
+        prefs.selectedModelID = rec.id
+        prefs.serviceType = .local
         Task {
-            await ModelManager.shared.adoptModel(path: discovered.path)
-            await ModelManager.shared.invalidateCache()
-            await MainActor.run {
-                adoptedPaths.insert(discovered.path)
-                let name = discovered.name
-                prefs.selectedModelID = name
-                prefs.serviceType = .local
-            }
+            async let stop: Void = ServerManager.shared.stop()
+            async let invalidate: Void = ModelManager.shared.invalidateCache()
+            _ = await (stop, invalidate)
             await LocalLLMService.shared.warmup()
         }
     }
@@ -148,10 +117,7 @@ struct ModelsTab: View {
             await MainActor.run {
                 prefs.selectedModelID = name
                 prefs.serviceType = .local
-                externalModels = []  // trigger refresh
             }
-            externalModels = await ModelManager.shared.discoverExternalModels()
-            adoptedPaths = Set(ModelManager.shared.adoptedModelPaths())
             await LocalLLMService.shared.warmup()
         }
     }
@@ -228,10 +194,12 @@ struct ModelsTab: View {
 private struct ModelRow: View {
     let model: ModelRecommendation
     let isDownloaded: Bool
+    let isSelected: Bool
     let isDownloading: Bool
     let progress: Double
     let status: String
     let onDownload: () -> Void
+    let onSelect: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -273,9 +241,20 @@ private struct ModelRow: View {
                         .foregroundColor(.textSecondary)
                 }
             } else if isDownloaded {
-                Text("Downloaded")
-                    .font(.caption)
-                    .foregroundColor(.statusOk)
+                if isSelected {
+                    Text("In use")
+                        .font(.caption)
+                        .foregroundColor(.statusOk)
+                } else {
+                    HStack(spacing: 6) {
+                        Text("Downloaded")
+                            .font(.caption)
+                            .foregroundColor(.textSecondary)
+                        Button("Use") { onSelect() }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                    }
+                }
             } else {
                 Button("Download") { onDownload() }
                     .buttonStyle(.borderedProminent)
@@ -286,51 +265,3 @@ private struct ModelRow: View {
     }
 }
 
-private struct ExternalModelRow: View {
-    let model: DiscoveredModel
-    let isAdopted: Bool
-    let onAdopt: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "externaldrive.fill")
-                .foregroundColor(.accentBrand)
-                .font(.caption)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.name)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
-                HStack(spacing: 8) {
-                    Label(model.source, systemImage: "folder")
-                        .font(.caption2)
-                        .foregroundColor(.textSecondary)
-                    Label(formatSize(model.size), systemImage: "doc")
-                        .font(.caption2)
-                        .foregroundColor(.textSecondary)
-                }
-            }
-
-            Spacer()
-
-            if isAdopted {
-                Text("In use")
-                    .font(.caption)
-                    .foregroundColor(.statusOk)
-            } else {
-                Button("Use") { onAdopt() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-            }
-        }
-        .padding(.vertical, 4)
-    }
-
-    private func formatSize(_ bytes: Int64) -> String {
-        let gb = Double(bytes) / 1_073_741_824
-        if gb >= 1.0 { return String(format: "%.1f GB", gb) }
-        let mb = Double(bytes) / 1_048_576
-        return String(format: "%.0f MB", mb)
-    }
-}

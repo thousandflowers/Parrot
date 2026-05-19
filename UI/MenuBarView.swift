@@ -1,4 +1,5 @@
 import SwiftUI
+import ApplicationServices
 
 struct MenuBarView: View {
     @State private var prefs = PreferencesStore.shared
@@ -7,6 +8,10 @@ struct MenuBarView: View {
         VStack(spacing: 0) {
             headerSection
             Divider()
+            if !prefs.isAccessibilityEnabled {
+                accessibilityBanner
+                Divider()
+            }
             serviceSection
             Divider()
             toggleSection
@@ -18,6 +23,9 @@ struct MenuBarView: View {
             quitRow
         }
         .frame(width: 280)
+        .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
+            if !prefs.isAccessibilityEnabled { prefs.refreshAccessibility() }
+        }
     }
 
     // MARK: - Header
@@ -40,10 +48,50 @@ struct MenuBarView: View {
                     .lineLimit(1)
             }
             Spacer()
-            accessibilityBadge
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+
+    // MARK: - Accessibility banner
+
+    private var accessibilityBanner: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "hand.raised.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Accessibility permission needed")
+                        .font(.callout.weight(.semibold))
+                    Text("Required to read and correct text in other apps.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Button(action: openAccessibilitySettings) {
+                Label("Enable in System Settings", systemImage: "arrow.up.right.square")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
+            Text("If Parrot is already listed, try toggling it off and on again.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.orange.opacity(0.08))
+    }
+
+    private func openAccessibilitySettings() {
+        let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+        AXIsProcessTrustedWithOptions(opts as CFDictionary)
+        NSWorkspace.shared.open(
+            URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+        )
     }
 
     private var serviceSubtitle: String {
@@ -53,28 +101,6 @@ struct MenuBarView: View {
         case .remote:      return "OpenAI · \(prefs.openAIModel)"
         case .openRouter:  return "OpenRouter · \(prefs.openRouterModel)"
         case .stub:        return "Stub (no connection)"
-        }
-    }
-
-    @ViewBuilder
-    private var accessibilityBadge: some View {
-        if prefs.isAccessibilityEnabled {
-            Circle()
-                .fill(.green)
-                .frame(width: 7, height: 7)
-                .help("Accessibility active")
-        } else {
-            HStack(spacing: 4) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 10))
-                Text("Acc.")
-                    .font(.caption2.weight(.medium))
-            }
-            .foregroundStyle(.orange)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(.orange.opacity(0.12), in: Capsule())
-            .help("Accessibility: permission required")
         }
     }
 
@@ -168,6 +194,7 @@ struct MenuBarView: View {
             sectionLabel("ACTIONS")
             MenuAction(icon: "text.badge.checkmark", title: "Check Grammar", shortcut: shortcutString(prefs.shortcutGrammar)) { checkGrammar() }
             MenuAction(icon: "sparkles", title: "Check Fluency", shortcut: shortcutString(prefs.shortcutFluency)) { checkFluency() }
+            MenuAction(icon: "text.badge.star", title: "Grammar + Fluency", shortcut: shortcutString(prefs.shortcutGrammarFluency)) { checkGrammarFluency() }
             MenuAction(icon: "text.cursor", title: "Open Editor", shortcut: shortcutString(prefs.shortcutEditor)) { openEditor() }
         }
     }
@@ -224,20 +251,17 @@ struct MenuBarView: View {
 
     // MARK: - Actions
 
-    private func checkGrammar() {
-        NSApp.deactivate()
-        TextCheckCoordinator.shared.checkSelectedText()
-    }
+    private func perform(_ action: () -> Void) { NSApp.deactivate(); action() }
 
-    private func checkFluency() {
-        NSApp.deactivate()
-        TextCheckCoordinator.shared.checkFluency()
-    }
+    private func checkGrammar()        { perform { TextCheckCoordinator.shared.checkSelectedText() } }
+    private func checkFluency()        { perform { TextCheckCoordinator.shared.checkFluency() } }
+    private func checkGrammarFluency() { perform { TextCheckCoordinator.shared.checkGrammarThenFluency() } }
 
     private func openEditor() {
         Task { await TextCheckCoordinator.shared.openFloatingEditor() }
         NSApp.activate(ignoringOtherApps: true)
     }
+
 }
 
 // MARK: - Components

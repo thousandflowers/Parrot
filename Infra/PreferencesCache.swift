@@ -75,15 +75,26 @@ final class PreferencesCache {
         return value
     }
 
-    func registerAccessibilityObserver() {
+    func registerAccessibilityObserver(onChange: @escaping @MainActor () -> Void) {
         guard accessibilityObserver == nil else { return }
         accessibilityObserver = DistributedNotificationCenter.default().addObserver(
             forName: NSNotification.Name("com.apple.accessibility.api"),
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.invalidateAccessibility() }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let before = self.cachedAccessibility
+                self.invalidateAccessibility()
+                let after = self.isAccessibilityEnabled
+                guard before != after else { return }
+                onChange()
+            }
         }
+    }
+
+    func invalidateAccessibility() {
+        cachedAccessibility = nil
     }
 
     func cleanup() {
@@ -104,7 +115,4 @@ final class PreferencesCache {
         return contents.filter { $0.hasSuffix(".gguf") }
     }
 
-    private func invalidateAccessibility() {
-        cachedAccessibility = nil
-    }
 }

@@ -66,6 +66,7 @@ struct FloatingEditorView: View {
     @State private var errorMessage: String?
     @State private var checkMode: CheckMode = .grammar
     @State private var checkTask: Task<Void, Never>?
+    @State private var showDiff: Bool = true
 
     enum CheckMode: String, CaseIterable {
         case grammar = "grammar"
@@ -163,12 +164,26 @@ struct FloatingEditorView: View {
 
     private var outputPane: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            HStack(spacing: 8) {
                 Text("Corrected")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
+
                 Spacer()
+
                 if !correctedText.isEmpty {
+                    // Diff / Result toggle
+                    HStack(spacing: 4) {
+                        Image(systemName: showDiff ? "highlighter" : "doc.text")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Toggle(showDiff ? "Changes" : "Result", isOn: $showDiff)
+                            .toggleStyle(.switch)
+                            .controlSize(.mini)
+                            .labelsHidden()
+                    }
+                    .help(showDiff ? "Showing changes — toggle to see clean result" : "Showing result — toggle to see changes")
+
                     Button {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(correctedText, forType: .string)
@@ -192,7 +207,7 @@ struct FloatingEditorView: View {
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
-                } else {
+                } else if showDiff {
                     DiffHighlightView(
                         original: inputText,
                         corrected: correctedText.isEmpty ? inputText : correctedText
@@ -201,6 +216,12 @@ struct FloatingEditorView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
                     .textSelection(.enabled)
+                } else {
+                    Text(correctedText.isEmpty ? inputText : correctedText)
+                        .font(.body)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .textSelection(.enabled)
                 }
             }
             .frame(minWidth: 240)

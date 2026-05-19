@@ -34,6 +34,13 @@ struct SettingsView: View {
                 .tabItem { Label("History", systemImage: "clock") }
         }
         .frame(minWidth: 560, minHeight: 420)
+        .onAppear {
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        .onDisappear {
+            NSApp.setActivationPolicy(.accessory)
+        }
         .task {
             serverIsRunning = await ServerManager.shared.currentPort > 0
             for await _ in pollingStream() {

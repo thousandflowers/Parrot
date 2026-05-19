@@ -59,6 +59,7 @@ enum Constants {
         static let shortcutApplyDirect = "shortcutApplyDirect"
         static let shortcutCoach = "shortcutCoach"
         static let shortcutApplyAll = "shortcutApplyAll"
+        static let shortcutGrammarFluency = "shortcutGrammarFluency"
         static let presets = "presets"
         static let translationLanguage = "translationLanguage"
     }

@@ -48,7 +48,6 @@ actor ServerHealthMonitor: Sendable {
         consecutiveFailures += 1
         guard consecutiveFailures <= 3 else {
             await restartServer()
-            consecutiveFailures = 0
             return
         }
     }
@@ -58,6 +57,7 @@ actor ServerHealthMonitor: Sendable {
         guard let modelPath = ModelManager.shared.currentModelPath else { return }
         do {
             try await ServerManager.shared.start(modelPath: modelPath)
+            consecutiveFailures = 0
             startMonitoring()
             Logger.server.info("ServerHealthMonitor: server restarted successfully")
         } catch {

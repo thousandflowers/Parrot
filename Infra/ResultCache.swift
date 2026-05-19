@@ -13,30 +13,36 @@ actor ResultCache: Sendable {
     struct CacheEntry {
         let result: CorrectionResult
         let timestamp: Date
-        let modelID: String
         let byteSize: Int
     }
 
-    func get(for text: String, modelID: String) -> CorrectionResult? {
-        guard let entry = cache[text],
-              entry.modelID == modelID,
-              Date().timeIntervalSince(entry.timestamp) < ttl else {
+    private func cacheKey(text: String, promptType: String, modelID: String) -> String {
+        "\(promptType)|\(modelID)|\(text)"
+    }
+
+    func get(for text: String, promptType: String, modelID: String) -> CorrectionResult? {
+        let key = cacheKey(text: text, promptType: promptType, modelID: modelID)
+        guard let entry = cache[key] else { return nil }
+        guard Date().timeIntervalSince(entry.timestamp) < ttl else {
+            cache.removeValue(forKey: key)
+            currentMemoryBytes = max(0, currentMemoryBytes - entry.byteSize)
             return nil
         }
         return entry.result
     }
 
-    func set(_ result: CorrectionResult, for text: String, modelID: String) {
+    func set(_ result: CorrectionResult, for text: String, promptType: String, modelID: String) {
+        let key = cacheKey(text: text, promptType: promptType, modelID: modelID)
         let byteSize = (result.originalText.utf8.count + result.correctedText.utf8.count)
 
-        if let existing = cache[text] {
+        if let existing = cache[key] {
             currentMemoryBytes = max(0, currentMemoryBytes - existing.byteSize)
         }
 
         if cache.count >= maxEntries || (currentMemoryBytes + byteSize) > maxMemoryBytes {
             evictUntilUnderLimit(neededBytes: byteSize)
         }
-        cache[text] = CacheEntry(result: result, timestamp: Date(), modelID: modelID, byteSize: byteSize)
+        cache[key] = CacheEntry(result: result, timestamp: Date(), byteSize: byteSize)
         currentMemoryBytes += byteSize
     }
 
@@ -54,8 +60,9 @@ actor ResultCache: Sendable {
         currentMemoryBytes = 0
     }
 
-    func setIfNewer(_ result: CorrectionResult, for text: String, modelID: String) {
-        if let existing = cache[text], existing.timestamp >= result.timestamp { return }
-        set(result, for: text, modelID: modelID)
+    func setIfNewer(_ result: CorrectionResult, for text: String, promptType: String, modelID: String) {
+        let key = cacheKey(text: text, promptType: promptType, modelID: modelID)
+        if let existing = cache[key], existing.timestamp >= result.timestamp { return }
+        set(result, for: text, promptType: promptType, modelID: modelID)
     }
 }

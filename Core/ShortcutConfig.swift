@@ -73,4 +73,5 @@ struct ShortcutConfig: Codable, Equatable, Sendable {
     static let applyDirectDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_A), modifiers: UInt32(cmdKey | shiftKey))
     static let coachDefault    = ShortcutConfig(keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(cmdKey | shiftKey))
     static let applyAllDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_U), modifiers: UInt32(cmdKey | shiftKey))
+    static let grammarFluencyDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_B), modifiers: UInt32(cmdKey | shiftKey))
 }

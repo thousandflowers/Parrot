@@ -12,7 +12,7 @@ final class PreferencesStore {
     private var _observationTrigger: Int = 0
 
     init() {
-        cache.registerAccessibilityObserver()
+        cache.registerAccessibilityObserver { [weak self] in self?.invalidate() }
         SeedDataProvider.seedSecurityExclusions()
         SeedDataProvider.seedDefaults(preferences: self)
     }
@@ -101,6 +101,7 @@ final class PreferencesStore {
     var shortcutApplyDirect: ShortcutConfig { get { shortcut(Constants.UserDefaultsKey.shortcutApplyDirect, fallback: .applyDirectDefault) } set { setShortcut(newValue, for: Constants.UserDefaultsKey.shortcutApplyDirect) } }
     var shortcutCoach: ShortcutConfig      { get { shortcut(Constants.UserDefaultsKey.shortcutCoach, fallback: .coachDefault) }        set { setShortcut(newValue, for: Constants.UserDefaultsKey.shortcutCoach) } }
     var shortcutApplyAll: ShortcutConfig   { get { shortcut(Constants.UserDefaultsKey.shortcutApplyAll, fallback: .applyAllDefault) }  set { setShortcut(newValue, for: Constants.UserDefaultsKey.shortcutApplyAll) } }
+    var shortcutGrammarFluency: ShortcutConfig { get { shortcut(Constants.UserDefaultsKey.shortcutGrammarFluency, fallback: .grammarFluencyDefault) } set { setShortcut(newValue, for: Constants.UserDefaultsKey.shortcutGrammarFluency) } }
 
     // MARK: - Presets
 
@@ -129,7 +130,12 @@ final class PreferencesStore {
 
     // MARK: - Accessibility & Exclusions
 
-    var isAccessibilityEnabled: Bool { cache.isAccessibilityEnabled }
+    var isAccessibilityEnabled: Bool { observe(); return cache.isAccessibilityEnabled }
+
+    func refreshAccessibility() {
+        cache.invalidateAccessibility()
+        invalidate()
+    }
     var excludedBundleIDs: Set<String> {
         get {
             observe()

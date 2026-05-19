@@ -38,7 +38,8 @@ extension LLMService {
         extraHeaders: [String: String] = [:]
     ) async throws -> String {
         try throwIfInvalidLLMURL(url)
-        if let prompt = body.messages.last(where: { $0.role == "user" })?.content,
+        let userPrompt = body.messages.last(where: { $0.role == "user" })?.content
+        if let prompt = userPrompt,
            let cached = ResponseCache.shared.get(text: prompt, model: body.model, promptType: "request") {
             return cached
         }
@@ -59,7 +60,7 @@ extension LLMService {
                 guard !result.isEmpty else {
                     throw CorrectionError.outputParsingFailed(raw: "empty")
                 }
-                if let prompt = body.messages.last(where: { $0.role == "user" })?.content {
+                if let prompt = userPrompt {
                     ResponseCache.shared.set(text: prompt, model: body.model, promptType: "request", result: result)
                 }
                 return result
@@ -138,6 +139,33 @@ extension LLMService {
         return best
     }
 
+    private func maxTokens(for text: String, isFluency: Bool) -> Int {
+        isFluency
+            ? max(256, min(text.count * 2, 1024))
+            : max(128, min(text.count + 100, 512))
+    }
+
+    private func buildChatBody(
+        text: String,
+        promptType: PromptType,
+        engine: PromptEngine,
+        model: String,
+        temperatureOffset: Double = 0
+    ) -> ChatRequest {
+        let prompt: String
+        let temperature: Double
+        switch promptType {
+        case .fluency:
+            prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
+            temperature = Constants.fluencyTemperature + temperatureOffset
+        default:
+            prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
+            temperature = Constants.grammarTemperature + temperatureOffset
+        }
+        return chatBody(model: model, prompt: prompt, temperature: temperature,
+                        maxTokens: maxTokens(for: text, isFluency: promptType.isFluency))
+    }
+
     private func performCorrectionAlternative(
         text: String,
         promptType: PromptType,
@@ -148,22 +176,11 @@ extension LLMService {
     ) async throws -> CorrectionResult {
         let detectedLang = LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
         let engine = PromptEngine(language: detectedLang, style: await resolveStyle())
-        let prompt: String
-        let temperature: Double
-        switch promptType {
-        case .fluency:
-            prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
-            temperature = Constants.fluencyTemperature + 0.1
-        default:
-            prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-            temperature = Constants.grammarTemperature + 0.1
-        }
-        let maxTokens = max(128, min(text.count + 100, 512))
         let rawCorrected = try await performOpenAIRequest(
-            body: chatBody(model: model, prompt: prompt, temperature: temperature, maxTokens: maxTokens),
+            body: buildChatBody(text: text, promptType: promptType, engine: engine, model: model, temperatureOffset: 0.1),
             url: url, apiKey: apiKey, extraHeaders: extraHeaders
         )
-        let corrected = validateCorrection(original: text, corrected: rawCorrected)
+        let corrected = validateCorrection(original: text, corrected: rawCorrected, isFluency: promptType.isFluency)
         let confidence = corrected == text ? 0.5 : 0.85
         return CorrectionResult(
             original: text, corrected: corrected,
@@ -181,44 +198,64 @@ extension LLMService {
     ) async throws -> CorrectionResult {
         let detectedLang = LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
         let engine = PromptEngine(language: detectedLang, style: await resolveStyle())
-        let prompt: String
-        let temperature: Double
-        switch promptType {
-        case .fluency:
-            prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
-            temperature = Constants.fluencyTemperature
-        default:
-            prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-            temperature = Constants.grammarTemperature
-        }
-        let maxTokens = max(128, min(text.count + 100, 512))
         let rawCorrected = try await performOpenAIRequest(
-            body: chatBody(model: model, prompt: prompt, temperature: temperature, maxTokens: maxTokens),
+            body: buildChatBody(text: text, promptType: promptType, engine: engine, model: model),
             url: url, apiKey: apiKey, extraHeaders: extraHeaders
         )
-        let corrected = validateCorrection(original: text, corrected: rawCorrected)
+        let corrected = validateCorrection(original: text, corrected: rawCorrected, isFluency: promptType.isFluency)
         return CorrectionResult(
             original: text, corrected: corrected,
             modelID: model, confidence: Constants.defaultConfidence, promptType: promptType.label
         )
     }
 
-    func validateCorrection(original: String, corrected: String) -> String {
-        if corrected.count > original.count * 3 { return original }
+    func validateCorrection(original: String, corrected: String, isFluency: Bool = false) -> String {
+        var text = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Strip known completion primers that the model might echo
+        let stripPrefixes = ["output:", "corrected:", "testo corretto:", "texte corrigé:", "corrección:",
+                             "rewritten:", "testo riscritto:", "texte réécrit:"]
+        let lower = text.lowercased()
+        for prefix in stripPrefixes {
+            if lower.hasPrefix(prefix) {
+                text = String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                break
+            }
+        }
+
+        // Strip wrapping quotes added by some models
+        if let q = text.first, (q == "\"" || q == "'"), text.last == q, text.count > 2 {
+            text = String(text.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+        }
+
+        // If the model added explanations after the corrected text (blank line separator), take only the first block
+        if let blankLine = text.range(of: "\n\n") {
+            let firstBlock = String(text[..<blankLine.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            // For fluency, allow slightly longer first block (rewrites can expand sentences)
+            let maxRatio = isFluency ? 3 : 2
+            if !firstBlock.isEmpty && firstBlock.count <= original.count * maxRatio {
+                text = firstBlock
+            }
+        }
+
+        // Sanity: if output is empty, return original
+        if text.isEmpty { return original }
+        // Fluency rewrites can be up to 6x longer (combining short sentences); grammar up to 4x
+        let maxRatio = isFluency ? 6 : 4
+        if text.count > original.count * maxRatio { return original }
+
+        // Sanity: if output looks like it's still just instructions, return original
         let chattyPhrases = [
             "here's the corrected", "here is the corrected", "corrected text:",
-            "corrected version:", "edited text:", "sure, here", "output:",
-            "ecco il testo", "testo corretto:", "voici le texte", "hier ist der korrigierte",
-            "aquí está el texto", "texto corregido:", "texto corrigido:",
+            "corrected version:", "edited text:", "sure, here", "i have corrected",
+            "here's the rewritten", "here is the rewritten", "rewritten text:",
+            "ecco il testo", "voici le texte", "hier ist der korrigierte",
+            "aquí está el texto", "texto corregido:",
         ]
-        let lowerCorrected = corrected.lowercased()
-        if chattyPhrases.contains(where: { lowerCorrected.hasPrefix($0) }) { return original }
-        let stripped = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
-        if stripped.hasPrefix("\"") && stripped.hasSuffix("\"") {
-            let inner = String(stripped.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
-            if inner == original { return original }
-        }
-        return preservePunctuation(original: original, corrected: corrected)
+        let lowerText = text.lowercased()
+        if chattyPhrases.contains(where: { lowerText.hasPrefix($0) }) { return original }
+
+        return isFluency ? text : preservePunctuation(original: original, corrected: text)
     }
 
     private func preservePunctuation(original: String, corrected: String) -> String {

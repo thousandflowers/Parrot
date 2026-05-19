@@ -54,37 +54,38 @@ struct TextCheckCoordinator: Sendable {
             let hasCustomFixes = !customResult.fixes.isEmpty
             let hasRuleFixes = ruleResult.hasFixes
 
-            if (hasCustomFixes || hasRuleFixes) && language != "en" {
-                return CorrectionResult(
-                    original: text,
-                    corrected: ruleResult.text,
-                    modelID: hasCustomFixes ? "custom+rules" : "rule_based",
-                    confidence: 1.0,
-                    promptType: type.label,
-                    detectedTone: detectedTone?.rawValue,
-                    source: .ruleBased
-                )
-            }
+            // Rule-based shortcuts only apply to grammar, not fluency
+            if !type.isFluency {
+                if (hasCustomFixes || hasRuleFixes) && language != "en" {
+                    return CorrectionResult(
+                        original: text,
+                        corrected: ruleResult.text,
+                        modelID: hasCustomFixes ? "custom+rules" : "rule_based",
+                        confidence: 1.0,
+                        promptType: type.label,
+                        detectedTone: detectedTone?.rawValue,
+                        source: .ruleBased
+                    )
+                }
 
-            let baseText = ruleResult.text
-            let harperAvailable = await HarperEngine.shared.isAvailable
-
-            if harperAvailable && language.hasPrefix("en") {
-                do {
-                    let harperResult = try await HarperEngine.shared.check(baseText)
-                    if harperResult.hasFixes {
-                        return CorrectionResult(
-                            original: text,
-                            corrected: harperResult.text,
-                            modelID: "harper",
-                            confidence: 1.0,
-                            promptType: type.label,
-                            detectedTone: detectedTone?.rawValue,
-                            source: .ruleBased
-                        )
+                let harperAvailable = await HarperEngine.shared.isAvailable
+                if harperAvailable && language.hasPrefix("en") {
+                    do {
+                        let harperResult = try await HarperEngine.shared.check(ruleResult.text)
+                        if harperResult.hasFixes {
+                            return CorrectionResult(
+                                original: text,
+                                corrected: harperResult.text,
+                                modelID: "harper",
+                                confidence: 1.0,
+                                promptType: type.label,
+                                detectedTone: detectedTone?.rawValue,
+                                source: .ruleBased
+                            )
+                        }
+                    } catch {
+                        // Fall through to LLM
                     }
-                } catch {
-                    // Fall through to LLM
                 }
             }
 
@@ -95,7 +96,7 @@ struct TextCheckCoordinator: Sendable {
                 serviceType = resolved.serviceType
             }
             return try await RequestQueue.shared.enqueue(
-                text: baseText, type: type, priority: .manual,
+                text: ruleResult.text, type: type, priority: .manual,
                 overrideServiceType: serviceType, overrideCustomPrompt: resolved.prompt
             )
         } onSuccess: { result in
@@ -320,8 +321,7 @@ struct TextCheckCoordinator: Sendable {
             fallbackLanguage: Locale.current.language.languageCode?.identifier ?? "en"
         )
 
-        let contextPID: pid_t
-        if let pid = frontAppPID { contextPID = pid } else { contextPID = await AccessibilityBridge.shared.lastKnownFrontAppPID() }
+        let contextPID: pid_t = if let pid = frontAppPID { pid } else { await AccessibilityBridge.shared.lastKnownFrontAppPID() }
         let surroundingText = await AccessibilityBridge.shared.fetchSurroundingText(
             pid: contextPID, selectionRange: capturedRange
         )
@@ -330,27 +330,26 @@ struct TextCheckCoordinator: Sendable {
             appBundleID: bundleID,
             language: language
         )
-        await ContextStorage.shared.store(docContext)
-
-        let resolved = await MainActor.run {
+        async let storeContext: Void = ContextStorage.shared.store(docContext)
+        async let resolved = MainActor.run {
             RuleResolver.resolve(
                 appBundleID: bundleID,
                 customPrompts: PreferencesStore.shared.customPrompts,
                 appRules: PreferencesStore.shared.appRules
             )
         }
-
-        let capturedPID = contextPID
+        let resolvedValue = await resolved
+        _ = await storeContext
 
         return PreparedCheck(
             text: text,
             bundleID: bundleID,
-            serviceType: resolved.serviceType,  // nil when no app-rule override
-            promptType: resolved.prompt.map { .custom(name: $0.name, template: $0.template) } ?? .grammar,
+            serviceType: resolvedValue.serviceType,  // nil when no app-rule override
+            promptType: resolvedValue.prompt.map { .custom(name: $0.name, template: $0.template) } ?? .grammar,
             anchorRect: nil,
             replacementRange: capturedRange,
-            capturedPID: capturedPID,
-            customPrompt: resolved.prompt,
+            capturedPID: contextPID,
+            customPrompt: resolvedValue.prompt,
             resolvedLanguage: language
         )
     }

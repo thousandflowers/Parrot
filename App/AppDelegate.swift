@@ -56,6 +56,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows {
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        return true
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         if let observer = frontAppObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)

@@ -20,7 +20,8 @@ struct LLMServiceFactory {
     }
 
     static func resolveFluencyServiceType() -> ServiceType {
-        resolveServiceType(for: Constants.UserDefaultsKey.fluencyServiceType)
+        let type = resolveServiceType(for: Constants.UserDefaultsKey.fluencyServiceType)
+        return type == .stub ? resolveDefaultServiceType() : type
     }
 
     static func resolveServiceType(forPromptType promptType: PromptType) -> ServiceType {

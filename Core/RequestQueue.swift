@@ -97,11 +97,6 @@ actor RequestQueue {
                 }
                 let modelID = resolveModelID(for: serviceType)
 
-                if let cached = await ResultCache.shared.get(for: request.text, modelID: modelID) {
-                    request.box.resume(returning: cached)
-                    continue
-                }
-
                 let promptType: PromptType
                 if let customPrompt = request.overrideCustomPrompt {
                     promptType = .custom(name: customPrompt.name, template: customPrompt.template)
@@ -109,8 +104,13 @@ actor RequestQueue {
                     promptType = request.promptType
                 }
 
+                if let cached = await ResultCache.shared.get(for: request.text, promptType: promptType.label, modelID: modelID) {
+                    request.box.resume(returning: cached)
+                    continue
+                }
+
                 let result = try await service.correct(text: request.text, promptType: promptType)
-                await ResultCache.shared.set(result, for: request.text, modelID: modelID)
+                await ResultCache.shared.set(result, for: request.text, promptType: promptType.label, modelID: modelID)
                 request.box.resume(returning: result)
             } catch {
                 if Date() > request.deadline {

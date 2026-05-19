@@ -26,6 +26,11 @@ enum PromptType: Sendable {
         case .translation(let lang): "translation:\(lang)"
         }
     }
+
+    var isFluency: Bool {
+        if case .fluency = self { return true }
+        return false
+    }
 }
 
 enum CorrectionError: Error, LocalizedError, Sendable {

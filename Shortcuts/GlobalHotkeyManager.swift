@@ -28,63 +28,21 @@ final class GlobalHotkeyManager {
     private func registerFromPrefs() {
         let prefs = PreferencesStore.shared
         failedShortcuts = []
-
-        register(
-            keyCode: prefs.shortcutGrammar.keyCode,
-            modifiers: prefs.shortcutGrammar.modifiers,
-            label: prefs.shortcutGrammar.displayString,
-            action: { TextCheckCoordinator.shared.checkSelectedText() },
-            enabled: prefs.shortcutGrammar.isEnabled
-        )
-        register(
-            keyCode: prefs.shortcutFluency.keyCode,
-            modifiers: prefs.shortcutFluency.modifiers,
-            label: prefs.shortcutFluency.displayString,
-            action: { TextCheckCoordinator.shared.checkFluency() },
-            enabled: prefs.shortcutFluency.isEnabled
-        )
-        register(
-            keyCode: prefs.shortcutEditor.keyCode,
-            modifiers: prefs.shortcutEditor.modifiers,
-            label: prefs.shortcutEditor.displayString,
-            action: { Task { await TextCheckCoordinator.shared.openFloatingEditor() } },
-            enabled: prefs.shortcutEditor.isEnabled
-        )
-        register(
-            keyCode: prefs.shortcutReplace.keyCode,
-            modifiers: prefs.shortcutReplace.modifiers,
-            label: prefs.shortcutReplace.displayString,
-            action: { TextCheckCoordinator.shared.checkAndReplace() },
-            enabled: prefs.shortcutReplace.isEnabled
-        )
-        register(
-            keyCode: prefs.shortcutTranslate.keyCode,
-            modifiers: prefs.shortcutTranslate.modifiers,
-            label: prefs.shortcutTranslate.displayString,
-            action: { TextCheckCoordinator.shared.checkTranslation() },
-            enabled: prefs.shortcutTranslate.isEnabled
-        )
-        register(
-            keyCode: prefs.shortcutApplyDirect.keyCode,
-            modifiers: prefs.shortcutApplyDirect.modifiers,
-            label: prefs.shortcutApplyDirect.displayString,
-            action: { TextCheckCoordinator.shared.checkAndApplyDirect() },
-            enabled: prefs.shortcutApplyDirect.isEnabled
-        )
-        register(
-            keyCode: prefs.shortcutCoach.keyCode,
-            modifiers: prefs.shortcutCoach.modifiers,
-            label: prefs.shortcutCoach.displayString,
-            action: { TextCheckCoordinator.shared.checkCoach() },
-            enabled: prefs.shortcutCoach.isEnabled
-        )
-        register(
-            keyCode: prefs.shortcutApplyAll.keyCode,
-            modifiers: prefs.shortcutApplyAll.modifiers,
-            label: prefs.shortcutApplyAll.displayString,
-            action: { InlineHighlightController.shared.applyAllAnnotations() },
-            enabled: prefs.shortcutApplyAll.isEnabled
-        )
+        let entries: [(ShortcutConfig, () -> Void)] = [
+            (prefs.shortcutGrammar,        { TextCheckCoordinator.shared.checkSelectedText() }),
+            (prefs.shortcutFluency,        { TextCheckCoordinator.shared.checkFluency() }),
+            (prefs.shortcutEditor,         { Task { await TextCheckCoordinator.shared.openFloatingEditor() } }),
+            (prefs.shortcutReplace,        { TextCheckCoordinator.shared.checkAndReplace() }),
+            (prefs.shortcutTranslate,      { TextCheckCoordinator.shared.checkTranslation() }),
+            (prefs.shortcutApplyDirect,    { TextCheckCoordinator.shared.checkAndApplyDirect() }),
+            (prefs.shortcutCoach,          { TextCheckCoordinator.shared.checkCoach() }),
+            (prefs.shortcutApplyAll,       { InlineHighlightController.shared.applyAllAnnotations() }),
+            (prefs.shortcutGrammarFluency, { TextCheckCoordinator.shared.checkGrammarThenFluency() }),
+        ]
+        for (config, action) in entries {
+            register(keyCode: config.keyCode, modifiers: config.modifiers,
+                     label: config.displayString, action: action, enabled: config.isEnabled)
+        }
     }
 
     private func installEventHandlerIfNeeded() {

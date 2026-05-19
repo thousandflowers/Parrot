@@ -52,8 +52,6 @@ actor ModelManager: Sendable {
         "~/.cache/lm-studio/models",
         "~/.cache/lmstudio/models",
         "~/LM Studio/models",
-        "~/Downloads",
-        "~/Documents",
         "~/models",
         "~/.ollama/models",
     ]
