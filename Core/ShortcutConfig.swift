@@ -4,6 +4,20 @@ import Cocoa
 struct ShortcutConfig: Codable, Equatable, Sendable {
     var keyCode: UInt32
     var modifiers: UInt32  // Carbon modifiers (cmdKey, shiftKey, etc.)
+    var isEnabled: Bool
+
+    init(keyCode: UInt32, modifiers: UInt32, isEnabled: Bool = true) {
+        self.keyCode = keyCode
+        self.modifiers = modifiers
+        self.isEnabled = isEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        keyCode = try c.decode(UInt32.self, forKey: .keyCode)
+        modifiers = try c.decode(UInt32.self, forKey: .modifiers)
+        isEnabled = try c.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+    }
 
     var displayString: String {
         var parts: [String] = []

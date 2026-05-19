@@ -67,9 +67,37 @@ private struct ShortcutRow: View {
 
     var body: some View {
         HStack {
+            Toggle("", isOn: Binding(
+                get: { shortcut.isEnabled },
+                set: { shortcut.isEnabled = $0 }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+            .labelsHidden()
+
             Text(label)
+                .foregroundStyle(shortcut.isEnabled ? .primary : .secondary)
+
             Spacer()
-            ShortcutRecorder(shortcut: $shortcut, defaultValue: defaultValue, label: label)
+
+            if shortcut.isEnabled {
+                ShortcutRecorder(shortcut: $shortcut, defaultValue: defaultValue, label: label)
+            } else {
+                Text("Disabled")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .frame(minWidth: 90, alignment: .center)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color(NSColor.controlBackgroundColor))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.secondary.opacity(0.2))
+                            )
+                    )
+            }
         }
     }
 }

@@ -321,6 +321,7 @@ actor ModelManager: Sendable {
                                    progressHandler: progressHandler)
             progressHandler?(1.0)
             try fh.synchronize()
+            try? FileManager.default.removeItem(at: destURL)
             try FileManager.default.moveItem(at: partialURL, to: destURL)
             return destURL
         }
@@ -333,6 +334,7 @@ actor ModelManager: Sendable {
         progressHandler?(1.0)
         try fileHandle.synchronize()
 
+        try? FileManager.default.removeItem(at: destURL)
         try FileManager.default.moveItem(at: partialURL, to: destURL)
         return destURL
     }
@@ -353,7 +355,7 @@ actor ModelManager: Sendable {
             buffer.append(byte)
             downloaded += 1
             if buffer.count >= chunkSize {
-                fileHandle.write(buffer)
+                try fileHandle.write(contentsOf: buffer)
                 buffer.removeAll(keepingCapacity: true)
             }
             if totalExpected > 0, let handler = progressHandler {
@@ -364,7 +366,7 @@ actor ModelManager: Sendable {
                 }
             }
         }
-        if !buffer.isEmpty { fileHandle.write(buffer) }
+        if !buffer.isEmpty { try fileHandle.write(contentsOf: buffer) }
     }
 
     func downloadModel(from url: URL, expectedSHA256: String? = nil, progressHandler: ((Double) -> Void)? = nil, verificationHandler: ((Double) -> Void)? = nil) async throws -> URL {

@@ -48,35 +48,35 @@ enum CorrectionError: Error, LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .accessibilityPermissionDenied:
-            return "Accessibilità non abilitata. Apri Impostazioni di Sistema > Privacy e sicurezza > Accessibilità e aggiungi Parrot all'elenco."
+            return "Accessibility not enabled. Open System Settings > Privacy & Security > Accessibility and add Parrot."
         case .noTextSelected:
-            return "Nessun testo selezionato. Seleziona del testo e riprova."
+            return "No text selected. Select some text and try again."
         case .textExtractionFailed(let appName):
-            return "Impossibile leggere il testo da \(appName). L'app potrebbe non supportare l'Accessibilità."
+            return "Cannot read text from \(appName). The app may not support Accessibility."
         case .serverNotRunning:
-            return "Il motore AI non è ancora pronto. Attendi qualche secondo e riprova."
+            return "AI engine failed to start. Check that llama-server is installed or restart the app."
         case .serverTimeout:
-            return "Il server sta impiegando troppo tempo. Riprova tra qualche secondo."
+            return "Server is taking too long to respond. Try again in a few seconds."
         case .modelNotLoaded:
-            return "Nessun modello installato. Vai su Impostazioni > Modelli per scaricarne uno."
+            return "No model installed. Go to Settings › Models to download one."
         case .modelDownloadFailed:
-            return "Download fallito. Controlla la connessione. Se il problema persiste, aggiungi un token HuggingFace in Impostazioni > Avanzate."
+            return "Download failed. Check your connection. If the issue persists, add a HuggingFace token in Settings › Advanced."
         case .modelCorrupted:
-            return "Il file del modello è danneggiato. Scaricalo di nuovo dal pannello Modelli."
+            return "Model file is corrupted. Download it again from the Models panel."
         case .modelIncompatibleVersion:
-            return "Questo modello non è compatibile con la versione attuale. Scarica un modello aggiornato."
+            return "This model is not compatible with the current version. Download an updated model."
         case .outOfMemory:
-            return "Memoria insufficiente. Chiudi altre app o scegli un modello più piccolo nel pannello Modelli."
+            return "Not enough memory. Close other apps or choose a smaller model in the Models panel."
         case .networkUnavailable:
-            return "Connessione assente. Controlla il Wi-Fi o il cavo ethernet."
+            return "No connection. Check your Wi-Fi or ethernet cable."
         case .invalidAPIKey:
-            return "API Key non valida. Verificala in Impostazioni > Motore."
+            return "Invalid API key. Verify it in Settings › Engine."
         case .rateLimited:
-            return "Troppe richieste. Riprova tra qualche secondo."
+            return "Too many requests. Try again in a few seconds."
         case .outputParsingFailed:
-            return "Il modello ha prodotto una risposta inattesa. Riprova la correzione."
+            return "The model produced an unexpected response. Try the correction again."
         case .textTooLong(let length, let maxLength):
-            return "Testo troppo lungo (\(length) caratteri). Massimo: \(maxLength)."
+            return "Text too long (\(length) characters). Maximum: \(maxLength)."
         }
     }
 }

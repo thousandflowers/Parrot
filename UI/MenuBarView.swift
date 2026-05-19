@@ -219,7 +219,7 @@ struct MenuBarView: View {
     }
 
     private func shortcutString(_ config: ShortcutConfig) -> String {
-        config.displayString
+        config.isEnabled ? config.displayString : ""
     }
 
     // MARK: - Actions

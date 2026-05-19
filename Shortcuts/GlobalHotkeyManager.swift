@@ -33,49 +33,57 @@ final class GlobalHotkeyManager {
             keyCode: prefs.shortcutGrammar.keyCode,
             modifiers: prefs.shortcutGrammar.modifiers,
             label: prefs.shortcutGrammar.displayString,
-            action: { TextCheckCoordinator.shared.checkSelectedText() }
+            action: { TextCheckCoordinator.shared.checkSelectedText() },
+            enabled: prefs.shortcutGrammar.isEnabled
         )
         register(
             keyCode: prefs.shortcutFluency.keyCode,
             modifiers: prefs.shortcutFluency.modifiers,
             label: prefs.shortcutFluency.displayString,
-            action: { TextCheckCoordinator.shared.checkFluency() }
+            action: { TextCheckCoordinator.shared.checkFluency() },
+            enabled: prefs.shortcutFluency.isEnabled
         )
         register(
             keyCode: prefs.shortcutEditor.keyCode,
             modifiers: prefs.shortcutEditor.modifiers,
             label: prefs.shortcutEditor.displayString,
-            action: { Task { await TextCheckCoordinator.shared.openFloatingEditor() } }
+            action: { Task { await TextCheckCoordinator.shared.openFloatingEditor() } },
+            enabled: prefs.shortcutEditor.isEnabled
         )
         register(
             keyCode: prefs.shortcutReplace.keyCode,
             modifiers: prefs.shortcutReplace.modifiers,
             label: prefs.shortcutReplace.displayString,
-            action: { TextCheckCoordinator.shared.checkAndReplace() }
+            action: { TextCheckCoordinator.shared.checkAndReplace() },
+            enabled: prefs.shortcutReplace.isEnabled
         )
         register(
             keyCode: prefs.shortcutTranslate.keyCode,
             modifiers: prefs.shortcutTranslate.modifiers,
             label: prefs.shortcutTranslate.displayString,
-            action: { TextCheckCoordinator.shared.checkTranslation() }
+            action: { TextCheckCoordinator.shared.checkTranslation() },
+            enabled: prefs.shortcutTranslate.isEnabled
         )
         register(
             keyCode: prefs.shortcutApplyDirect.keyCode,
             modifiers: prefs.shortcutApplyDirect.modifiers,
             label: prefs.shortcutApplyDirect.displayString,
-            action: { TextCheckCoordinator.shared.checkAndApplyDirect() }
+            action: { TextCheckCoordinator.shared.checkAndApplyDirect() },
+            enabled: prefs.shortcutApplyDirect.isEnabled
         )
         register(
             keyCode: prefs.shortcutCoach.keyCode,
             modifiers: prefs.shortcutCoach.modifiers,
             label: prefs.shortcutCoach.displayString,
-            action: { TextCheckCoordinator.shared.checkCoach() }
+            action: { TextCheckCoordinator.shared.checkCoach() },
+            enabled: prefs.shortcutCoach.isEnabled
         )
         register(
             keyCode: prefs.shortcutApplyAll.keyCode,
             modifiers: prefs.shortcutApplyAll.modifiers,
             label: prefs.shortcutApplyAll.displayString,
-            action: { InlineHighlightController.shared.applyAllAnnotations() }
+            action: { InlineHighlightController.shared.applyAllAnnotations() },
+            enabled: prefs.shortcutApplyAll.isEnabled
         )
     }
 
@@ -115,7 +123,8 @@ final class GlobalHotkeyManager {
         actionsLock.unlock()
     }
 
-    private func register(keyCode: UInt32, modifiers: UInt32, label: String, action: @escaping () -> Void) {
+    private func register(keyCode: UInt32, modifiers: UInt32, label: String, action: @escaping () -> Void, enabled: Bool = true) {
+        guard enabled else { return }
         let id = EventHotKeyID(signature: OSType(0x5246434C), id: nextID)
         nextID += 1
 
