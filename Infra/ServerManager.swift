@@ -61,19 +61,7 @@ actor ServerManager: Sendable {
     }
 
     private func resolveServerExecutable() -> URL? {
-        // 1. Bundled binary inside .app (production release)
-        if let bundled = Bundle.main.url(forAuxiliaryExecutable: "llama-server") {
-            return bundled
-        }
-        // 2. Homebrew (Apple Silicon / Intel) and standard PATH locations
-        let candidates = [
-            "/opt/homebrew/bin/llama-server",
-            "/usr/local/bin/llama-server",
-            "/usr/bin/llama-server",
-        ]
-        return candidates
-            .first(where: { FileManager.default.isExecutableFile(atPath: $0) })
-            .map { URL(fileURLWithPath: $0) }
+        LlamaInstaller.resolveExecutable().map { URL(fileURLWithPath: $0) }
     }
 
     func start(modelPath: String) async throws {

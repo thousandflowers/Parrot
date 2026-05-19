@@ -62,8 +62,93 @@ struct GeneralTab: View {
             } header: {
                 Label("Status", systemImage: "antenna.radiowaves.left.and.right")
             }
+
+            if prefs.serviceType == .local {
+                LlamaInstallerSection()
+            }
         }
         .formStyle(.grouped)
+    }
+}
+
+// MARK: - llama-server Installer
+
+private struct LlamaInstallerSection: View {
+    private var installer: LlamaInstaller { LlamaInstaller.shared }
+
+    var body: some View {
+        switch installer.phase {
+        case .unknown:
+            EmptyView()
+                .onAppear { installer.checkAvailability() }
+
+        case .available:
+            EmptyView()
+
+        case .unavailable:
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("llama-server not found", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.callout.weight(.medium))
+                    Text("The local AI engine is not installed. Parrot can install it automatically via Homebrew, or download a prebuilt binary from GitHub.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Install llama-server") { installer.install() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                }
+                .padding(.vertical, 2)
+            } header: {
+                Label("Engine Setup", systemImage: "wrench.and.screwdriver")
+            }
+
+        case .installing(let progress, let message):
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(message)
+                        .font(.callout)
+                    if progress < 0 {
+                        ProgressView()
+                            .progressViewStyle(.linear)
+                    } else {
+                        ProgressView(value: progress)
+                            .progressViewStyle(.linear)
+                    }
+                    Text("Do not close the app while installing.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 2)
+            } header: {
+                Label("Engine Setup", systemImage: "wrench.and.screwdriver")
+            }
+
+        case .failed(let message):
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Installation failed", systemImage: "xmark.circle.fill")
+                        .foregroundStyle(.red)
+                        .font(.callout.weight(.medium))
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Button("Try Again") { installer.install() }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                        Button("Install Homebrew first…") {
+                            NSWorkspace.shared.open(URL(string: "https://brew.sh")!)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+                .padding(.vertical, 2)
+            } header: {
+                Label("Engine Setup", systemImage: "wrench.and.screwdriver")
+            }
+        }
     }
 }
 
