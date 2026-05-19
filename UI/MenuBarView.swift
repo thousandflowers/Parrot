@@ -28,9 +28,8 @@ struct MenuBarView: View {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(Color.accentColor.opacity(0.12))
                     .frame(width: 30, height: 30)
-                Image(systemName: "checkmark.shield.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
+                Text("🦜")
+                    .font(.system(size: 16))
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text("Parrot")

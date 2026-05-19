@@ -27,7 +27,7 @@ final class OnboardingController {
             backing: .buffered,
             defer: false
         )
-        w.title = "Initial Setup — Refine"
+        w.title = "Initial Setup — Parrot"
         w.center()
         w.isReleasedWhenClosed = false
         w.setFrameAutosaveName("OnboardingWindow")
@@ -107,7 +107,7 @@ struct OnboardingView: View {
                     .controlSize(.regular)
                     .keyboardShortcut(.return, modifiers: [])
             } else {
-                Button("Start using Refine") { onComplete() }
+                Button("Start using Parrot") { onComplete() }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.regular)
                     .keyboardShortcut(.return, modifiers: [])
@@ -136,13 +136,11 @@ private struct WelcomeStep: View {
         VStack(spacing: 28) {
             Spacer()
 
-            Image(systemName: "checkmark.shield.fill")
+            Text("🦜")
                 .font(.system(size: 64))
-                .foregroundStyle(Color.accentColor)
-                .symbolRenderingMode(.hierarchical)
 
             VStack(spacing: 10) {
-                Text("Welcome to Refine")
+                Text("Welcome to Parrot")
                     .font(.largeTitle.bold())
 
                 Text("Your writing assistant for Mac")
@@ -220,8 +218,8 @@ private struct AccessibilityStep: View {
                     .font(.title2.bold())
 
                 Text(isGranted
-                    ? "Refine can now read and modify text in other applications."
-                    : "Refine needs access to text in other applications to correct grammar."
+                    ? "Parrot can now read and modify text in other applications."
+                    : "Parrot needs access to text in other applications to correct grammar."
                 )
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
@@ -236,7 +234,7 @@ private struct AccessibilityStep: View {
                     }
                     .buttonStyle(.borderedProminent)
 
-                    Text("System Settings → Privacy & Security → Accessibility → add Refine")
+                    Text("System Settings → Privacy & Security → Accessibility → add Parrot")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -273,7 +271,7 @@ private struct ServiceStep: View {
                         .symbolRenderingMode(.hierarchical)
                     Text("AI Engine")
                         .font(.title2.bold())
-                    Text("Choose how Refine will process your text.")
+                    Text("Choose how Parrot will process your text.")
                         .foregroundStyle(.secondary)
                         .font(.callout)
                 }
@@ -528,7 +526,7 @@ private struct ReadyStep: View {
             VStack(spacing: 8) {
                 Text("All set!")
                     .font(.largeTitle.bold())
-                Text("Refine is configured and ready to use.")
+                Text("Parrot is configured and ready to use.")
                     .foregroundStyle(.secondary)
                     .font(.title3)
             }

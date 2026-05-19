@@ -24,7 +24,7 @@ final class FloatingEditorController {
             backing: .buffered,
             defer: false
         )
-        newWindow.title = "Editor — Refine"
+        newWindow.title = "Editor — Parrot"
         newWindow.subtitle = "Correct and improve your text"
         newWindow.level = .floating
         newWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]

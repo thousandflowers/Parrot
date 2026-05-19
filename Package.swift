@@ -36,7 +36,8 @@ let package = Package(
                 ".build",
                 "setup-dev.sh",
                 "build-app.sh",
-                "RefineClone.app"
+                "RefineClone.app",
+                "Parrot.app"
             ]
         ),
         .testTarget(
