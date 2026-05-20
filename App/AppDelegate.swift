@@ -19,6 +19,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         OnboardingController.shared.showIfNeeded()
 
+        // Load correction cache persisted from previous session
+        Task { await CorrectionCache.shared.loadFromDisk() }
+
         if UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.realtimeEnabled) {
             Task { await RealtimeMonitor.shared.start() }
         }

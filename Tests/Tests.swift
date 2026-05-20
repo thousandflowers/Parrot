@@ -815,3 +815,49 @@ final class StreamingCacheTests: XCTestCase {
         XCTAssertNil(result)
     }
 }
+
+final class CorrectionCacheDiskTests: XCTestCase {
+    override func setUp() async throws {
+        await CorrectionCache.shared.invalidateAll()
+        await CorrectionCache.shared.deleteCacheFile()
+    }
+
+    override func tearDown() async throws {
+        await CorrectionCache.shared.deleteCacheFile()
+    }
+
+    func testSaveToDisk_thenLoadFromDisk_restoresEntry() async throws {
+        let cache = CorrectionCache.shared
+        let result = CorrectionResult(original: "disk test", corrected: "disk fixed", modelID: "m1")
+        await cache.set(result, text: "disk test", promptType: "grammar", modelID: "m1", language: "en")
+        await cache.saveToDisk()
+
+        await cache.invalidateAll()
+        let nilResult = await cache.get(text: "disk test", promptType: "grammar", modelID: "m1", language: "en")
+        XCTAssertNil(nilResult)
+
+        await cache.loadFromDisk()
+        let loaded = await cache.get(text: "disk test", promptType: "grammar", modelID: "m1", language: "en")
+        XCTAssertNotNil(loaded)
+        XCTAssertEqual(loaded?.correctedText, "disk fixed")
+    }
+
+    func testLoadFromDisk_corruptFile_doesNotCrash() async {
+        let url = await CorrectionCache.shared.cacheFileURL
+        try? "not valid json {{{{".write(to: url, atomically: true, encoding: .utf8)
+        await CorrectionCache.shared.loadFromDisk()
+        let result = await CorrectionCache.shared.get(text: "any", promptType: "grammar", modelID: "m", language: "en")
+        XCTAssertNil(result)
+    }
+
+    func testSaveToDisk_emptyCache_writesValidJSON() async {
+        await CorrectionCache.shared.saveToDisk()
+        let url = await CorrectionCache.shared.cacheFileURL
+        let data = try? Data(contentsOf: url)
+        XCTAssertNotNil(data)
+        // Should decode as empty array
+        let entries = try? JSONDecoder().decode([String].self, from: data ?? Data())
+        // Actually it's [DiskEntry], verify it's valid JSON at minimum
+        XCTAssertNotNil(data.flatMap { try? JSONSerialization.jsonObject(with: $0) })
+    }
+}

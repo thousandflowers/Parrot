@@ -1,8 +1,7 @@
 import Foundation
 import CryptoKit
+import OSLog
 
-/// Unified correction cache. Replaces the former ResponseCache + ResultCache.
-/// Caches full CorrectionResult objects with SHA256-based keys and memory-aware eviction.
 actor CorrectionCache: Sendable {
     static let shared = CorrectionCache()
 
@@ -11,10 +10,24 @@ actor CorrectionCache: Sendable {
     private let ttl = Constants.cacheTTL
     private let maxMemoryBytes = Constants.cacheMaxMemoryBytes
     private var currentMemoryBytes = 0
+    private var pendingSave: Task<Void, Never>?
 
     var currentMemoryBytesForTesting: Int { currentMemoryBytes }
 
+    let cacheFileURL: URL = {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return support.appendingPathComponent("Parrot/correction_cache.json")
+    }()
+
     private struct Entry {
+        let result: CorrectionResult
+        let timestamp: Date
+        let byteSize: Int
+    }
+
+    private struct DiskEntry: Codable {
+        let key: String
         let result: CorrectionResult
         let timestamp: Date
         let byteSize: Int
@@ -54,12 +67,12 @@ actor CorrectionCache: Sendable {
         if let existing = cache[key] {
             currentMemoryBytes = max(0, currentMemoryBytes - existing.byteSize)
         }
-
         if cache.count >= maxEntries || (currentMemoryBytes + byteSize) > maxMemoryBytes {
             evictUntilUnderLimit(neededBytes: byteSize)
         }
         cache[key] = Entry(result: result, timestamp: Date(), byteSize: byteSize)
         currentMemoryBytes += byteSize
+        scheduleSave()
     }
 
     func setIfNewer(_ result: CorrectionResult, text: String, promptType: String, modelID: String, language: String = "") {
@@ -84,6 +97,36 @@ actor CorrectionCache: Sendable {
         }
     }
 
+    // MARK: - Disk persistence
+
+    func loadFromDisk() {
+        guard let data = try? Data(contentsOf: cacheFileURL),
+              let entries = try? JSONDecoder().decode([DiskEntry].self, from: data) else { return }
+        let now = Date()
+        var loaded = 0
+        for entry in entries {
+            guard now.timeIntervalSince(entry.timestamp) < ttl else { continue }
+            cache[entry.key] = Entry(result: entry.result, timestamp: entry.timestamp, byteSize: entry.byteSize)
+            currentMemoryBytes += entry.byteSize
+            loaded += 1
+        }
+        Logger.infra.debug("CorrectionCache: loaded \(loaded) entries from disk")
+    }
+
+    func saveToDisk() {
+        let entries = cache.map { (key, entry) in
+            DiskEntry(key: key, result: entry.result, timestamp: entry.timestamp, byteSize: entry.byteSize)
+        }
+        guard let data = try? JSONEncoder().encode(entries) else { return }
+        let dir = cacheFileURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? data.write(to: cacheFileURL, options: .atomic)
+    }
+
+    func deleteCacheFile() {
+        try? FileManager.default.removeItem(at: cacheFileURL)
+    }
+
     // MARK: - Eviction
 
     private func evictUntilUnderLimit(neededBytes: Int) {
@@ -92,6 +135,17 @@ actor CorrectionCache: Sendable {
             guard cache.count >= maxEntries || (currentMemoryBytes + neededBytes) > maxMemoryBytes else { break }
             cache.removeValue(forKey: key)
             currentMemoryBytes = max(0, currentMemoryBytes - entry.byteSize)
+        }
+    }
+
+    // MARK: - Debounced save
+
+    private func scheduleSave() {
+        pendingSave?.cancel()
+        pendingSave = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(30))
+            guard !Task.isCancelled else { return }
+            await self?.saveToDisk()
         }
     }
 }
