@@ -26,5 +26,20 @@
         </item>
         -->
 
+        <item>
+            <title>Version 0.9.1</title>
+            <pubDate>mer, 20 mag 2026 14:13:54 +0000</pubDate>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>0.9.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/thousandflowers/Parrot/releases/download/v0.9.1/Parrot_0.9.1.zip"
+                length="13002086"
+                type="application/octet-stream"
+                sparkle:edSignature="3qDtUETq8ijSBEV0Wl/xm+2lTkGChBKmU8weEn7V/ibjn7ea83rsVhJo3bzFtuU85HLT+l11A76UuFN2xsFqDg=="
+            />
+            <sparkle:releaseNotesLink>https://github.com/thousandflowers/Parrot/releases/tag/v0.9.1</sparkle:releaseNotesLink>
+        </item>
+
     </channel>
 </rss>

@@ -15,9 +15,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.9.0</string>
+    <string>0.9.1</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>2</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSUIElement</key>
@@ -29,6 +29,8 @@
     <key>NSHumanReadableCopyright</key>
     <string>MIT License</string>
     <key>SUFeedURL</key>
-    <string>https://raw.githubusercontent.com/thousandflowers/parrot/main/appcast.xml</string>
+    <string>https://raw.githubusercontent.com/thousandflowers/Parrot/main/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>IA9eZ9C+2e+WWzy2TftXjhygp8z31LDwUh/tBSlnKos=</string>
 </dict>
 </plist>
