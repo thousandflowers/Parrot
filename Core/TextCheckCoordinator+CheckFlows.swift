@@ -32,7 +32,29 @@ extension TextCheckCoordinator {
     func checkStreaming() {
         runTask {
             let prepared = try await prepareCheck()
-            let service = LLMServiceFactory.make(with: prepared.serviceType ?? LLMServiceFactory.resolveDefaultServiceType())
+            let serviceType = prepared.serviceType ?? LLMServiceFactory.resolveDefaultServiceType()
+            let service = LLMServiceFactory.make(with: serviceType)
+            let modelID = LLMServiceFactory.resolveModelID(for: serviceType)
+            let detectedTone = await ToneDetector.shared.detect(
+                text: prepared.text, language: prepared.resolvedLanguage
+            )
+
+            // Cache lookup before streaming
+            if let cached = await CorrectionCache.shared.get(
+                text: prepared.text,
+                promptType: prepared.promptType.label,
+                modelID: modelID,
+                language: prepared.resolvedLanguage
+            ) {
+                await MainActor.run { SuggestionPanelController.shared.show(result: cached) }
+                await showInlineAnnotations(
+                    result: cached,
+                    textOffset: prepared.replacementRange?.location ?? 0,
+                    pid: prepared.capturedPID
+                )
+                return
+            }
+
             await MainActor.run { SuggestionPanelController.shared.showLoading() }
             var accumulated = ""
             let stream = service.streamCorrect(text: prepared.text, promptType: prepared.promptType)
@@ -41,9 +63,31 @@ extension TextCheckCoordinator {
             }
             try Task.checkCancellation()
             let finalText = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
-            let result = CorrectionResult(original: prepared.text, corrected: finalText, modelID: "streaming", confidence: 0.9, promptType: prepared.promptType.label)
+            var result = CorrectionResult(
+                original: prepared.text,
+                corrected: finalText,
+                modelID: modelID,
+                confidence: 0.9,
+                promptType: prepared.promptType.label,
+                detectedTone: detectedTone.rawValue
+            )
+            result.replacementRange = prepared.replacementRange
+
+            // Store in cache
+            await CorrectionCache.shared.set(
+                result,
+                text: prepared.text,
+                promptType: prepared.promptType.label,
+                modelID: modelID,
+                language: prepared.resolvedLanguage
+            )
+
             await MainActor.run { SuggestionPanelController.shared.show(result: result) }
-            await showInlineAnnotations(result: result, textOffset: prepared.replacementRange?.location ?? 0, pid: prepared.capturedPID)
+            await showInlineAnnotations(
+                result: result,
+                textOffset: prepared.replacementRange?.location ?? 0,
+                pid: prepared.capturedPID
+            )
         }
     }
 

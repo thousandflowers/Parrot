@@ -797,3 +797,21 @@ final class CorrectionResultSourceTests: XCTestCase {
         XCTAssertEqual(Constants.queueTimeout, 60.0, accuracy: 0.001)
     }
 }
+
+final class StreamingCacheTests: XCTestCase {
+    override func setUp() async throws {
+        await CorrectionCache.shared.invalidateAll()
+    }
+
+    func testCorrectionCache_preservesModelID_onRoundTrip() async {
+        let result = CorrectionResult(original: "hello", corrected: "hi", modelID: "stub-v1")
+        await CorrectionCache.shared.set(result, text: "hello", promptType: "grammar", modelID: "stub-v1", language: "en")
+        let retrieved = await CorrectionCache.shared.get(text: "hello", promptType: "grammar", modelID: "stub-v1", language: "en")
+        XCTAssertEqual(retrieved?.modelID, "stub-v1", "modelID must be preserved through cache")
+    }
+
+    func testCorrectionCache_cacheMiss_returnNil() async {
+        let result = await CorrectionCache.shared.get(text: "not cached", promptType: "grammar", modelID: "any", language: "en")
+        XCTAssertNil(result)
+    }
+}
