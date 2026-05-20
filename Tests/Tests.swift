@@ -861,3 +861,49 @@ final class CorrectionCacheDiskTests: XCTestCase {
         XCTAssertNotNil(data.flatMap { try? JSONSerialization.jsonObject(with: $0) })
     }
 }
+
+final class LexiconTests: XCTestCase {
+    func testInformalWords_containsGerman() {
+        XCTAssertTrue(Lexicon.informalWords.contains("krass"))
+        XCTAssertTrue(Lexicon.informalWords.contains("geil"))
+    }
+
+    func testInformalWords_containsSpanish() {
+        XCTAssertTrue(Lexicon.informalWords.contains("tío"))
+        XCTAssertTrue(Lexicon.informalWords.contains("guay"))
+    }
+
+    func testInformalWords_containsPortuguese() {
+        XCTAssertTrue(Lexicon.informalWords.contains("fixe"))
+        XCTAssertTrue(Lexicon.informalWords.contains("beleza"))
+    }
+
+    func testAcademicWords_containsGerman() {
+        XCTAssertTrue(Lexicon.academicWords.contains("daher"))
+        XCTAssertTrue(Lexicon.academicWords.contains("folglich"))
+    }
+
+    func testComputeWordScores_informalText_highInformalScore() {
+        let scores = Lexicon.computeWordScores(
+            words: ["hey", "yeah", "cool"],
+            rawWords: ["hey", "yeah", "cool"],
+            text: "hey yeah cool"
+        )
+        XCTAssertGreaterThan(scores.informalScore, 10.0)
+    }
+
+    func testComputeWordScores_academicText_highAcademicScore() {
+        let scores = Lexicon.computeWordScores(
+            words: ["therefore", "furthermore", "consequently"],
+            rawWords: ["therefore", "furthermore", "consequently"],
+            text: "therefore furthermore consequently"
+        )
+        XCTAssertGreaterThan(scores.academicScore, 5.0)
+    }
+
+    func testComputeWordScores_emptyText_doesNotCrash() {
+        let scores = Lexicon.computeWordScores(words: [], rawWords: [], text: "")
+        XCTAssertEqual(scores.wordCount, 1)  // max(0, 1)
+        XCTAssertEqual(scores.informalScore, 0.0)
+    }
+}

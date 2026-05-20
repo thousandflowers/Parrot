@@ -11,51 +11,6 @@ enum DetectedTone: String, Sendable, CaseIterable {
 actor ToneDetector {
     static let shared = ToneDetector()
 
-    private let informalContractionsEN: Set<String> = [
-        "don't", "can't", "it's", "we're", "i'm", "you're", "they're",
-        "won't", "shouldn't", "couldn't", "wouldn't", "isn't", "aren't",
-        "wasn't", "weren't", "hasn't", "haven't", "hadn't", "let's",
-        "that's", "what's", "who's", "here's", "there's", "he's", "she's",
-        "i'll", "you'll", "he'll", "she'll", "we'll", "they'll",
-        "i've", "you've", "we've", "they've", "i'd", "you'd", "he'd", "she'd",
-    ]
-
-    private let informalContractionsIT: Set<String> = [
-        "dell'", "nell'", "sull'", "coll'", "all'", "dall'",
-        "c'è", "c'era", "c'erano", "l'ho", "l'hai", "l'ha",
-        "m'ha", "t'ho", "s'è", "n'è",
-    ]
-
-    private let informalWords: Set<String> = [
-        "hey", "yeah", "yep", "nope", "cool", "awesome", "gonna",
-        "wanna", "gotta", "kinda", "sorta", "dunno", "lol", "omg",
-        "btw", "thx", "pls", "ok", "okay", "nah", "wow", "oops",
-        "ciao", "ok", "wow", "eh", "ah", "oh",
-        // French informal
-        "ouais", "nan", "bah", "hein", "genre", "truc", "machin",
-        "chelou", "ouf", "grave", "carrément", "trop", "vachement",
-        // Croatian informal
-        "bok", "cao", "kul", "super", "hej", "jel", "šta", "kaj",
-        // Danish informal
-        "fedt", "nice", "sejt", "bare", "altså", "jo",
-    ]
-
-    private let academicMarkers: Set<String> = [
-        "therefore", "furthermore", "consequently", "nonetheless",
-        "moreover", "thus", "hence", "accordingly", "nevertheless",
-        "whereas", "hereby", "therein", "thereof", "wherein",
-        "pertanto", "inoltre", "dunque", "conseguentemente",
-        "ciononostante", "tuttavia", "perciò", "nonostante",
-        // French academic
-        "ainsi", "néanmoins", "cependant", "toutefois", "certes",
-        "dès lors", "par conséquent", "en outre", "en effet",
-        // Croatian academic
-        "stoga", "međutim", "naime", "štoviše", "naposljetku",
-        // Danish academic
-        "desuden", "endvidere", "følgelig", "imidlertid", "herunder",
-        "ligeledes", "dermed", "således", "henholdsvis",
-    ]
-
     private lazy var passivePatternEN: NSRegularExpression? = {
         try? NSRegularExpression(pattern: "\\b(?:is|are|was|were|has been|have been|had been|will be|would be|should be|must be|being|been)\\s+\\w+(?:ed|en|t|d)\\b", options: [.caseInsensitive])
     }()
@@ -67,45 +22,42 @@ actor ToneDetector {
     }()
 
     func detect(text: String, language: String) -> DetectedTone {
-        // CJK text can't be reliably tokenised by spaces — let app context signal prevail
         guard LanguageFamily.family(for: language) != .cjk else { return .neutral }
 
         let rawWords = text.split(separator: " ")
         let words = rawWords.map { $0.trimmingCharacters(in: .punctuationCharacters).lowercased() }
-        let wordCount = max(words.count, 1)
         let isItalian = language.starts(with: "it")
 
-        let contractions: Set<String> = isItalian ? informalContractionsIT : informalContractionsEN
-        // Use raw words (before punctuation trimming) because contractions
-        // contain apostrophes that .punctuationCharacters removes.
+        let scores = Lexicon.computeWordScores(
+            words: words,
+            rawWords: rawWords.map(String.init),
+            text: text
+        )
+
+        let contractions: Set<String> = isItalian
+            ? Lexicon.informalContractionsIT
+            : Lexicon.informalContractionsEN
         let contractionCount = rawWords.map({ $0.lowercased() }).filter { w in
             contractions.contains { w.hasPrefix($0) }
         }.count
-        let informalWordCount = words.filter { informalWords.contains(String($0)) }.count
-        let academicCount = words.filter { academicMarkers.contains(String($0)) }.count
 
-        let exclamationCount = text.filter { $0 == "!" }.count
-        let allCapsRatio: Double = {
-            let capsWords = words.filter { $0 == $0.uppercased() && $0.count > 2 }
-            return Double(capsWords.count) / Double(wordCount)
-        }()
+        let adjustedInformalScore = scores.informalScore
+            + Double(contractionCount) / Double(scores.wordCount) * 100.0
 
         let passivePattern = isItalian ? passivePatternIT : passivePatternEN
-        let passiveCount = passivePattern?.numberOfMatches(in: text, range: NSRange(location: 0, length: text.utf16.count)) ?? 0
-
-        let techWordCount = camelCasePattern?.numberOfMatches(in: text, range: NSRange(location: 0, length: text.utf16.count)) ?? 0
+        let passiveCount = passivePattern?.numberOfMatches(
+            in: text, range: NSRange(location: 0, length: text.utf16.count)
+        ) ?? 0
+        let techWordCount = camelCasePattern?.numberOfMatches(
+            in: text, range: NSRange(location: 0, length: text.utf16.count)
+        ) ?? 0
         let longWordCount = words.filter { $0.count > 12 }.count
 
-        let informalScore = Double(contractionCount + informalWordCount) / Double(wordCount) * 100.0
-            + Double(exclamationCount) * 5.0
-            + allCapsRatio * 50.0
+        let formalScore = Double(passiveCount) / Double(scores.wordCount) * 100.0
+        let technicalScore = (Double(techWordCount + longWordCount)) / Double(scores.wordCount) * 100.0
 
-        let formalScore = Double(passiveCount) / Double(wordCount) * 100.0
-        let academicScore = Double(academicCount) / Double(wordCount) * 100.0
-        let technicalScore = Double(techWordCount + longWordCount) / Double(wordCount) * 100.0
-
-        if informalScore > 12.0 { return .informal }
-        if academicScore > 5.0 { return .academic }
+        if adjustedInformalScore > 12.0 { return .informal }
+        if scores.academicScore > 5.0 { return .academic }
         if formalScore > 8.0 { return .formal }
         if technicalScore > 5.0 { return .technical }
         return .neutral

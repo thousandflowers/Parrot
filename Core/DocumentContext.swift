@@ -85,64 +85,23 @@ struct ContextAnalyzer {
     }
 
     private static func styleFromText(_ text: String, language: String) -> WritingStyle {
-        // CJK text can't be reliably tokenised by space; defer to app bundle signal
         guard LanguageFamily.family(for: language) != .cjk else { return .neutral }
 
         let words = text.split(separator: " ")
             .map { $0.trimmingCharacters(in: .punctuationCharacters).lowercased() }
-        let wordCount = max(words.count, 1)
+        let scores = Lexicon.computeWordScores(
+            words: words,
+            rawWords: words,
+            text: text
+        )
 
-        let informalWords: Set<String> = [
-            "hey", "yeah", "yep", "nope", "cool", "awesome", "gonna", "wanna", "gotta",
-            "kinda", "sorta", "dunno", "lol", "omg", "btw", "thx", "ok", "okay", "nah",
-            "ciao", "eh", "xd", "haha", "lmao", "rofl", "tbh", "imo", "smh",
-            // French
-            "ouais", "nan", "bah", "hein", "genre", "truc", "machin", "chelou",
-            "ouf", "grave", "carrément", "trop", "vachement",
-            // Croatian
-            "bok", "cao", "kul", "hej", "jel", "šta", "kaj",
-            // Danish
-            "fedt", "nice", "sejt", "bare", "altså",
-        ]
-        let academicWords: Set<String> = [
-            "therefore", "furthermore", "consequently", "nonetheless", "moreover",
-            "thus", "hence", "accordingly", "nevertheless", "whereas", "pertanto",
-            "inoltre", "dunque", "conseguentemente", "ciononostante", "tuttavia",
-            "altresì", "parimenti", "nonostante",
-            // French
-            "ainsi", "néanmoins", "cependant", "toutefois", "certes",
-            "par conséquent", "en outre",
-            // Croatian
-            "stoga", "međutim", "naime", "štoviše", "naposljetku",
-            // Danish
-            "desuden", "endvidere", "følgelig", "imidlertid", "ligeledes",
-        ]
-        let technicalWords: Set<String> = [
-            "function", "variable", "api", "json", "http", "async",
-            "import", "struct", "protocol", "interface", "const",
-            "swift", "python", "javascript", "typescript", "kotlin",
-            "boolean", "integer", "callback", "endpoint", "repository",
-            "dockerfile", "kubernetes", "docker", "gradle", "webpack",
-        ]
-
-        let informalCount = words.filter { informalWords.contains($0) }.count
-        let academicCount = words.filter { academicWords.contains($0) }.count
-        let technicalCount = words.filter { technicalWords.contains($0) }.count
-
-        let exclamationCount = text.filter { $0 == "!" }.count
-        let semicolonCount = text.filter { $0 == ";" }.count
-
-        let informalScore  = Double(informalCount)  / Double(wordCount) * 100 + Double(exclamationCount) * 3
-        let academicScore  = Double(academicCount)  / Double(wordCount) * 100 + Double(semicolonCount)
-        let technicalScore = Double(technicalCount) / Double(wordCount) * 100
-
-        if informalScore  > 8 { return .informal }
-        if academicScore  > 5 { return .academic }
-        if technicalScore > 8 { return .technical }
+        if scores.informalScore > 8 { return .informal }
+        if scores.academicScore > 5 { return .academic }
+        if scores.technicalScore > 8 { return .technical }
 
         let sentences = text.components(separatedBy: CharacterSet(charactersIn: ".!?"))
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-        let avgLen = sentences.isEmpty ? 0.0 : Double(wordCount) / Double(sentences.count)
+        let avgLen = sentences.isEmpty ? 0.0 : Double(scores.wordCount) / Double(sentences.count)
         if avgLen > 20 { return .formal }
 
         return .neutral
