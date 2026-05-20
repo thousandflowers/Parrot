@@ -98,14 +98,14 @@ actor RequestQueue {
                     promptType = request.promptType
                 }
 
-                if let cached = await CorrectionCache.shared.get(text: request.text, promptType: promptType.label, modelID: modelID) {
+                if let cached = await CorrectionCache.shared.get(text: request.text, promptType: promptType.label, modelID: modelID, language: request.language) {
                     request.continuation.yield(.success(cached))
                     request.continuation.finish()
                     continue
                 }
 
                 let result = try await service.correct(text: request.text, promptType: promptType, language: request.language)
-                await CorrectionCache.shared.set(result, text: request.text, promptType: promptType.label, modelID: modelID)
+                await CorrectionCache.shared.set(result, text: request.text, promptType: promptType.label, modelID: modelID, language: request.language)
                 request.continuation.yield(.success(result))
                 request.continuation.finish()
             } catch {
