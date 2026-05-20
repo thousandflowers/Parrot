@@ -1,4 +1,5 @@
 import Cocoa
+import os
 import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -30,14 +31,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        let replyLock = NSLock()
-        // Swift 6 migration: replace with Mutex (swift-synchronization) or @MainActor redesign
-        nonisolated(unsafe) var didReply = false
+        let replySent = OSAllocatedUnfairLock<Bool>(initialState: false)
         let replyOnce: @Sendable () -> Void = {
-            replyLock.lock()
-            defer { replyLock.unlock() }
-            guard !didReply else { return }
-            didReply = true
+            let alreadySent = replySent.withLock { state in
+                let prev = state
+                state = true
+                return prev
+            }
+            guard !alreadySent else { return }
             DispatchQueue.main.async {
                 NSApp.reply(toApplicationShouldTerminate: true)
             }
@@ -65,6 +66,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        hotkeyManager?.shutdown()
         if let observer = frontAppObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
             frontAppObserver = nil
