@@ -10,7 +10,7 @@ actor CorrectionCache: Sendable {
     private let ttl = Constants.cacheTTL
     private let maxMemoryBytes = Constants.cacheMaxMemoryBytes
     private var currentMemoryBytes = 0
-    private var pendingSave: Task<Void, Never>?
+    private var pendingSave: Task<Void, Error>?
 
     var currentMemoryBytesForTesting: Int { currentMemoryBytes }
 
@@ -110,6 +110,9 @@ actor CorrectionCache: Sendable {
             currentMemoryBytes += entry.byteSize
             loaded += 1
         }
+        if cache.count > maxEntries || currentMemoryBytes > maxMemoryBytes {
+            evictUntilUnderLimit(neededBytes: 0)
+        }
         Logger.infra.debug("CorrectionCache: loaded \(loaded) entries from disk")
     }
 
@@ -117,10 +120,13 @@ actor CorrectionCache: Sendable {
         let entries = cache.map { (key, entry) in
             DiskEntry(key: key, result: entry.result, timestamp: entry.timestamp, byteSize: entry.byteSize)
         }
-        guard let data = try? JSONEncoder().encode(entries) else { return }
-        let dir = cacheFileURL.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? data.write(to: cacheFileURL, options: .atomic)
+        let url = cacheFileURL
+        Task.detached(priority: .utility) {
+            guard let data = try? JSONEncoder().encode(entries) else { return }
+            let dir = url.deletingLastPathComponent()
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? data.write(to: url, options: .atomic)
+        }
     }
 
     func deleteCacheFile() {
@@ -142,10 +148,9 @@ actor CorrectionCache: Sendable {
 
     private func scheduleSave() {
         pendingSave?.cancel()
-        pendingSave = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(30))
-            guard !Task.isCancelled else { return }
-            await self?.saveToDisk()
+        pendingSave = Task {
+            try await Task.sleep(for: .seconds(30))
+            await self.saveToDisk()
         }
     }
 }

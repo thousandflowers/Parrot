@@ -831,6 +831,7 @@ final class CorrectionCacheDiskTests: XCTestCase {
         let result = CorrectionResult(original: "disk test", corrected: "disk fixed", modelID: "m1")
         await cache.set(result, text: "disk test", promptType: "grammar", modelID: "m1", language: "en")
         await cache.saveToDisk()
+        try await Task.sleep(for: .milliseconds(100))
 
         await cache.invalidateAll()
         let nilResult = await cache.get(text: "disk test", promptType: "grammar", modelID: "m1", language: "en")
@@ -852,6 +853,7 @@ final class CorrectionCacheDiskTests: XCTestCase {
 
     func testSaveToDisk_emptyCache_writesValidJSON() async {
         await CorrectionCache.shared.saveToDisk()
+        try? await Task.sleep(for: .milliseconds(100))
         let url = await CorrectionCache.shared.cacheFileURL
         let data = try? Data(contentsOf: url)
         XCTAssertNotNil(data)
