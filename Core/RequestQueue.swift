@@ -44,7 +44,7 @@ actor RequestQueue {
             promptType: type,
             priority: priority,
             continuation: continuation,
-            deadline: Date().addingTimeInterval(60),
+            deadline: Date().addingTimeInterval(Constants.queueTimeout),
             overrideServiceType: overrideServiceType,
             overrideCustomPrompt: overrideCustomPrompt,
             language: language

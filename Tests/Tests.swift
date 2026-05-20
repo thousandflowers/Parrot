@@ -759,3 +759,41 @@ final class LLMServiceFactoryModelIDTests: XCTestCase {
         XCTAssertEqual(LLMServiceFactory.resolveModelID(for: .local), "qwen2-0.5b-instruct")
     }
 }
+
+final class CorrectionResultSourceTests: XCTestCase {
+    func testSource_ruleBasedPreservedThroughRoundTrip() {
+        let rawResult = CorrectionResult(original: "a", corrected: "b", modelID: "rules", source: .ruleBased)
+        let rebuilt = CorrectionResult(
+            original: rawResult.originalText,
+            corrected: rawResult.correctedText,
+            modelID: rawResult.modelID,
+            explanation: rawResult.explanation,
+            confidence: rawResult.confidence,
+            customInstruction: rawResult.customInstruction,
+            promptType: rawResult.promptType,
+            detectedTone: rawResult.detectedTone,
+            source: rawResult.source
+        )
+        XCTAssertEqual(rebuilt.source, .ruleBased, "source must survive performCheck reconstruction")
+    }
+
+    func testSource_hybridPreservedThroughRoundTrip() {
+        let rawResult = CorrectionResult(original: "a", corrected: "b", modelID: "grammar+fluency", source: .hybrid)
+        let rebuilt = CorrectionResult(
+            original: rawResult.originalText,
+            corrected: rawResult.correctedText,
+            modelID: rawResult.modelID,
+            source: rawResult.source
+        )
+        XCTAssertEqual(rebuilt.source, .hybrid)
+    }
+
+    func testSource_defaultIsLLM() {
+        let result = CorrectionResult(original: "a", corrected: "b", modelID: "gpt")
+        XCTAssertEqual(result.source, .llm, "default source must be .llm")
+    }
+
+    func testQueueTimeout_constant_is60() {
+        XCTAssertEqual(Constants.queueTimeout, 60.0, accuracy: 0.001)
+    }
+}

@@ -199,7 +199,8 @@ struct TextCheckCoordinator: Sendable {
                 confidence: rawResult.confidence,
                 customInstruction: rawResult.customInstruction,
                 promptType: rawResult.promptType,
-                detectedTone: detectedTone.rawValue)
+                detectedTone: rawResult.detectedTone ?? detectedTone.rawValue,
+                source: rawResult.source)
             mutableResult.replacementRange = replacementRange
             mutableResult.anchorRect = anchorRect
             let finalResult = mutableResult
