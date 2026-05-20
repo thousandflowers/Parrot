@@ -11,10 +11,11 @@ actor RequestQueue {
         let text: String
         let promptType: PromptType
         let priority: Priority
-        let box: ContinuationBox<CorrectionResult>
+        let continuation: AsyncStream<Result<CorrectionResult, Error>>.Continuation
         let deadline: Date
         let overrideServiceType: ServiceType?
         let overrideCustomPrompt: CustomPrompt?
+        let language: String
 
         enum Priority: Int, Comparable {
             case manual = 2
@@ -30,46 +31,38 @@ actor RequestQueue {
         type: PromptType,
         priority: LLMRequest.Priority,
         overrideServiceType: ServiceType? = nil,
-        overrideCustomPrompt: CustomPrompt? = nil
+        overrideCustomPrompt: CustomPrompt? = nil,
+        language: String = ""
     ) async throws -> CorrectionResult {
         guard text.count <= Constants.maxTextLength else {
             throw CorrectionError.textTooLong(length: text.count, maxLength: Constants.maxTextLength)
         }
-        let box = ContinuationBox<CorrectionResult>()
-        let timeoutTask = Task {
-            do {
-                try await Task.sleep(for: .seconds(60))
-                box.resume(throwing: CorrectionError.serverTimeout)
-            } catch {
-                // Timeout task cancelled, body already completed
-            }
+
+        let (stream, continuation) = AsyncStream<Result<CorrectionResult, Error>>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let request = LLMRequest(
+            text: text,
+            promptType: type,
+            priority: priority,
+            continuation: continuation,
+            deadline: Date().addingTimeInterval(60),
+            overrideServiceType: overrideServiceType,
+            overrideCustomPrompt: overrideCustomPrompt,
+            language: language
+        )
+        if let insertAt = self.queue.firstIndex(where: { $0.priority < priority }) {
+            self.queue.insert(request, at: insertAt)
+        } else {
+            self.queue.append(request)
         }
-        defer { timeoutTask.cancel() }
+        Task { await self.processQueue() }
 
         return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                guard box.install(continuation) else {
-                    continuation.resume(throwing: CancellationError())
-                    return
-                }
-                let request = LLMRequest(
-                    text: text,
-                    promptType: type,
-                    priority: priority,
-                    box: box,
-                    deadline: Date().addingTimeInterval(60),
-                    overrideServiceType: overrideServiceType,
-                    overrideCustomPrompt: overrideCustomPrompt
-                )
-                if let insertAt = self.queue.firstIndex(where: { $0.priority < priority }) {
-                    self.queue.insert(request, at: insertAt)
-                } else {
-                    self.queue.append(request)
-                }
-                Task { await self.processQueue() }
+            for await result in stream {
+                return try result.get()
             }
+            throw CancellationError()
         } onCancel: {
-            box.resume(throwing: CancellationError())
+            continuation.finish()
         }
     }
 
@@ -81,7 +74,8 @@ actor RequestQueue {
             let request = queue.removeFirst()
             
             if Date() > request.deadline {
-                request.box.resume(throwing: CorrectionError.serverTimeout)
+                request.continuation.yield(.failure(CorrectionError.serverTimeout))
+                request.continuation.finish()
                 continue
             }
             
@@ -104,20 +98,19 @@ actor RequestQueue {
                     promptType = request.promptType
                 }
 
-                if let cached = await ResultCache.shared.get(for: request.text, promptType: promptType.label, modelID: modelID) {
-                    request.box.resume(returning: cached)
+                if let cached = await CorrectionCache.shared.get(text: request.text, promptType: promptType.label, modelID: modelID) {
+                    request.continuation.yield(.success(cached))
+                    request.continuation.finish()
                     continue
                 }
 
-                let result = try await service.correct(text: request.text, promptType: promptType)
-                await ResultCache.shared.set(result, for: request.text, promptType: promptType.label, modelID: modelID)
-                request.box.resume(returning: result)
+                let result = try await service.correct(text: request.text, promptType: promptType, language: request.language)
+                await CorrectionCache.shared.set(result, text: request.text, promptType: promptType.label, modelID: modelID)
+                request.continuation.yield(.success(result))
+                request.continuation.finish()
             } catch {
-                if Date() > request.deadline {
-                    request.box.resume(throwing: CorrectionError.serverTimeout)
-                } else {
-                    request.box.resume(throwing: error)
-                }
+                request.continuation.yield(.failure(error))
+                request.continuation.finish()
             }
         }
         
@@ -141,81 +134,21 @@ actor RequestQueue {
     }
 }
 
-final class ContinuationBox<T>: @unchecked Sendable {
-    private var continuation: CheckedContinuation<T, Error>?
-    private var _resumed = false
-    let lock = NSLock()
-
-    var isResumed: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return _resumed
-    }
-
-    /// Atomically stores the continuation. Returns false if already resumed — caller must resume cont manually.
-    func install(_ cont: CheckedContinuation<T, Error>) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !_resumed else { return false }
-        continuation = cont
-        return true
-    }
-
-    func resume(throwing error: Error) {
-        let cont: CheckedContinuation<T, Error>?
-        lock.lock()
-        guard !_resumed else { lock.unlock(); return }
-        _resumed = true
-        cont = continuation
-        continuation = nil
-        lock.unlock()
-        cont?.resume(throwing: error)
-    }
-    func resume(returning value: T) {
-        let cont: CheckedContinuation<T, Error>?
-        lock.lock()
-        guard !_resumed else { lock.unlock(); return }
-        _resumed = true
-        cont = continuation
-        continuation = nil
-        lock.unlock()
-        cont?.resume(returning: value)
-    }
-}
-
 func withTimeout<T>(
     seconds: TimeInterval,
     operation: @escaping @Sendable () async throws -> T
 ) async throws -> T {
-    let box = ContinuationBox<T>()
-    var operationTask: Task<Void, Never>?
-    let timeoutTask = Task {
-        do {
+    try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask { try await operation() }
+        group.addTask {
             try await Task.sleep(for: .seconds(seconds))
-            operationTask?.cancel()
-            box.resume(throwing: CorrectionError.serverTimeout)
-        } catch {
-            // Timeout task cancelled, body already completed
+            throw CorrectionError.serverTimeout
         }
-    }
-    defer { timeoutTask.cancel(); operationTask?.cancel() }
 
-    return try await withTaskCancellationHandler {
-        try await withCheckedThrowingContinuation { continuation in
-            guard box.install(continuation) else {
-                continuation.resume(throwing: CancellationError())
-                return
-            }
-            operationTask = Task {
-                do {
-                    let result = try await operation()
-                    box.resume(returning: result)
-                } catch {
-                    box.resume(throwing: error)
-                }
-            }
+        guard let result = try await group.next() else {
+            throw CancellationError()
         }
-    } onCancel: {
-        box.resume(throwing: CancellationError())
+        group.cancelAll()
+        return result
     }
 }

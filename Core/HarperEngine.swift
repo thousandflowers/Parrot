@@ -74,7 +74,12 @@ actor HarperEngine {
             throw HarperError.processFailed(status)
         }
 
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let outputData: Data
+        do {
+            outputData = try outputPipe.fileHandleForReading.readToEnd() ?? Data()
+        } catch {
+            throw HarperError.processFailed(-1)
+        }
         guard let outputString = String(data: outputData, encoding: .utf8),
               !outputString.isEmpty else {
             return HarperResult(text: text, fixes: [])

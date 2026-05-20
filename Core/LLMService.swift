@@ -87,7 +87,7 @@ enum CorrectionError: Error, LocalizedError, Sendable {
 }
 
 protocol LLMService: AnyObject, Sendable {
-    func correct(text: String, promptType: PromptType) async throws -> CorrectionResult
+    func correct(text: String, promptType: PromptType, language: String) async throws -> CorrectionResult
     func correctFluency(text: String) async throws -> CorrectionResult
     func explain(original: String, corrected: String) async throws -> String
     func streamCorrect(text: String, promptType: PromptType) -> AsyncThrowingStream<String, Error>

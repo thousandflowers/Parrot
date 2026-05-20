@@ -6,10 +6,10 @@ final class PromptEngineTests: XCTestCase {
         let engine = PromptEngine(language: "en", style: "formale")
         let prompt = engine.buildGrammarPrompt(for: "This is a test")
         XCTAssertTrue(prompt.contains("This is a test"))
-        XCTAssertTrue(prompt.contains("<TEXT>"))
-        XCTAssertTrue(prompt.contains("</TEXT>"))
+        XCTAssertTrue(prompt.contains("Input:"))
+        XCTAssertTrue(prompt.contains("Output:"))
         XCTAssertTrue(prompt.contains("Use formal, professional tone."))
-        XCTAssertTrue(prompt.contains("Output only the corrected text; no notes or explanations. Do not include <TEXT>/<CUSTOM> tags."))
+        XCTAssertTrue(prompt.contains("Fix grammar, spelling, punctuation"))
     }
 
     func testLanguageFamily_latin() {
@@ -61,7 +61,7 @@ final class PromptEngineTests: XCTestCase {
     func testGrammarPrompt_slavic_hasDeclensionInstruction() {
         let engine = PromptEngine(language: "ru", style: "formal")
         let prompt = engine.buildGrammarPrompt(for: "test")
-        XCTAssertTrue(prompt.contains("Pay attention to case declensions and aspect of verbs."))
+        XCTAssertTrue(prompt.contains("Pay attention to case declensions, verb aspect"))
     }
 
     func testGrammarPrompt_nordic_hasSpecialCharsInstruction() {
@@ -163,35 +163,35 @@ final class CorrectionResultTests: XCTestCase {
     }
 }
 
-final class ResultCacheTests: XCTestCase {
+final class CorrectionCacheTests: XCTestCase {
+    override func setUp() async throws {
+        await CorrectionCache.shared.invalidateAll()
+    }
+
     func testGet_afterSet_returnsResult() async {
-        let cache = ResultCache.shared
-        await cache.invalidateAll()
+        let cache = CorrectionCache.shared
         let result = CorrectionResult(original: "a", corrected: "b", modelID: "x")
-        await cache.set(result, for: "a", modelID: "x")
-        let retrieved = await cache.get(for: "a", modelID: "x")
+        await cache.set(result, text: "a", promptType: "grammar", modelID: "x")
+        let retrieved = await cache.get(text: "a", promptType: "grammar", modelID: "x")
         XCTAssertNotNil(retrieved)
         XCTAssertEqual(retrieved?.correctedText, "b")
     }
 
     func testGet_differentModel_returnsNil() async {
-        let cache = ResultCache.shared
-        await cache.invalidateAll()
+        let cache = CorrectionCache.shared
         let result = CorrectionResult(original: "a", corrected: "b", modelID: "x")
-        await cache.set(result, for: "a", modelID: "x")
-        let retrieved = await cache.get(for: "a", modelID: "y")
+        await cache.set(result, text: "a", promptType: "grammar", modelID: "x")
+        let retrieved = await cache.get(text: "a", promptType: "grammar", modelID: "y")
         XCTAssertNil(retrieved)
     }
 
     func testSet_updatingExistingKey_doesNotDoublecountMemory() async {
-        let cache = ResultCache.shared
-        await cache.invalidateAll()
-
+        let cache = CorrectionCache.shared
         let result1 = CorrectionResult(original: "hello world", corrected: "hello world!", modelID: "m1")
         let result2 = CorrectionResult(original: "hello world", corrected: "hi world!", modelID: "m1")
 
-        await cache.set(result1, for: "hello world", modelID: "m1")
-        await cache.set(result2, for: "hello world", modelID: "m1")
+        await cache.set(result1, text: "hello world", promptType: "grammar", modelID: "m1")
+        await cache.set(result2, text: "hello world", promptType: "grammar", modelID: "m1")
         let bytesAfter = await cache.currentMemoryBytesForTesting
 
         let expectedBytes = "hello world".utf8.count + "hi world!".utf8.count
@@ -379,92 +379,28 @@ final class TextLengthValidationTests: XCTestCase {
     }
 }
 
-final class ContinuationBoxTests: XCTestCase {
-    func testDoubleResume_returning_noOp() {
-        let box = ContinuationBox<String>()
-        let exp = expectation(description: "resume")
-        let sem = DispatchSemaphore(value: 0)
-        Task {
-            _ = try? await withCheckedThrowingContinuation { cont in
-                _ = box.install(cont)
-                sem.signal()
-            }
-            exp.fulfill()
+final class ModelCatalogTests: XCTestCase {
+    func testAllModels_haveValidURLs() {
+        XCTAssertFalse(ModelCatalog.all.isEmpty)
+        for model in ModelCatalog.all {
+            XCTAssertNotNil(URL(string: model.url.absoluteString), "Invalid URL for model: \(model.name)")
         }
-        sem.wait()
-        box.resume(returning: "first")
-        box.resume(returning: "second")
-        wait(for: [exp])
     }
 
-    func testDoubleResume_throwing_noOp() {
-        let box = ContinuationBox<String>()
-        let exp = expectation(description: "resume")
-        let sem = DispatchSemaphore(value: 0)
-        Task {
-            do {
-                _ = try await withCheckedThrowingContinuation { cont in
-                    _ = box.install(cont)
-                    sem.signal()
-                }
-            } catch {
-                exp.fulfill()
-            }
+    func testAllModels_haveNonEmptyNames() {
+        for model in ModelCatalog.all {
+            XCTAssertFalse(model.name.isEmpty)
+            XCTAssertGreaterThan(model.ramRequired, 0)
         }
-        sem.wait()
-        box.resume(throwing: CorrectionError.serverTimeout)
-        box.resume(throwing: CorrectionError.networkUnavailable)
-        wait(for: [exp])
     }
 
-    func testMixedResume_thenError_noOp() {
-        let box = ContinuationBox<String>()
-        let exp = expectation(description: "resume")
-        let sem = DispatchSemaphore(value: 0)
-        Task {
-            _ = try? await withCheckedThrowingContinuation { cont in
-                _ = box.install(cont)
-                sem.signal()
-            }
-            exp.fulfill()
+    func testOnboardingCandidates_areSubsetOfAll() {
+        let candidates = ModelCatalog.onboardingCandidates
+        XCTAssertFalse(candidates.isEmpty)
+        for candidate in candidates {
+            XCTAssertTrue(candidate.isOnboardingCandidate)
+            XCTAssertTrue(ModelCatalog.all.contains(where: { $0.id == candidate.id }))
         }
-        sem.wait()
-        box.resume(returning: "ok")
-        box.resume(throwing: CorrectionError.serverTimeout)
-        wait(for: [exp])
-    }
-}
-
-final class ContinuationBoxInstallTests: XCTestCase {
-    func testInstall_freshBox_returnsTrue() async {
-        let box = ContinuationBox<String>()
-        var installed = false
-        let result = try? await withCheckedThrowingContinuation { cont in
-            installed = box.install(cont)
-            if installed {
-                box.resume(returning: "ok")
-            } else {
-                cont.resume(returning: "not-installed")
-            }
-        }
-        XCTAssertTrue(installed)
-        XCTAssertEqual(result, "ok")
-    }
-
-    func testInstall_afterResume_returnsFalse() async {
-        let box = ContinuationBox<String>()
-        box.resume(throwing: CancellationError())
-        XCTAssertTrue(box.isResumed)
-
-        var installed = false
-        let result = try? await withCheckedThrowingContinuation { cont in
-            installed = box.install(cont)
-            if !installed {
-                cont.resume(returning: "handled-by-caller")
-            }
-        }
-        XCTAssertFalse(installed, "install() must return false when box was already resumed")
-        XCTAssertEqual(result, "handled-by-caller")
     }
 }
 
@@ -522,12 +458,17 @@ final class LanguageFamilyTests: XCTestCase {
 }
 
 final class CustomRuleEscapingTests: XCTestCase {
+    override func setUp() async throws {
+        for rule in await CustomRuleStore.shared.allRules() {
+            await CustomRuleStore.shared.remove(id: rule.id)
+        }
+    }
+
     func testRegexRule_dollarInReplacement_isLiteral() async {
         let store = CustomRuleStore.shared
         let rule = CustomRule(name: "test-dollar", pattern: "foo", replacement: "$100", isRegex: true)
         await store.add(rule)
         let (result, _) = await store.apply(to: "foo bar", language: "en")
-        await store.remove(id: rule.id)
         XCTAssertEqual(result, "$100 bar", "$ in replacement must be literal, not a backreference")
     }
 
@@ -536,7 +477,6 @@ final class CustomRuleEscapingTests: XCTestCase {
         let rule = CustomRule(name: "test-backslash", pattern: "baz", replacement: "a\\1b", isRegex: true)
         await store.add(rule)
         let (result, _) = await store.apply(to: "baz", language: "en")
-        await store.remove(id: rule.id)
         XCTAssertEqual(result, "a\\1b", "\\1 in replacement must be literal, not a backreference")
     }
 }
@@ -685,20 +625,6 @@ final class RequestQueueTests: XCTestCase {
         _ = await task2.value
         _ = await task1.value
     }
-
-    func testContinuationBox_doubleResume_safe() {
-        let box = ContinuationBox<String>()
-        box.resume(returning: "first")
-        box.resume(returning: "second") // should be no-op, no crash
-        XCTAssertTrue(box.isResumed)
-    }
-
-    func testContinuationBox_resumeThenThrow_safe() {
-        let box = ContinuationBox<String>()
-        box.resume(returning: "ok")
-        box.resume(throwing: CorrectionError.serverTimeout)
-        XCTAssertTrue(box.isResumed)
-    }
 }
 
 final class ServerManagerTests: XCTestCase {
@@ -755,9 +681,12 @@ final class LLMAPITypesTests: XCTestCase {
 }
 
 final class HistoryStoreTests: XCTestCase {
+    override func setUp() async throws {
+        await HistoryStore.shared.clear()
+    }
+
     func testAdd_storesEntry() async {
         let store = HistoryStore.shared
-        await store.clear()
         let result = CorrectionResult(original: "hello", corrected: "Hello world!", modelID: "test")
         await store.add(result: result)
         let entries = await store.all()
@@ -767,7 +696,6 @@ final class HistoryStoreTests: XCTestCase {
 
     func testAdd_noChanges_doesNotStore() async {
         let store = HistoryStore.shared
-        await store.clear()
         let result = CorrectionResult(original: "hello", corrected: "hello", modelID: "test")
         await store.add(result: result)
         let entries = await store.all()

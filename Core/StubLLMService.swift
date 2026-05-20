@@ -3,7 +3,7 @@ import Foundation
 final class StubLLMService: LLMService, Sendable {
     static let shared = StubLLMService()
 
-    func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
+    func correct(text: String, promptType: PromptType, language: String) async throws -> CorrectionResult {
         try await Task.sleep(for: .milliseconds(500))
 
         let fakeCorrection: String
@@ -106,10 +106,10 @@ final class StubLLMService: LLMService, Sendable {
         result = result.replacingOccurrences(of: "wouldnt", with: "wouldn't")
         // Fix common Italian mistakes
         result = result.replacingOccurrences(of: " e' ", with: " è ")
-        result = result.replacingOccurrences(of: " po' ", with: " po' ")
-        result = result.replacingOccurrences(of: "perche", with: "perché")
-        result = result.replacingOccurrences(of: "Perche", with: "Perché")
-        result = result.replacingOccurrences(of: "poiche", with: "poiché")
+        result = result.replacingOccurrences(of: " un po' ", with: " un po' ")
+        result = result.replacingOccurrences(of: "perche ", with: "perché ")
+        result = result.replacingOccurrences(of: "Perche ", with: "Perché ")
+        result = result.replacingOccurrences(of: "poiche ", with: "poiché ")
         // Fix trailing punctuation
         result = result.trimmingCharacters(in: .whitespacesAndNewlines)
         return result

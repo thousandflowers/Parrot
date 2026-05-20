@@ -31,10 +31,10 @@ final class RemoteLLMService: LLMService, Sendable {
         }
     }
 
-    func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
+    func correct(text: String, promptType: PromptType, language: String) async throws -> CorrectionResult {
         let apiKey = try loadAPIKey()
         guard !apiKey.isEmpty else { throw CorrectionError.invalidAPIKey }
-        return try await performCorrection(text: text, promptType: promptType,
+        return try await performCorrection(text: text, promptType: promptType, language: language,
             model: openAIModel, url: try chatURL(), apiKey: apiKey)
     }
 
@@ -65,38 +65,19 @@ final class RemoteLLMService: LLMService, Sendable {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let lang = LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
-                    let engine = PromptEngine(language: lang, style: await resolveStyle())
-                    let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-                    let apiKey = try loadAPIKey()
-                    guard !apiKey.isEmpty else {
-                        throw CorrectionError.invalidAPIKey
+                    let apiKey = try self.loadAPIKey()
+                    guard !apiKey.isEmpty else { throw CorrectionError.invalidAPIKey }
+                    let url = try self.chatURL()
+                    for try await accumulated in self.defaultStreamCorrect(text: text, promptType: promptType, model: self.openAIModel, url: url, apiKey: apiKey) {
+                        continuation.yield(accumulated)
                     }
-                    let model = openAIModel
-
-                    let stream = performOpenAIStreamRequest(
-                        body: chatBody(model: model, prompt: prompt, temperature: 0.1, stream: true),
-                        url: try chatURL(),
-                        apiKey: apiKey
-                    )
-                    var fullText = ""
-                    for try await chunk in stream {
-                        fullText += chunk
-                        continuation.yield(fullText)
-                    }
-                    if fullText.isEmpty {
-                        continuation.finish(throwing: CorrectionError.outputParsingFailed(raw: "empty"))
-                    } else {
-                        continuation.finish()
-                    }
+                    continuation.finish()
                 } catch {
                     guard !Task.isCancelled else { return }
                     continuation.finish(throwing: error)
                 }
             }
-            continuation.onTermination = { _ in
-                task.cancel()
-            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 }

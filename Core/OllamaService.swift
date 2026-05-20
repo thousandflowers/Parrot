@@ -27,8 +27,8 @@ final class OllamaService: LLMService, Sendable {
         }
     }
 
-    func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
-        try await performCorrection(text: text, promptType: promptType,
+    func correct(text: String, promptType: PromptType, language: String) async throws -> CorrectionResult {
+        try await performCorrection(text: text, promptType: promptType, language: language,
             model: ollamaModel, url: try chatURL(), apiKey: nil)
     }
 
@@ -51,37 +51,9 @@ final class OllamaService: LLMService, Sendable {
     }
 
     func streamCorrect(text: String, promptType: PromptType) -> AsyncThrowingStream<String, Error> {
-        AsyncThrowingStream { continuation in
-            let task = Task {
-                do {
-                    let lang = LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
-                    let engine = PromptEngine(language: lang, style: await resolveStyle())
-                    let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-                    let model = ollamaModel
-
-                    let stream = performOpenAIStreamRequest(
-                        body: chatBody(model: model, prompt: prompt, temperature: 0.1, stream: true),
-                        url: try chatURL(),
-                        apiKey: nil
-                    )
-                    var fullText = ""
-                    for try await chunk in stream {
-                        fullText += chunk
-                        continuation.yield(fullText)
-                    }
-                    if fullText.isEmpty {
-                        continuation.finish(throwing: CorrectionError.outputParsingFailed(raw: "empty"))
-                    } else {
-                        continuation.finish()
-                    }
-                } catch {
-                    guard !Task.isCancelled else { return }
-                    continuation.finish(throwing: error)
-                }
-            }
-            continuation.onTermination = { _ in
-                task.cancel()
-            }
+        guard let url = try? chatURL() else {
+            return AsyncThrowingStream { $0.finish(throwing: CorrectionError.networkUnavailable) }
         }
+        return defaultStreamCorrect(text: text, promptType: promptType, model: ollamaModel, url: url, apiKey: nil)
     }
 }

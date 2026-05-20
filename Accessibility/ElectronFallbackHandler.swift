@@ -16,29 +16,26 @@ actor ElectronFallbackHandler {
         "com.obsidian.md",
     ]
 
+    private static let clipboardTokenType = NSPasteboard.PasteboardType("com.parrot.clipboard-token")
+
     func isElectronApp(bundleID: String) -> Bool {
         electronBundleIDs.contains(bundleID)
     }
 
-    /// Estrae il testo selezionato sintetizzando Cmd+C e leggendo la clipboard.
-    /// Ripristina la clipboard originale dopo l'estrazione.
     func extractViaClipboard(pid: pid_t) async throws -> String {
-        let (originalChangeCount, originalString) = await MainActor.run { () -> (Int, String?) in
+        let (originalString, originalToken) = await MainActor.run { () -> (String?, String?) in
             let pb = NSPasteboard.general
-            return (pb.changeCount, pb.string(forType: .string))
+            return (pb.string(forType: .string), pb.string(forType: Self.clipboardTokenType))
         }
 
-        // Focus l'app target
-        await MainActor.run {
+        _ = await MainActor.run {
             NSWorkspace.shared.runningApplications
                 .first(where: { $0.processIdentifier == pid })?
                 .activate(options: [])
-            return ()
         }
 
         try? await Task.sleep(for: .milliseconds(100))
 
-        // Sintetizza Cmd+C
         let source = CGEventSource(stateID: .hidSystemState)
         let cKeyCode: CGKeyCode = 0x08
         guard
@@ -52,34 +49,33 @@ actor ElectronFallbackHandler {
         keyDown.post(tap: .cghidEventTap)
         keyUp.post(tap: .cghidEventTap)
 
-        // Attendi che la clipboard si aggiorni (max 1s)
-        for _ in 0..<20 {
+        var copiedText: String?
+        for _ in 0..<10 {
             try? await Task.sleep(for: .milliseconds(50))
-            let (changeCount, text) = await MainActor.run { () -> (Int, String?) in
+            let (token, text) = await MainActor.run { () -> (String?, String?) in
                 let pb = NSPasteboard.general
-                return (pb.changeCount, pb.string(forType: .string))
+                return (pb.string(forType: Self.clipboardTokenType), pb.string(forType: .string))
             }
-            if changeCount != originalChangeCount {
-                await MainActor.run {
-                    let pb = NSPasteboard.general
-                    pb.clearContents()
-                    if let original = originalString {
-                        pb.setString(original, forType: .string)
-                    }
-                }
-                guard let text = text, !text.isEmpty else { break }
-                return text
+            if token != originalToken {
+                copiedText = text
+                break
             }
         }
 
-        // Ripristina clipboard originale anche in caso di fallimento
         await MainActor.run {
             let pb = NSPasteboard.general
             pb.clearContents()
             if let original = originalString {
                 pb.setString(original, forType: .string)
             }
+            if let originalToken {
+                pb.setString(originalToken, forType: Self.clipboardTokenType)
+            }
         }
-        throw CorrectionError.noTextSelected
+
+        guard let text = copiedText, !text.isEmpty else {
+            throw CorrectionError.noTextSelected
+        }
+        return text
     }
 }

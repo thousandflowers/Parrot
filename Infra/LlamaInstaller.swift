@@ -16,7 +16,7 @@ final class LlamaInstaller {
     private(set) var phase: LlamaInstallPhase = .unknown
 
     // Where we install a self-managed binary (not Homebrew)
-    static let managedBinURL: URL = {
+    nonisolated static let managedBinURL: URL = {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first ?? FileManager.default.temporaryDirectory
         return appSupport.appendingPathComponent("Parrot/bin/llama-server")
@@ -159,6 +159,7 @@ final class LlamaInstaller {
 
         FileManager.default.createFile(atPath: tempZip.path(percentEncoded: false), contents: nil)
         let handle = try FileHandle(forWritingTo: tempZip)
+        defer { try? handle.close() }
 
         var received: Int64 = 0
         var buf = Data()

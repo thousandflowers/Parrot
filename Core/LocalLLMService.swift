@@ -40,9 +40,9 @@ actor LocalLLMService: @preconcurrency LLMService {
         return url
     }
 
-    func correct(text: String, promptType: PromptType) async throws -> CorrectionResult {
+    func correct(text: String, promptType: PromptType, language: String) async throws -> CorrectionResult {
         let port = try await ensureServerRunning()
-        return try await performCorrection(text: text, promptType: promptType,
+        return try await performCorrection(text: text, promptType: promptType, language: language,
             model: modelName, url: try localChatURL(port: port), apiKey: nil)
     }
 
@@ -69,34 +69,18 @@ actor LocalLLMService: @preconcurrency LLMService {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let lang = LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
-                    let engine = PromptEngine(language: lang, style: await resolveStyle())
-                    let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-                    let port = try await ensureServerRunning()
-
-                    let stream = performOpenAIStreamRequest(
-                        body: chatBody(model: modelName, prompt: prompt, temperature: 0.1, stream: true),
-                        url: try localChatURL(port: port),
-                        apiKey: nil
-                    )
-                    var fullText = ""
-                    for try await chunk in stream {
-                        fullText += chunk
-                        continuation.yield(fullText)
+                    let port = try await self.ensureServerRunning()
+                    let url = try self.localChatURL(port: port)
+                    for try await accumulated in self.defaultStreamCorrect(text: text, promptType: promptType, model: self.modelName, url: url, apiKey: nil) {
+                        continuation.yield(accumulated)
                     }
-                    if fullText.isEmpty {
-                        continuation.finish(throwing: CorrectionError.outputParsingFailed(raw: "empty"))
-                    } else {
-                        continuation.finish()
-                    }
+                    continuation.finish()
                 } catch {
                     guard !Task.isCancelled else { return }
                     continuation.finish(throwing: error)
                 }
             }
-            continuation.onTermination = { _ in
-                task.cancel()
-            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 }

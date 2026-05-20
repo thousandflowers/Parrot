@@ -38,11 +38,6 @@ extension LLMService {
         extraHeaders: [String: String] = [:]
     ) async throws -> String {
         try throwIfInvalidLLMURL(url)
-        let userPrompt = body.messages.last(where: { $0.role == "user" })?.content
-        if let prompt = userPrompt,
-           let cached = ResponseCache.shared.get(text: prompt, model: body.model, promptType: "request") {
-            return cached
-        }
         var request = try buildLLMRequest(url: url, apiKey: apiKey, body: body)
         for (key, value) in extraHeaders {
             request.setValue(value, forHTTPHeaderField: key)
@@ -59,9 +54,6 @@ extension LLMService {
                 let result = try parseResponse(data: data)
                 guard !result.isEmpty else {
                     throw CorrectionError.outputParsingFailed(raw: "empty")
-                }
-                if let prompt = userPrompt {
-                    ResponseCache.shared.set(text: prompt, model: body.model, promptType: "request", result: result)
                 }
                 return result
             } catch is CancellationError {
@@ -122,23 +114,6 @@ extension LLMService {
         return "equilibrato"
     }
 
-    func rankedCorrection(
-        text: String,
-        promptType: PromptType,
-        model: String,
-        url: URL,
-        apiKey: String?,
-        extraHeaders: [String: String] = [:]
-    ) async throws -> CorrectionResult {
-        async let r1 = performCorrection(text: text, promptType: promptType, model: model, url: url, apiKey: apiKey, extraHeaders: extraHeaders)
-        async let r2 = performCorrectionAlternative(text: text, promptType: promptType, model: model, url: url, apiKey: apiKey, extraHeaders: extraHeaders)
-        let results = try await [r1, r2]
-        guard let best = results.max(by: { ($0.confidence ?? 0) < ($1.confidence ?? 0) }) else {
-            return results[0]
-        }
-        return best
-    }
-
     private func maxTokens(for text: String, isFluency: Bool) -> Int {
         isFluency
             ? max(256, min(text.count * 2, 1024))
@@ -166,38 +141,19 @@ extension LLMService {
                         maxTokens: maxTokens(for: text, isFluency: promptType.isFluency))
     }
 
-    private func performCorrectionAlternative(
-        text: String,
-        promptType: PromptType,
-        model: String,
-        url: URL,
-        apiKey: String?,
-        extraHeaders: [String: String] = [:]
-    ) async throws -> CorrectionResult {
-        let detectedLang = LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
-        let engine = PromptEngine(language: detectedLang, style: await resolveStyle())
-        let rawCorrected = try await performOpenAIRequest(
-            body: buildChatBody(text: text, promptType: promptType, engine: engine, model: model, temperatureOffset: 0.1),
-            url: url, apiKey: apiKey, extraHeaders: extraHeaders
-        )
-        let corrected = validateCorrection(original: text, corrected: rawCorrected, isFluency: promptType.isFluency)
-        let confidence = corrected == text ? 0.5 : 0.85
-        return CorrectionResult(
-            original: text, corrected: corrected,
-            modelID: model, confidence: confidence, promptType: promptType.label
-        )
-    }
-
     func performCorrection(
         text: String,
         promptType: PromptType,
+        language: String = "",
         model: String,
         url: URL,
         apiKey: String?,
         extraHeaders: [String: String] = [:]
     ) async throws -> CorrectionResult {
-        let detectedLang = LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
-        let engine = PromptEngine(language: detectedLang, style: await resolveStyle())
+        let lang = language.isEmpty
+            ? LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
+            : language
+        let engine = PromptEngine(language: lang, style: await resolveStyle())
         let rawCorrected = try await performOpenAIRequest(
             body: buildChatBody(text: text, promptType: promptType, engine: engine, model: model),
             url: url, apiKey: apiKey, extraHeaders: extraHeaders
@@ -291,48 +247,29 @@ extension LLMService {
                            max_tokens: maxTokens, stream: stream)
     }
 
-    func performOpenAIStreamRequest(
-        body: ChatRequest,
+    // MARK: - Shared streaming (used by all concrete services)
+
+    func defaultStreamCorrect(
+        text: String,
+        promptType: PromptType,
+        model: String,
         url: URL,
         apiKey: String?,
         extraHeaders: [String: String] = [:]
     ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
-                let session = URLSession(configuration: .default)
-                defer { session.invalidateAndCancel() }
                 do {
-                    let streamBody = ChatRequest(model: body.model, messages: body.messages,
-                                                temperature: body.temperature, max_tokens: body.max_tokens,
-                                                stream: true)
-                    var request = try buildLLMRequest(url: url, apiKey: apiKey, body: streamBody)
+                    let lang = LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
+                    let engine = PromptEngine(language: lang, style: await resolveStyle())
+                    let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
+                    let body = chatBody(model: model, prompt: prompt, temperature: 0.1, stream: true)
+                    var request = try buildLLMRequest(url: url, apiKey: apiKey, body: body)
                     for (key, value) in extraHeaders {
                         request.setValue(value, forHTTPHeaderField: key)
                     }
-                    let (bytes, response) = try await session.bytes(for: request)
-                    guard let httpResponse = response as? HTTPURLResponse else {
-                        throw CorrectionError.networkUnavailable
-                    }
-                    try handleOpenAIHTTPStatus(httpResponse.statusCode, data: Data())
-
-                    var skippedChunks = 0
-                    for try await line in bytes.lines {
-                        guard line.hasPrefix("data: ") else { continue }
-                        let jsonStr = String(line.dropFirst(6))
-                        if jsonStr == "[DONE]" { continuation.finish(); return }
-                        guard let jsonData = jsonStr.data(using: .utf8),
-                              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-                              let choices = json["choices"] as? [[String: Any]],
-                              let first = choices.first,
-                              let delta = first["delta"] as? [String: Any],
-                              let content = delta["content"] as? String else {
-                            if !jsonStr.isEmpty && jsonStr != "[DONE]" {
-                                skippedChunks += 1
-                                Logger.core.debug("Stream: unparseable chunk (\(skippedChunks, privacy: .public))")
-                            }
-                            continue
-                        }
-                        continuation.yield(content)
+                    for try await accumulated in await SSEStreamingEngine.shared.stream(request: request) {
+                        continuation.yield(accumulated)
                     }
                     continuation.finish()
                 } catch {
