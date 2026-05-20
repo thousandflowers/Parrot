@@ -85,11 +85,13 @@ enum Lexicon {
     static func computeWordScores(words: [String], rawWords: [String], text: String) -> StyleScores {
         let wordCount = max(words.count, 1)
         let informalCount = words.filter { informalWords.contains($0) }.count
-        let academicCount = words.filter { academicWords.contains($0) }.count
+        let singleWordAcademicCount = words.filter { academicWords.contains($0) }.count
+        let phraseAcademicCount = academicWords.filter { $0.contains(" ") && text.lowercased().contains($0) }.count
+        let academicCount = singleWordAcademicCount + phraseAcademicCount
         let technicalCount = words.filter { technicalWords.contains($0) }.count
         let exclamationCount = text.filter { $0 == "!" }.count
         let allCapsRatio: Double = {
-            let capsWords = words.filter { $0 == $0.uppercased() && $0.count > 2 }
+            let capsWords = rawWords.filter { $0 == $0.uppercased() && $0.count > 2 }
             return Double(capsWords.count) / Double(wordCount)
         }()
 
