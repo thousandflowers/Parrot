@@ -117,20 +117,9 @@ actor RequestQueue {
         isProcessing = false
     }
 
+    // nonisolated is safe here — delegates to a pure static factory method with no actor state.
     private nonisolated func resolveModelID(for serviceType: ServiceType) -> String {
-        switch serviceType {
-        case .stub:
-            return "stub-v1"
-        case .local:
-            let id = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID)
-            return id?.replacingOccurrences(of: ".gguf", with: "") ?? "local-qwen"
-        case .remote:
-            return UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openAIModel) ?? "gpt-4o-mini"
-        case .ollama:
-            return UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.ollamaModel) ?? "llama3.2"
-        case .openRouter:
-            return UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openRouterModel) ?? "openai/gpt-4o-mini"
-        }
+        LLMServiceFactory.resolveModelID(for: serviceType)
     }
 }
 

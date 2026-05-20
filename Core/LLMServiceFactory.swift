@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 struct LLMServiceFactory {
     static func make() -> LLMService {
@@ -35,7 +36,26 @@ struct LLMServiceFactory {
 
     private static func resolveServiceType(for key: String) -> ServiceType {
         guard let raw = UserDefaults.standard.string(forKey: key),
-              let type = ServiceType(rawValue: raw) else { return .stub }
+              let type = ServiceType(rawValue: raw) else {
+            Logger.infra.warning("No serviceType configured for \(key), defaulting to .local")
+            return .local
+        }
         return type
+    }
+
+    static func resolveModelID(for serviceType: ServiceType) -> String {
+        switch serviceType {
+        case .stub:
+            return "stub-v1"
+        case .local:
+            let id = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID)
+            return id?.replacingOccurrences(of: ".gguf", with: "") ?? "local-qwen"
+        case .remote:
+            return UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openAIModel) ?? "gpt-4o-mini"
+        case .ollama:
+            return UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.ollamaModel) ?? "llama3.2"
+        case .openRouter:
+            return UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openRouterModel) ?? "openai/gpt-4o-mini"
+        }
     }
 }

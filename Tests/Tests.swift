@@ -721,3 +721,41 @@ final class DiffHighlightTests: XCTestCase {
         XCTAssertEqual(corrWords[3], "veramente", "Expected word at index 3 to be 'veramente'")
     }
 }
+
+final class LLMServiceFactoryModelIDTests: XCTestCase {
+    override func tearDown() async throws {
+        UserDefaults.standard.removeObject(forKey: Constants.UserDefaultsKey.openAIModel)
+        UserDefaults.standard.removeObject(forKey: Constants.UserDefaultsKey.ollamaModel)
+        UserDefaults.standard.removeObject(forKey: Constants.UserDefaultsKey.openRouterModel)
+        UserDefaults.standard.removeObject(forKey: Constants.UserDefaultsKey.selectedModelID)
+    }
+
+    func testResolveModelID_stub_returnsStubV1() {
+        XCTAssertEqual(LLMServiceFactory.resolveModelID(for: .stub), "stub-v1")
+    }
+
+    func testResolveModelID_remote_returnsGPT4oMiniWhenNotSet() {
+        UserDefaults.standard.removeObject(forKey: Constants.UserDefaultsKey.openAIModel)
+        XCTAssertEqual(LLMServiceFactory.resolveModelID(for: .remote), "gpt-4o-mini")
+    }
+
+    func testResolveModelID_ollama_returnsLlama32WhenNotSet() {
+        UserDefaults.standard.removeObject(forKey: Constants.UserDefaultsKey.ollamaModel)
+        XCTAssertEqual(LLMServiceFactory.resolveModelID(for: .ollama), "llama3.2")
+    }
+
+    func testResolveModelID_openRouter_returnsGPT4oMiniWhenNotSet() {
+        UserDefaults.standard.removeObject(forKey: Constants.UserDefaultsKey.openRouterModel)
+        XCTAssertEqual(LLMServiceFactory.resolveModelID(for: .openRouter), "openai/gpt-4o-mini")
+    }
+
+    func testResolveModelID_local_returnsLocalQwenFallbackWhenNotSet() {
+        UserDefaults.standard.removeObject(forKey: Constants.UserDefaultsKey.selectedModelID)
+        XCTAssertEqual(LLMServiceFactory.resolveModelID(for: .local), "local-qwen")
+    }
+
+    func testResolveModelID_local_stripsGGUFExtension() {
+        UserDefaults.standard.set("qwen2-0.5b-instruct.gguf", forKey: Constants.UserDefaultsKey.selectedModelID)
+        XCTAssertEqual(LLMServiceFactory.resolveModelID(for: .local), "qwen2-0.5b-instruct")
+    }
+}
