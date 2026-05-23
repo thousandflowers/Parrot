@@ -196,13 +196,16 @@ extension LLMService {
         CrashLogger.log("performCorrection: done")
         let corrected: String
         switch promptType {
-        case .grammar:
-            corrected = validateCorrection(original: text, corrected: rawCorrected, isFluency: false)
-        case .fluency, .deSlop:
-            let validated = validateCorrection(original: text, corrected: rawCorrected, isFluency: true)
-            // Safety: if model translated instead of rewriting, discard output
-            let outLang = LanguageDetector.detect(text: validated, fallbackLanguage: lang)
-            corrected = (outLang == lang) ? validated : text
+        case .grammar, .fluency, .deSlop:
+            let isFluency = promptType != .grammar
+            let validated = validateCorrection(original: text, corrected: rawCorrected, isFluency: isFluency)
+            // Safety: discard output if model switched language (e.g. translated to English).
+            // Use resolvedLanguage as fallback for both to avoid error-heavy input text being
+            // misdetected and masking a language switch.
+            let sysLang = resolvedLanguage
+            let inLang  = LanguageDetector.detect(text: text,      fallbackLanguage: sysLang)
+            let outLang = LanguageDetector.detect(text: validated,  fallbackLanguage: sysLang)
+            corrected = (outLang == inLang) ? validated : text
         default:
             // Translation, coach, explain, etc.: pass raw output through — no word-change guards.
             corrected = rawCorrected.trimmingCharacters(in: .whitespacesAndNewlines)
