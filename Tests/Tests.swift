@@ -9,7 +9,7 @@ final class PromptEngineTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Input:"))
         XCTAssertTrue(prompt.contains("Output:"))
         XCTAssertTrue(prompt.contains("Use formal, professional tone."))
-        XCTAssertTrue(prompt.contains("Fix grammar, spelling, punctuation"))
+        XCTAssertTrue(prompt.contains("Fix all grammatical errors"))
     }
 
     func testLanguageFamily_latin() {
@@ -861,6 +861,15 @@ final class CorrectionCacheDiskTests: XCTestCase {
         let entries = try? JSONDecoder().decode([String].self, from: data ?? Data())
         // Actually it's [DiskEntry], verify it's valid JSON at minimum
         XCTAssertNotNil(data.flatMap { try? JSONSerialization.jsonObject(with: $0) })
+    }
+}
+
+final class RuleBasedEnginePipelineTests: XCTestCase {
+    func testRuleBasedResultDoesNotBlockLLM() async {
+        let engine = RuleBasedEngine()
+        let result = await engine.check("Qual'è il problema? Io andato a casa.", language: "it")
+        XCTAssertTrue(result.text.contains("Qual è"), "Rule engine must fix qual'è")
+        XCTAssertTrue(result.text.contains("Io andato"), "Rule engine must not fix 'Io andato' (LLM-only error)")
     }
 }
 
