@@ -367,7 +367,7 @@ struct PromptEngine {
         let styleLine = styleInstruction
         let safeText = escapeForPrompt(text)
         var lines: [String] = []
-        lines.append("Rewrite the text to improve readability, flow, and naturalness. Combine short choppy sentences. Use varied sentence structure. Preserve the original meaning exactly. Output ONLY the rewritten text IN THE SAME LANGUAGE as the input. Do NOT translate.")
+        lines.append("Rewrite the text to improve readability, flow, and naturalness. Combine short choppy sentences. Use varied sentence structure. Preserve the original meaning exactly — do NOT add, invent, or assume any information not present in the original. Only words and facts already in the text may appear in the output. Output ONLY the rewritten text IN THE SAME LANGUAGE as the input. Do NOT translate.")
         if let nativeLine = nativeLanguageInstruction { lines.append(nativeLine) }
         if !styleLine.isEmpty { lines.append(styleLine) }
         if let custom = customInstruction { lines.append(custom) }
