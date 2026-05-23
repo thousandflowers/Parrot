@@ -7,6 +7,7 @@ final class RealtimeIndicatorController {
 
     private var window: NSWindow?
     private var hostingView: NSHostingView<RealtimeIndicatorView>?
+    private var autoDismissTask: Task<Void, Never>?
 
     private init() {}
 
@@ -14,7 +15,13 @@ final class RealtimeIndicatorController {
         NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 
+    // Only shows when there are actual errors. "All OK" is silent.
     func show(errors: Bool) {
+        guard errors else {
+            hide()
+            return
+        }
+
         Task { @MainActor [weak self] in
             guard let self else { return }
             let bounds = await AccessibilityBridge.shared.lastSelectionBounds
@@ -29,12 +36,11 @@ final class RealtimeIndicatorController {
                 y = mousePoint.y - 20
             }
 
-            let newView = RealtimeIndicatorView(hasErrors: errors)
+            let newView = RealtimeIndicatorView(hasErrors: true)
 
             if let existing = window {
                 // Never update rootView on a visible window — NSHostingView.updateAnimatedWindowSize
                 // fires from windowDidLayout and causes a re-entrant constraint crash.
-                // Hide → replace contentView with fresh NSHostingView → show again.
                 existing.orderOut(nil)
                 let hv = NSHostingView(rootView: newView)
                 hv.sizingOptions = []
@@ -43,33 +49,42 @@ final class RealtimeIndicatorController {
                 existing.setFrameOrigin(NSPoint(x: x, y: y))
                 existing.orderFront(nil)
                 fadeIn(existing)
-                return
+            } else {
+                let panel = NSWindow(
+                    contentRect: NSRect(x: x, y: y, width: 130, height: 30),
+                    styleMask: [.borderless, .nonactivatingPanel],
+                    backing: .buffered,
+                    defer: false
+                )
+                panel.level = .floating
+                panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+                panel.isOpaque = false
+                panel.backgroundColor = .clear
+                panel.hasShadow = true
+                panel.isReleasedWhenClosed = false
+
+                let hv = NSHostingView(rootView: newView)
+                hv.sizingOptions = []
+                hostingView = hv
+                panel.contentView = hv
+                window = panel
+                panel.orderFront(nil)
+                fadeIn(panel)
             }
 
-            let panel = NSWindow(
-                contentRect: NSRect(x: x, y: y, width: 130, height: 30),
-                styleMask: [.borderless, .nonactivatingPanel],
-                backing: .buffered,
-                defer: false
-            )
-            panel.level = .floating
-            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-            panel.isOpaque = false
-            panel.backgroundColor = .clear
-            panel.hasShadow = true
-            panel.isReleasedWhenClosed = false
-
-            let hv = NSHostingView(rootView: newView)
-            hv.sizingOptions = []
-            hostingView = hv
-            panel.contentView = hv
-            window = panel
-            panel.orderFront(nil)
-            fadeIn(panel)
+            // Auto-dismiss after 4 seconds — avoid the popup lingering indefinitely.
+            autoDismissTask?.cancel()
+            autoDismissTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(4))
+                guard !Task.isCancelled else { return }
+                await self?.hide()
+            }
         }
     }
 
     func hide() {
+        autoDismissTask?.cancel()
+        autoDismissTask = nil
         guard let window = window else { return }
         if reduceMotion {
             window.orderOut(nil)

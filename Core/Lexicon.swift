@@ -2,24 +2,41 @@ import Foundation
 
 enum Lexicon {
     static let informalWords: Set<String> = [
+        // English
         "hey", "yeah", "yep", "nope", "cool", "awesome", "gonna",
         "wanna", "gotta", "kinda", "sorta", "dunno", "lol", "omg",
         "btw", "thx", "pls", "ok", "okay", "nah", "wow", "oops",
-        "ciao", "eh", "ah", "oh", "xd", "haha", "lmao", "rofl",
-        "tbh", "imo", "smh",
+        "xd", "haha", "lmao", "rofl", "tbh", "imo", "smh", "irl",
+        "fwiw", "afaik", "idk", "nvm", "rn", "asap", "gg", "ty", "np",
+        // Italian informal
+        "ciao", "dai", "boh", "mah", "eh", "ah", "oh", "beh",
+        "magari", "figurati", "prego", "insomma", "vabbè", "azz",
+        "basta", "tipo", "roba", "mica", "mica male", "pazzesco",
         // French informal
         "ouais", "nan", "bah", "hein", "genre", "truc", "machin",
         "chelou", "ouf", "grave", "carrément", "trop", "vachement",
+        "sympa", "super", "tip-top", "nickel", "cool", "wesh",
+        "franchement", "franchement", "putain", "mec", "gars",
+        // Spanish informal
+        "tío", "tía", "guay", "mola", "venga", "dale", "oye", "pues",
+        "vale", "hostia", "tronco", "macho", "colega", "joder",
+        "buenas", "que tal", "genial", "brutal", "flipar", "chévere",
+        // Portuguese informal
+        "fixe", "giro", "bué", "tipo", "massa", "beleza", "oi", "opa",
+        "poxa", "caramba", "cara", "mano", "legal", "valeu", "né",
+        "pô", "eita", "nossa", "show", "tá",
+        // German informal
+        "krass", "geil", "mega", "moin", "tschüss", "nee", "jup",
+        "boah", "äh", "ähm", "alter", "digga", "oha", "naja",
+        "stimmt", "genau", "echt", "echt jetzt", "hammer",
         // Croatian informal
         "bok", "cao", "kul", "super", "hej", "jel", "šta", "kaj",
-        // Danish informal
-        "fedt", "nice", "sejt", "bare", "altså", "jo",
-        // German informal
-        "krass", "geil", "mega", "moin", "tschüss", "nee", "jup", "boah", "äh", "ähm",
-        // Spanish informal
-        "tío", "tía", "guay", "mola", "venga", "dale", "oye", "pues", "vale", "hostia",
-        // Portuguese informal
-        "fixe", "giro", "bué", "tipo", "massa", "beleza", "oi", "opa", "poxa", "caramba",
+        // Danish/Norwegian informal
+        "fedt", "nice", "sejt", "bare", "altså", "jo", "asså",
+        "skjønner", "kult", "digg",
+        // Russian informal
+        "ладно", "окей", "норм", "круто", "блин", "чё", "ваще",
+        "типа", "прикол", "лол", "ок",
     ]
 
     static let academicWords: Set<String> = [
@@ -69,6 +86,27 @@ enum Lexicon {
         "dell'", "nell'", "sull'", "coll'", "all'", "dall'",
         "c'è", "c'era", "c'erano", "l'ho", "l'hai", "l'ha",
         "m'ha", "t'ho", "s'è", "n'è",
+    ]
+
+    static let informalContractionsFR: Set<String> = [
+        "j'ai", "j'm", "t'as", "t'es", "c'est", "c'était", "y'a",
+        "y'en a", "j'vais", "j'veux", "t'inquiète", "t'sais",
+        "j'suis", "ch'uis", "i'l", "i'z", "ça",
+    ]
+
+    static let informalContractionsDE: Set<String> = [
+        "ich's", "er's", "sie's", "hast du's", "hab's", "mach's",
+        "gibt's", "geht's", "is'", "ham", "'nen", "'nem", "'ne",
+    ]
+
+    static let informalContractionsES: Set<String> = [
+        "pa'", "pa' qué", "tó", "to'", "na'", "ca'", "d'", "m'",
+        "t'", "l'", "qu'", "s'", "'tá", "'tán",
+    ]
+
+    static let informalContractionsPT: Set<String> = [
+        "tô", "tá", "tão", "pra", "pro", "pros", "pras",
+        "num", "numa", "nuns", "numas", "dum", "duma",
     ]
 
     // MARK: - Shared word-count scoring

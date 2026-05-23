@@ -108,7 +108,13 @@ extension LLMService {
     }
 
     func resolveStyle() async -> String {
-        if let ctx = await ContextStorage.shared.current, ctx.confidence >= 0.60 {
+        let ctx = await ContextStorage.shared.current
+        // High-confidence context (usually from app bundle ID) → always trust it.
+        if let ctx, ctx.confidence >= 0.80 {
+            return ctx.style.promptEngineStyle
+        }
+        // Medium-confidence context: only trust if style is not neutral.
+        if let ctx, ctx.confidence >= 0.55, ctx.style != .neutral {
             return ctx.style.promptEngineStyle
         }
         return "equilibrato"
