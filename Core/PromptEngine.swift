@@ -106,12 +106,14 @@ struct PromptEngine {
 
     private var latinFamilyInstruction: String {
         switch primaryLanguageCode {
-        case "de": return "Pay attention to case declension (Nominativ, Akkusativ, Dativ, Genitiv), noun gender (der/die/das), verb-second word order (Verbzweitstellung), and separable verbs."
-        case "es": return "Pay attention to ser vs. estar, subjunctive mood (subjuntivo), gender and number agreement (concordancia), and correct use of por vs. para."
-        case "pt": return "Pay attention to ser vs. estar, subjunctive mood (subjuntivo), gender agreement, and correct use of accents."
-        case "el": return "Pay attention to noun declension, verb conjugation, and correct use of accents (τόνοι)."
-        case "nl": return "Pay attention to noun gender (de/het), verb conjugation, and word order in subordinate clauses."
-        case "tr": return "Pay attention to vowel harmony (sesli uyumu), correct suffixes for cases, and verb conjugation."
+        case "it": return "Fix subject-verb agreement and article-noun agreement only when clearly wrong. NEVER change: verb tense (imperfetto/passato prossimo/passato remoto/trapassato), verb mood (congiuntivo/condizionale/imperativo), or grammatical gender of any word."
+        case "de": return "Fix case declension and article errors only when clearly wrong (der/die/das/dem/den/des). NEVER change verb tense (Präteritum/Perfekt/Plusquamperfekt), Konjunktiv II, or noun gender."
+        case "es": return "Fix ser/estar and agreement errors only when clearly wrong. NEVER change: verb tense (pretérito indefinido/imperfecto/pluscuamperfecto), subjuntivo mood, or grammatical gender."
+        case "fr": return "Fix agreement and article contraction errors only when clearly wrong. NEVER change: verb tense (imparfait/passé composé/plus-que-parfait), subjonctif mood, or grammatical gender."
+        case "pt": return "Fix ser/estar and agreement errors only when clearly wrong. NEVER change: verb tense, subjuntivo mood, or grammatical gender."
+        case "el": return "Pay attention to noun declension, verb conjugation, and correct use of accents (τόνοι). NEVER change verb tense or mood."
+        case "nl": return "Fix noun gender (de/het) and verb conjugation errors only when clearly wrong. NEVER change verb tense or word order in subordinate clauses unless grammatically incorrect."
+        case "tr": return "Fix vowel harmony (sesli uyumu) and case suffix errors only when clearly wrong. NEVER change verb tense or aspect."
         default:    return ""
         }
     }
@@ -183,6 +185,11 @@ struct PromptEngine {
         - If a sentence has no errors, copy it VERBATIM — do not change a single word.
         - Do NOT rephrase, restructure, simplify, or improve style.
         - Do NOT add, remove, or reorder words unless fixing a concrete error.
+        - NEVER change verb tense. If the text uses past tense, keep past tense. If it uses present, keep present. If it uses future, keep future.
+        - NEVER change verb mood. If the text uses subjunctive (congiuntivo/subjonctif/subjuntivo/Konjunktiv), keep subjunctive. If it uses conditional, keep conditional.
+        - NEVER change grammatical gender. If the subject or object is feminine, keep all agreements feminine. If masculine, keep masculine.
+        - NEVER change subject or object pronouns (io/tu/lui/lei/noi/voi/loro and equivalents).
+        - NEVER change from active to passive voice or vice versa.
         - Preserve proper nouns, brand names, product names, and abbreviations exactly.
         - Preserve code identifiers, URLs, file paths, email addresses, and numbers exactly.
         - If the text contains words in another language (technical terms, English in an Italian text, etc.), preserve them exactly.
@@ -226,6 +233,14 @@ struct PromptEngine {
             Output: "I ragazzi giocano a calcio nel parco ogni giorno."
             Input: "È inutile che tu viene, tanto non cambia niente."
             Output: "È inutile che tu venga, tanto non cambia niente."
+            Input: "La ragazza era andata via prima che arrivassimo."
+            Output: "La ragazza era andata via prima che arrivassimo."
+            Input: "Se avessi saputo, sarei venuta prima."
+            Output: "Se avessi saputo, sarei venuta prima."
+            Input: "Stavo studiando quando mi ha chiamato."
+            Output: "Stavo studiando quando mi ha chiamato."
+            Input: "Lei ha detto che verrebbe domani se potesse."
+            Output: "Lei ha detto che verrebbe domani se potesse."
             """
         case "fr":
             return """
@@ -235,6 +250,10 @@ struct PromptEngine {
             Output: "Il a mangé une pomme ce matin."
             Input: "Elle est plus intelligente que moi, bien qu'elle a moins d'expérience."
             Output: "Elle est plus intelligente que moi, bien qu'elle ait moins d'expérience."
+            Input: "Elle était partie avant que nous arrivions."
+            Output: "Elle était partie avant que nous arrivions."
+            Input: "Si j'avais su, je serais venue plus tôt."
+            Output: "Si j'avais su, je serais venue plus tôt."
             """
         case "de":
             return """
@@ -244,6 +263,10 @@ struct PromptEngine {
             Output: "Er geht jeden Tag in die Schule."
             Input: "Wegen dem schlechten Wetter blieb er zuhause."
             Output: "Wegen des schlechten Wetters blieb er zuhause."
+            Input: "Sie hatte das Haus verlassen, bevor er ankam."
+            Output: "Sie hatte das Haus verlassen, bevor er ankam."
+            Input: "Wenn ich das gewusst hätte, wäre ich früher gekommen."
+            Output: "Wenn ich das gewusst hätte, wäre ich früher gekommen."
             """
         case "es":
             return """
@@ -253,6 +276,10 @@ struct PromptEngine {
             Output: "El agua está muy fría y cristalina."
             Input: "Espero que vengas y traes algo de comer."
             Output: "Espero que vengas y traigas algo de comer."
+            Input: "Ella había llegado antes de que nosotros llegáramos."
+            Output: "Ella había llegado antes de que nosotros llegáramos."
+            Input: "Si lo hubiera sabido, habría venido antes."
+            Output: "Si lo hubiera sabido, habría venido antes."
             """
         case "pt":
             return """

@@ -242,7 +242,70 @@ extension LLMService {
             return original
         }
 
+        // For grammar mode: detect if the model changed verb tense markers or grammatical
+        // gender markers — both are common small-model hallucination patterns.
+        if !isFluency && grammarCategoryChanged(original: original, corrected: text) {
+            return original
+        }
+
         return isFluency ? text : preservePunctuation(original: original, corrected: text)
+    }
+
+    // Detect if the model changed tense-bearing or gender-bearing auxiliary verbs —
+    // a reliable signal that it hallucinated a grammatical category change.
+    // Operates on the full token set (not just selected text) to be robust.
+    private func grammarCategoryChanged(original: String, corrected: String) -> Bool {
+        // Tense marker sets: past perfect / conditional / subjunctive auxiliaries that
+        // are easy for small models to flip. Each set maps to a "tense family".
+        // If the original contains a marker from family A and the corrected version
+        // contains a marker from a DIFFERENT family in the same slot, we reject it.
+        let tenseFamilies: [[String]] = [
+            // IT past perfect (trapassato)
+            ["avevo", "avevi", "aveva", "avevamo", "avevate", "avevano",
+             "ero", "eri", "era", "eravamo", "eravate", "erano"],
+            // IT passato prossimo auxiliaries
+            ["ho", "hai", "ha", "abbiamo", "avete", "hanno",
+             "sono", "sei", "è", "siamo", "siete"],
+            // IT conditional (condizionale)
+            ["sarei", "saresti", "sarebbe", "saremmo", "sareste", "sarebbero",
+             "avrei", "avresti", "avrebbe", "avremmo", "avreste", "avrebbero"],
+            // IT subjunctive (congiuntivo) past
+            ["fossi", "fosse", "fossimo", "fossero",
+             "avessi", "avesse", "avessimo", "avessero"],
+            // FR past perfect
+            ["avais", "avait", "avions", "aviez", "avaient",
+             "étais", "était", "étions", "étiez", "étaient"],
+            // FR conditionnel
+            ["serais", "serait", "serions", "seriez", "seraient",
+             "aurais", "aurait", "aurions", "auriez", "auraient"],
+            // ES past perfect / conditional
+            ["había", "habías", "habíamos", "habíais", "habían",
+             "habría", "habrías", "habría", "habríamos", "habríais", "habrían"],
+            // DE Konjunktiv II
+            ["wäre", "wären", "hätte", "hätten", "würde", "würden",
+             "könnte", "könnten", "müsste", "müssten"],
+        ]
+
+        let origTokens = Set(original.lowercased().split(separator: " ").map(String.init))
+        let corrTokens = Set(corrected.lowercased().split(separator: " ").map(String.init))
+
+        for (idx, family) in tenseFamilies.enumerated() {
+            let familySet = Set(family)
+            let inOrig = !origTokens.intersection(familySet).isEmpty
+            let inCorr = !corrTokens.intersection(familySet).isEmpty
+            // If a tense-family marker is present in original but REMOVED entirely in corrected
+            // AND at least one OTHER family's markers are introduced → category changed.
+            if inOrig && !inCorr {
+                let otherFamiliesIntroduced = tenseFamilies.enumerated().contains { (otherIdx, other) in
+                    guard otherIdx != idx else { return false }
+                    let otherSet = Set(other)
+                    return origTokens.intersection(otherSet).isEmpty
+                        && !corrTokens.intersection(otherSet).isEmpty
+                }
+                if otherFamiliesIntroduced { return true }
+            }
+        }
+        return false
     }
 
     private func wordChangeFraction(original: String, corrected: String) -> Double {
