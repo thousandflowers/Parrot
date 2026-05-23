@@ -181,19 +181,10 @@ struct PromptEngine {
 
         var lines: [String] = []
         lines.append("""
-        Fix ONLY clear grammar, spelling, and punctuation errors. Rules:
-        - If a sentence has no errors, copy it VERBATIM — do not change a single word.
-        - Do NOT rephrase, restructure, simplify, or improve style.
-        - Do NOT add, remove, or reorder words unless fixing a concrete error.
-        - NEVER change verb tense. If the text uses past tense, keep past tense. If it uses present, keep present. If it uses future, keep future.
-        - NEVER change verb mood. If the text uses subjunctive (congiuntivo/subjonctif/subjuntivo/Konjunktiv), keep subjunctive. If it uses conditional, keep conditional.
-        - NEVER change grammatical gender. If the subject or object is feminine, keep all agreements feminine. If masculine, keep masculine.
-        - NEVER change subject or object pronouns (io/tu/lui/lei/noi/voi/loro and equivalents).
-        - NEVER change from active to passive voice or vice versa.
-        - Preserve proper nouns, brand names, product names, and abbreviations exactly.
-        - Preserve code identifiers, URLs, file paths, email addresses, and numbers exactly.
-        - If the text contains words in another language (technical terms, English in an Italian text, etc.), preserve them exactly.
-        - Output ONLY the corrected text in the SAME language as the input. Do NOT translate.
+        Fix grammar, spelling, and punctuation errors. Use minimum changes.
+        Preserve exactly: verb tense, mood, grammatical gender, voice, pronouns, proper nouns, code, URLs, numbers.
+        If unsure whether something is an error, leave it unchanged.
+        Output only the corrected text in the same language. No explanations, no translations.
         """)
         if let nativeLine = nativeLanguageInstruction { lines.append(nativeLine) }
         if !extra.isEmpty { lines.append(extra) }
@@ -233,14 +224,18 @@ struct PromptEngine {
             Output: "I ragazzi giocano a calcio nel parco ogni giorno."
             Input: "È inutile che tu viene, tanto non cambia niente."
             Output: "È inutile che tu venga, tanto non cambia niente."
+            Input: "Maria è andato al lavoro stamattina."
+            Output: "Maria è andata al lavoro stamattina."
+            Input: "Devo di comprare il pane oggi."
+            Output: "Devo comprare il pane oggi."
+            Input: "Ho messo un zaino in macchina."
+            Output: "Ho messo uno zaino in macchina."
+            Input: "Il studente legge il libro."
+            Output: "Lo studente legge il libro."
             Input: "La ragazza era andata via prima che arrivassimo."
             Output: "La ragazza era andata via prima che arrivassimo."
             Input: "Se avessi saputo, sarei venuta prima."
             Output: "Se avessi saputo, sarei venuta prima."
-            Input: "Stavo studiando quando mi ha chiamato."
-            Output: "Stavo studiando quando mi ha chiamato."
-            Input: "Lei ha detto che verrebbe domani se potesse."
-            Output: "Lei ha detto che verrebbe domani se potesse."
             """
         case "fr":
             return """
@@ -250,6 +245,8 @@ struct PromptEngine {
             Output: "Il a mangé une pomme ce matin."
             Input: "Elle est plus intelligente que moi, bien qu'elle a moins d'expérience."
             Output: "Elle est plus intelligente que moi, bien qu'elle ait moins d'expérience."
+            Input: "J'ai acheté de le pain ce matin."
+            Output: "J'ai acheté du pain ce matin."
             Input: "Elle était partie avant que nous arrivions."
             Output: "Elle était partie avant que nous arrivions."
             Input: "Si j'avais su, je serais venue plus tôt."
@@ -367,6 +364,8 @@ struct PromptEngine {
             return """
             Input: "He go to the store yesterday."
             Output: "He went to the store yesterday."
+            Input: "She is a honest person."
+            Output: "She is an honest person."
             Input: "The cats is sleeping on the couch since morning."
             Output: "The cats have been sleeping on the couch since morning."
             """

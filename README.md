@@ -106,7 +106,7 @@ Parrot uses the macOS Accessibility API to read and write text directly in the f
 
 **Floating Editor** — A full split-screen editor for longer texts. Includes dictation input, file import, and a **Story Analyzer** that scores narrative structure, pacing, and style for manuscripts over 100 words.
 
-**Intelligence** — Language auto-detection (50+ languages), per-app rules, real-time mode (auto-checks as you pause typing), correction history, ignore list.
+**Intelligence** — Language auto-detection (50+ languages), per-app rules, real-time mode (auto-checks as you pause typing), correction history, ignore list. Grammar mode targets minimum changes and preserves verb tense, mood, gender, and voice — corrections are surgical, not rewrites. Article and determiner allomorphy (Italian *un/uno/il/lo/i/gli*, French contractions, English *a/an*) handled correctly across all supported languages.
 
 **Privacy and sync** — iCloud sync for settings and history across your Macs. Local-only mode keeps everything on device. API keys stored in Keychain, never on disk.
 
