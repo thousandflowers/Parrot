@@ -178,7 +178,16 @@ struct PromptEngine {
         let safeText = escapeForPrompt(text)
 
         var lines: [String] = []
-        lines.append("Fix ONLY grammar, spelling, and punctuation errors. Do NOT rephrase, restructure, or rewrite sentences that are already correct. Copy unchanged any sentence that has no errors. Preserve the original meaning, style, and formatting exactly. Output ONLY the corrected text in the SAME language as the input. Do NOT translate.")
+        lines.append("""
+        Fix ONLY clear grammar, spelling, and punctuation errors. Rules:
+        - If a sentence has no errors, copy it VERBATIM — do not change a single word.
+        - Do NOT rephrase, restructure, simplify, or improve style.
+        - Do NOT add, remove, or reorder words unless fixing a concrete error.
+        - Preserve proper nouns, brand names, product names, and abbreviations exactly.
+        - Preserve code identifiers, URLs, file paths, email addresses, and numbers exactly.
+        - If the text contains words in another language (technical terms, English in an Italian text, etc.), preserve them exactly.
+        - Output ONLY the corrected text in the SAME language as the input. Do NOT translate.
+        """)
         if let nativeLine = nativeLanguageInstruction { lines.append(nativeLine) }
         if !extra.isEmpty { lines.append(extra) }
         if !styleLine.isEmpty { lines.append(styleLine) }

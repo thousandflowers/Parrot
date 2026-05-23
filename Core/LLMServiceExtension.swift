@@ -230,7 +230,25 @@ extension LLMService {
         let lowerText = text.lowercased()
         if chattyPhrases.contains(where: { lowerText.hasPrefix($0) }) { return original }
 
+        // For grammar mode: if more than 50% of tokens differ, the model over-corrected —
+        // fall back to original rather than presenting a hallucinated rewrite.
+        if !isFluency && wordChangeFraction(original: original, corrected: text) > 0.5 {
+            return original
+        }
+
         return isFluency ? text : preservePunctuation(original: original, corrected: text)
+    }
+
+    private func wordChangeFraction(original: String, corrected: String) -> Double {
+        // Tokenize by whitespace; CJK texts fall back to character-level comparison.
+        let origTokens = original.split(separator: " ").map(String.init)
+        let corrTokens = corrected.split(separator: " ").map(String.init)
+        guard !origTokens.isEmpty else { return 0 }
+        // Use a simple set-difference approach: tokens present in original but not corrected.
+        let origSet = Set(origTokens.map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters) })
+        let corrSet = Set(corrTokens.map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters) })
+        let removed = origSet.subtracting(corrSet).count
+        return Double(removed) / Double(origSet.count)
     }
 
     private func preservePunctuation(original: String, corrected: String) -> String {
