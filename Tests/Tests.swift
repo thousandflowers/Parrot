@@ -873,6 +873,16 @@ final class RuleBasedEnginePipelineTests: XCTestCase {
     }
 }
 
+final class ValidateCorrectionTests: XCTestCase {
+    func testValidateCorrection_doesNotDiscardValidItalianCorrection() {
+        let service = StubLLMService.shared
+        let original  = "Io andato a casa ieri."
+        let corrected = "Sono andato a casa ieri."
+        let result = service.validateCorrection(original: original, corrected: corrected, isFluency: false)
+        XCTAssertEqual(result, corrected, "validateCorrection must not discard a valid Italian correction")
+    }
+}
+
 final class LexiconTests: XCTestCase {
     func testInformalWords_containsGerman() {
         XCTAssertTrue(Lexicon.informalWords.contains("krass"))

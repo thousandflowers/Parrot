@@ -147,7 +147,7 @@ extension LLMService {
         case .grammar:
             prompt = engine.buildGrammarPrompt(for: text, customInstruction: nil)
             temperature = Constants.grammarTemperature + temperatureOffset
-            systemPrompt = "You are a proofreader. Copy the input text unchanged. Only fix clear errors: misspelled words, wrong verb conjugation, wrong grammatical agreement. Do NOT rephrase, reorder words, or substitute synonyms — every correct word stays exactly as written. Output only the (possibly unchanged) text. No explanations, no translations, no prefixes, no quotes."
+            systemPrompt = "You are a proofreader. Fix all grammatical errors in the input: misspellings, wrong verb forms, wrong agreement, missing required verb forms in subordinate clauses (e.g. congiuntivo after pensare/credere/volere + che). You may add or replace words only to fix a clear grammatical error. Do NOT rephrase correct sentences, reorder words, or substitute synonyms. Output only the corrected text. No explanations, no translations, no prefixes, no quotes."
         case .fluency:
             prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
             temperature = Constants.fluencyTemperature + temperatureOffset
@@ -198,16 +198,8 @@ extension LLMService {
         switch promptType {
         case .grammar, .fluency, .deSlop:
             let isFluency = promptType != .grammar
-            let validated = validateCorrection(original: text, corrected: rawCorrected, isFluency: isFluency)
-            // Safety: discard output if model switched language (e.g. translated to English).
-            // Use resolvedLanguage as fallback for both to avoid error-heavy input text being
-            // misdetected and masking a language switch.
-            let sysLang = resolvedLanguage
-            let inLang  = LanguageDetector.detect(text: text,      fallbackLanguage: sysLang)
-            let outLang = LanguageDetector.detect(text: validated,  fallbackLanguage: sysLang)
-            corrected = (outLang == inLang) ? validated : text
+            corrected = validateCorrection(original: text, corrected: rawCorrected, isFluency: isFluency)
         default:
-            // Translation, coach, explain, etc.: pass raw output through — no word-change guards.
             corrected = rawCorrected.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return CorrectionResult(
@@ -286,15 +278,22 @@ extension LLMService {
     }
 
     private func wordChangeFraction(original: String, corrected: String) -> Double {
-        // Tokenize by whitespace; CJK texts fall back to character-level comparison.
-        let origTokens = original.split(separator: " ").map(String.init)
-        let corrTokens = corrected.split(separator: " ").map(String.init)
+        let origTokens = original.split(separator: " ")
+            .map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters) }
+        let corrTokens = corrected.split(separator: " ")
+            .map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters) }
         guard !origTokens.isEmpty else { return 0 }
-        // Use a simple set-difference approach: tokens present in original but not corrected.
-        let origSet = Set(origTokens.map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters) })
-        let corrSet = Set(corrTokens.map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters) })
-        let removed = origSet.subtracting(corrSet).count
-        return Double(removed) / Double(origSet.count)
+        // Count how many original tokens have no match in corrected (multiset-aware).
+        var corrCounts = corrTokens.reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
+        var unmatched = 0
+        for tok in origTokens {
+            if let n = corrCounts[tok], n > 0 {
+                corrCounts[tok] = n - 1
+            } else {
+                unmatched += 1
+            }
+        }
+        return Double(unmatched) / Double(origTokens.count)
     }
 
     private func preservePunctuation(original: String, corrected: String) -> String {
@@ -315,7 +314,7 @@ extension LLMService {
     func chatBody(
         model: String,
         prompt: String,
-        systemPrompt: String? = "You are a proofreader. Copy the input text unchanged. Only fix clear errors: misspelled words, wrong verb conjugation, wrong grammatical agreement. Do NOT rephrase, reorder words, or substitute synonyms — every correct word stays exactly as written. Output only the (possibly unchanged) text. No explanations, no translations, no prefixes, no quotes.",
+        systemPrompt: String? = "You are a proofreader. Fix all grammatical errors in the input: misspellings, wrong verb forms, wrong agreement, missing required verb forms in subordinate clauses. You may add or replace words only to fix a clear grammatical error. Do NOT rephrase correct sentences, reorder words, or substitute synonyms. Output only the corrected text. No explanations, no translations, no prefixes, no quotes.",
         temperature: Double,
         maxTokens: Int = 1024,
         stream: Bool = false
