@@ -180,12 +180,10 @@ actor AccessibilityBridge: AXBridgeProtocol {
         // Chromium/Electron: AX setters claim success without touching DOM text.
         // Detect via last known PID and go directly to clipboard.
         let targetPID = _lastKnownFrontAppPID
-        let hasSelection = lastSelectedRange.length > 0
         if targetPID != 0 {
             let bid = await AppDetector.shared.frontAppBundleID(forPID: targetPID)
             if let b = bid, await ElectronFallbackHandler.shared.isElectronApp(bundleID: b) {
-                try await injectViaClipboard(correctedText: correctedText, targetPID: targetPID,
-                                             selectAllFirst: !hasSelection)
+                try await injectViaClipboard(correctedText: correctedText, targetPID: targetPID)
                 return
             }
         }
@@ -208,30 +206,20 @@ actor AccessibilityBridge: AXBridgeProtocol {
               let axElement = Self.asElement(focusedElement) else {
             throw CorrectionError.noTextSelected
         }
-        if hasSelection {
-            // Re-select the known range then replace, avoiding stale-cursor drift.
-            var mutableRange = lastSelectedRange
-            if let axRangeValue = AXValueCreate(.cfRange, &mutableRange) {
-                AXUIElementSetAttributeValue(
-                    axElement, kAXSelectedTextRangeAttribute as CFString, axRangeValue)
-            }
-            let setResult = AXUIElementSetAttributeValue(
-                axElement, kAXSelectedTextAttribute as CFString, correctedText as CFTypeRef
-            )
-            if setResult == .success { return }
-        }
-        // No selection (or setSelectedText failed): replace entire field value.
-        // kAXSelectedTextAttribute with empty selection inserts at cursor — skip it.
+        let setResult = AXUIElementSetAttributeValue(
+            axElement, kAXSelectedTextAttribute as CFString, correctedText as CFTypeRef
+        )
+        if setResult == .success { return }
         let valueResult = AXUIElementSetAttributeValue(
             axElement, kAXValueAttribute as CFString, correctedText as CFTypeRef
         )
         if valueResult == .success { return }
-        try await injectViaClipboard(correctedText: correctedText, selectAllFirst: !hasSelection)
+        try await injectViaClipboard(correctedText: correctedText)
     }
 
     private static let clipboardTokenType = NSPasteboard.PasteboardType("com.parrot.clipboard-token")
 
-    private func injectViaClipboard(correctedText: String, targetPID: pid_t = 0, selectAllFirst: Bool = false) async throws {
+    private func injectViaClipboard(correctedText: String, targetPID: pid_t = 0) async throws {
         // NSPasteboard is not thread-safe — all reads/writes must happen on the main thread.
         let originalItems: [NSPasteboardItem] = await MainActor.run {
             NSPasteboard.general.pasteboardItems?.compactMap { item in
@@ -270,21 +258,8 @@ actor AccessibilityBridge: AXBridgeProtocol {
         }
 
         let source = CGEventSource(stateID: .hidSystemState)
-        // When no text was selected, send Cmd+A first to select all before pasting.
-        if selectAllFirst {
-            let aKeyCode: CGKeyCode = 0x00
-            if let selDown = CGEvent(keyboardEventSource: source, virtualKey: aKeyCode, keyDown: true),
-               let selUp   = CGEvent(keyboardEventSource: source, virtualKey: aKeyCode, keyDown: false) {
-                selDown.flags = .maskCommand
-                selUp.flags   = .maskCommand
-                selDown.post(tap: .cghidEventTap)
-                selUp.post(tap: .cghidEventTap)
-                try? await Task.sleep(for: .milliseconds(50))
-            }
-        }
-        let vKeyCode: CGKeyCode = 0x09
-        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: false) else {
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: false) else {
             if !originalItems.isEmpty {
                 await restoreClipboard(PendingClipboardRestore(items: originalItems))
             }
