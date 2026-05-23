@@ -151,7 +151,7 @@ extension LLMService {
         case .fluency:
             prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
             temperature = Constants.fluencyTemperature + temperatureOffset
-            systemPrompt = nil
+            systemPrompt = "You are a writing assistant. Rewrite text to improve readability, flow, and naturalness. Preserve the original meaning exactly — do not add, invent, or assume any information not present in the original. Output only the rewritten text in the same language as the input. Do not translate."
         default:
             // Translation, coach, explain, deSlop, aiPrompt: no system prompt —
             // the user prompt fully specifies the task; a proofreader framing would conflict.

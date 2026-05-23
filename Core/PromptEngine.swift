@@ -106,14 +106,14 @@ struct PromptEngine {
 
     private var latinFamilyInstruction: String {
         switch primaryLanguageCode {
-        case "it": return "Fix subject-verb agreement and article-noun agreement only when clearly wrong. NEVER change: verb tense (imperfetto/passato prossimo/passato remoto/trapassato), verb mood (congiuntivo/condizionale/imperativo), or grammatical gender of any word."
-        case "de": return "Fix case declension and article errors only when clearly wrong (der/die/das/dem/den/des). NEVER change verb tense (Präteritum/Perfekt/Plusquamperfekt), Konjunktiv II, or noun gender."
-        case "es": return "Fix ser/estar and agreement errors only when clearly wrong. NEVER change: verb tense (pretérito indefinido/imperfecto/pluscuamperfecto), subjuntivo mood, or grammatical gender."
-        case "fr": return "Fix agreement and article contraction errors only when clearly wrong. NEVER change: verb tense (imparfait/passé composé/plus-que-parfait), subjonctif mood, or grammatical gender."
-        case "pt": return "Fix ser/estar and agreement errors only when clearly wrong. NEVER change: verb tense, subjuntivo mood, or grammatical gender."
-        case "el": return "Pay attention to noun declension, verb conjugation, and correct use of accents (τόνοι). NEVER change verb tense or mood."
-        case "nl": return "Fix noun gender (de/het) and verb conjugation errors only when clearly wrong. NEVER change verb tense or word order in subordinate clauses unless grammatically incorrect."
-        case "tr": return "Fix vowel harmony (sesli uyumu) and case suffix errors only when clearly wrong. NEVER change verb tense or aspect."
+        case "it": return "Fix verb conjugation errors (wrong auxiliary essere/avere, wrong person or number), subject-verb agreement, and article agreement (un/uno, il/lo, i/gli) when clearly wrong. Do NOT replace one tense with another when both are grammatically valid in context (e.g., do not swap imperfetto for passato prossimo). Do NOT change verb mood (congiuntivo/condizionale/imperativo) unless the syntax makes it impossible."
+        case "de": return "Fix verb conjugation errors, case declension, and article errors (der/die/das/dem/den/des) when clearly wrong. Do NOT replace one tense with another when both are valid (Präteritum/Perfekt/Plusquamperfekt). Do NOT change Konjunktiv II unless syntax demands it."
+        case "es": return "Fix verb conjugation, ser/estar usage, and agreement errors when clearly wrong. Do NOT replace one tense with another when both are valid (e.g., indefinido vs imperfecto). Do NOT change subjuntivo mood unless syntax demands a different mood."
+        case "fr": return "Fix verb conjugation, agreement, and article contraction errors when clearly wrong. Do NOT replace one tense with another when both are valid (e.g., imparfait vs passé composé). Do NOT change subjonctif mood unless syntax demands it."
+        case "pt": return "Fix verb conjugation, ser/estar usage, and agreement errors when clearly wrong. Do NOT replace one tense with another when both are valid. Do NOT change subjuntivo mood unless syntax demands it."
+        case "el": return "Pay attention to noun declension, verb conjugation, and correct use of accents (τόνοι). Do NOT change tense choice when both options are valid."
+        case "nl": return "Fix noun gender (de/het) and verb conjugation errors when clearly wrong. Do NOT change tense or word order in subordinate clauses unless grammatically incorrect."
+        case "tr": return "Fix vowel harmony (sesli uyumu), case suffix errors, and verb conjugation when clearly wrong. Do NOT change tense or aspect unless clearly incorrect."
         default:    return ""
         }
     }
@@ -371,65 +371,7 @@ struct PromptEngine {
         if let nativeLine = nativeLanguageInstruction { lines.append(nativeLine) }
         if !styleLine.isEmpty { lines.append(styleLine) }
         if let custom = customInstruction { lines.append(custom) }
-        lines.append("")
-
-        switch primaryLanguageCode {
-        case "it":
-            lines.append("Input: \"Il progetto è finito. Il team ha festeggiato. È stato bello.\"")
-            lines.append("Output: \"Al termine del progetto il team ha festeggiato — è stata un'esperienza gratificante.\"")
-            lines.append("Input: \"Ho comprato il pane. Ho comprato il latte. Ho comprato le uova.\"")
-            lines.append("Output: \"Ho fatto la spesa comprando pane, latte e uova.\"")
-        case "fr":
-            lines.append("Input: \"Le projet est terminé. L'équipe a fêté ça. C'était bien.\"")
-            lines.append("Output: \"Une fois le projet terminé, l'équipe a célébré — une expérience enrichissante.\"")
-            lines.append("Input: \"Je suis allé au marché. J'ai acheté des légumes. Je suis rentré.\"")
-            lines.append("Output: \"Je suis allé au marché, j'ai acheté des légumes et je suis rentré.\"")
-        case "de":
-            lines.append("Input: \"Das Projekt wurde abgeschlossen. Das Team hat gefeiert. Es war schön.\"")
-            lines.append("Output: \"Nach Abschluss des Projekts feierte das Team — ein rundum gelungener Abend.\"")
-            lines.append("Input: \"Ich ging in den Laden. Ich kaufte Milch. Ich kam nach Hause.\"")
-            lines.append("Output: \"Ich ging in den Laden, kaufte Milch und kam wieder nach Hause.\"")
-        case "es":
-            lines.append("Input: \"El proyecto terminó. El equipo celebró. Fue bueno.\"")
-            lines.append("Output: \"Al concluir el proyecto, el equipo celebró — fue una experiencia gratificante.\"")
-            lines.append("Input: \"Ella fue a la tienda. Compró leche. Regresó a casa.\"")
-            lines.append("Output: \"Ella fue a la tienda, compró leche y regresó a casa.\"")
-        case "pt":
-            lines.append("Input: \"O projeto foi concluído. A equipa celebrou. Foi bom.\"")
-            lines.append("Output: \"Após a conclusão do projeto, a equipa celebrou — foi uma experiência gratificante.\"")
-        case "ru":
-            lines.append("Input: \"Проект был завершён. Команда отпраздновала. Это было хорошо.\"")
-            lines.append("Output: \"После завершения проекта команда устроила праздник — это было незабываемо.\"")
-            lines.append("Input: \"Она пошла в магазин. Она купила молоко. Она вернулась домой.\"")
-            lines.append("Output: \"Она пошла в магазин, купила молоко и вернулась домой.\"")
-        case "zh", "yue":
-            lines.append("Input: \"项目完成了。团队庆祝了。那很好。\"")
-            lines.append("Output: \"项目完成后，团队举行了庆祝活动，整个过程令人难忘。\"")
-            lines.append("Input: \"她去了商店。她买了牛奶。她回来了。\"")
-            lines.append("Output: \"她去商店买了牛奶后便回来了。\"")
-        case "ja":
-            lines.append("Input: \"プロジェクトが完了しました。チームは祝いました。良かったです。\"")
-            lines.append("Output: \"プロジェクトが完了し、チームは盛大に祝いました。とても充実した経験でした。\"")
-            lines.append("Input: \"彼女は店に行きました。牛乳を買いました。家に帰りました。\"")
-            lines.append("Output: \"彼女は店に行って牛乳を買い、そのまま家に帰りました。\"")
-        case "ko":
-            lines.append("Input: \"프로젝트가 완료되었습니다. 팀이 축하했습니다. 좋았습니다.\"")
-            lines.append("Output: \"프로젝트가 완료되어 팀이 축하 행사를 열었고, 정말 보람 있는 시간이었습니다.\"")
-            lines.append("Input: \"그녀는 가게에 갔습니다. 우유를 샀습니다. 집에 왔습니다.\"")
-            lines.append("Output: \"그녀는 가게에 가서 우유를 사고 집으로 돌아왔습니다.\"")
-        case "ar":
-            lines.append("Input: \"انتهى المشروع. احتفل الفريق. كان ذلك جيداً.\"")
-            lines.append("Output: \"بعد انتهاء المشروع، احتفل الفريق بهذا الإنجاز احتفالاً رائعاً.\"")
-        default:
-            lines.append("Input: \"The project was completed. The team celebrated. It was good.\"")
-            lines.append("Output: \"After completing the project, the team celebrated — it was a rewarding experience.\"")
-            lines.append("Input: \"She went to the store. She bought milk. She came back home.\"")
-            lines.append("Output: \"She went to the store, bought milk, and came back home.\"")
-        }
-
-        lines.append("")
-        lines.append("Input: \"\(safeText)\"")
-        lines.append("Output:")
+        lines.append("\n<TEXT>\(safeText)</TEXT>")
 
         return lines.joined(separator: "\n")
     }
@@ -442,7 +384,7 @@ struct PromptEngine {
         if let custom = customInstruction { instruction += " \(custom)" }
         let safeOriginal = escapeForPrompt(original)
         let safeCorrected = escapeForPrompt(corrected)
-        return "\(instruction)\n\nORIGINAL: \(safeOriginal)\nCORRECTED: \(safeCorrected)\nEXPLANATION:"
+        return "\(instruction)\n\nORIGINAL: \(safeOriginal)\nCORRECTED: \(safeCorrected)"
     }
 
     func buildCoachPrompt(for text: String) -> String {
@@ -465,7 +407,7 @@ struct PromptEngine {
         """
         if !family.isEmpty { instruction += "\n\n\(family)" }
         let safeText = escapeForPrompt(text)
-        return "\(instruction)\n\nTEXT TO ANALYZE: \(safeText)\n\nANALYSIS:"
+        return "\(instruction)\n\n<TEXT>\(safeText)</TEXT>"
     }
 
     private func englishLanguageName(for code: String) -> String {
@@ -573,8 +515,7 @@ struct PromptEngine {
 
         Preserve the original meaning, facts, and intent. Keep the same language. Output ONLY the rewritten text.
 
-        Input: "\(safeText)"
-        Output:
+        <TEXT>\(safeText)</TEXT>
         """
     }
 
@@ -591,8 +532,7 @@ struct PromptEngine {
 
         Output ONLY the optimized prompt text.
 
-        Input: "\(safeText)"
-        Output:
+        <TEXT>\(safeText)</TEXT>
         """
     }
 }
