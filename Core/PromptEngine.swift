@@ -387,25 +387,12 @@ struct PromptEngine {
 
     func buildCoachPrompt(for text: String) -> String {
         let langName = englishLanguageName(for: language)
-        let family = grammarFamilyInstruction
-        var instruction = """
-        Analyze the following text as a professional writing teacher. Provide structured feedback in 4 categories:
-
-        1. **Grammar**: spelling, grammar, and punctuation errors
-        2. **Style**: repetitions, overly long sentences, weak words, passive voice
-        3. **Tone**: register consistency, contextual appropriateness
-        4. **Clarity**: ambiguities, logical structure, flow of ideas
-
-        For each category, list:
-        - Specific issues found (with quotes from the text)
-        - Concrete suggestions for improvement
-        - An example of how to rewrite it
-
-        Output language must be \(langName). Be constructive and specific.
-        """
-        if !family.isEmpty { instruction += "\n\n\(family)" }
         let safeText = escapeForPrompt(text)
-        return "\(instruction)\n\n<TEXT>\(safeText)</TEXT>"
+        return """
+        You are a writing coach. Respond in \(langName). Look at the text below and list only the real issues you can see in it — grammar errors, unclear phrasing, awkward word choices. For each issue: quote the exact problematic part, explain what is wrong, and give a corrected version. If there are no significant issues, say so briefly. Do not invent issues that are not in the text.
+
+        <TEXT>\(safeText)</TEXT>
+        """
     }
 
     private func englishLanguageName(for code: String) -> String {

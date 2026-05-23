@@ -151,10 +151,21 @@ extension LLMService {
         case .fluency:
             prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
             temperature = Constants.fluencyTemperature + temperatureOffset
-            systemPrompt = "You are a writing assistant. Rewrite text to improve readability, flow, and naturalness. Preserve the original meaning exactly — do not add, invent, or assume any information not present in the original. Output only the rewritten text in the same language as the input. Do not translate."
+            systemPrompt = "You are a writing assistant. Rewrite text to improve readability, flow, and naturalness. Preserve the original meaning exactly — do not add, invent, or assume any information not in the original. Output only the rewritten text. Keep the exact same language as the input — do NOT translate to English or any other language."
+        case .coach:
+            prompt = engine.buildCoachPrompt(for: text)
+            temperature = Constants.grammarTemperature + temperatureOffset
+            systemPrompt = "You are a concise writing coach. Analyze only the specific text given — never invent issues that are not present. Respond in the same language as the input text."
+        case .deSlop:
+            prompt = engine.buildDeSlopPrompt(for: text)
+            temperature = Constants.fluencyTemperature + temperatureOffset
+            systemPrompt = "You are an editor. Remove AI-sounding patterns from text. Preserve meaning. Output only the rewritten text in the same language as the input — do NOT translate."
+        case .aiPrompt:
+            prompt = engine.buildAIPromptPrompt(for: text)
+            temperature = Constants.grammarTemperature + temperatureOffset
+            systemPrompt = "You are a prompt engineer. Rewrite the given text into an effective AI assistant prompt. Output only the optimized prompt."
         default:
-            // Translation, coach, explain, deSlop, aiPrompt: no system prompt —
-            // the user prompt fully specifies the task; a proofreader framing would conflict.
+            // Translation, explain, custom: no system prompt — user prompt fully specifies the task.
             prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
             temperature = Constants.grammarTemperature + temperatureOffset
             systemPrompt = nil
@@ -185,8 +196,13 @@ extension LLMService {
         CrashLogger.log("performCorrection: done")
         let corrected: String
         switch promptType {
-        case .grammar, .fluency:
-            corrected = validateCorrection(original: text, corrected: rawCorrected, isFluency: promptType.isFluency)
+        case .grammar:
+            corrected = validateCorrection(original: text, corrected: rawCorrected, isFluency: false)
+        case .fluency, .deSlop:
+            let validated = validateCorrection(original: text, corrected: rawCorrected, isFluency: true)
+            // Safety: if model translated instead of rewriting, discard output
+            let outLang = LanguageDetector.detect(text: validated, fallbackLanguage: lang)
+            corrected = (outLang == lang) ? validated : text
         default:
             // Translation, coach, explain, etc.: pass raw output through — no word-change guards.
             corrected = rawCorrected.trimmingCharacters(in: .whitespacesAndNewlines)
