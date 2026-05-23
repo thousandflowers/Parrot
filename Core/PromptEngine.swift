@@ -179,24 +179,15 @@ struct PromptEngine {
         let styleLine = styleInstruction
         let safeText = escapeForPrompt(text)
 
-        var lines: [String] = []
-        lines.append("""
-        Fix grammar, spelling, and punctuation errors. Use minimum changes.
-        Preserve exactly: verb tense, mood, grammatical gender, voice, pronouns, proper nouns, code, URLs, numbers.
-        If unsure whether something is an error, leave it unchanged.
-        Output only the corrected text in the same language. No explanations, no translations.
-        """)
-        if let nativeLine = nativeLanguageInstruction { lines.append(nativeLine) }
-        if !extra.isEmpty { lines.append(extra) }
-        if !styleLine.isEmpty { lines.append(styleLine) }
-        if let custom = customInstruction { lines.append(custom) }
-        lines.append("")
-        lines.append(fewShotExamples())
-        lines.append("")
-        lines.append("Input: \"\(safeText)\"")
-        lines.append("Output:")
+        var parts: [String] = []
+        parts.append("Proofread the text inside <TEXT>. Copy it exactly — only fix words that are clearly wrong (misspelling, wrong conjugation, wrong grammatical agreement). Every correct word stays unchanged. Do not rephrase, reorder, or substitute synonyms. Return only the corrected text.")
+        if let nativeLine = nativeLanguageInstruction { parts.append(nativeLine) }
+        if !extra.isEmpty { parts.append(extra) }
+        if !styleLine.isEmpty { parts.append(styleLine) }
+        if let custom = customInstruction { parts.append(custom) }
+        parts.append("\n<TEXT>\(safeText)</TEXT>")
 
-        return lines.joined(separator: "\n")
+        return parts.joined(separator: "\n")
     }
 
     private var nativeLanguageInstruction: String? {

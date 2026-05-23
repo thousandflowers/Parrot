@@ -120,13 +120,16 @@ extension LLMService {
         return "equilibrato"
     }
 
-    private func maxTokens(for text: String, isFluency: Bool) -> Int {
-        // text.count is characters; ~4 chars/token for Latin, so divide by 4.
-        // CJK is ~1.5 chars/token — this formula underestimates, which is safe (generous output).
+    private func maxTokens(for text: String, promptType: PromptType) -> Int {
         let approxInputTokens = max(64, text.count / 4)
-        return isFluency
-            ? max(256, min(approxInputTokens * 2 + 128, 2048))
-            : max(256, min(approxInputTokens + approxInputTokens / 4 + 64, 2048))
+        switch promptType {
+        case .fluency, .translation:
+            return max(256, min(approxInputTokens * 2 + 128, 2048))
+        case .coach, .explain:
+            return max(512, min(approxInputTokens * 3 + 256, 2048))
+        default:
+            return max(256, min(approxInputTokens + approxInputTokens / 4 + 64, 2048))
+        }
     }
 
     private func buildChatBody(
@@ -138,16 +141,27 @@ extension LLMService {
     ) -> ChatRequest {
         let prompt: String
         let temperature: Double
+        let systemPrompt: String?
+
         switch promptType {
+        case .grammar:
+            prompt = engine.buildGrammarPrompt(for: text, customInstruction: nil)
+            temperature = Constants.grammarTemperature + temperatureOffset
+            systemPrompt = "You are a proofreader. Copy the input text unchanged. Only fix clear errors: misspelled words, wrong verb conjugation, wrong grammatical agreement. Do NOT rephrase, reorder words, or substitute synonyms — every correct word stays exactly as written. Output only the (possibly unchanged) text. No explanations, no translations, no prefixes, no quotes."
         case .fluency:
             prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
             temperature = Constants.fluencyTemperature + temperatureOffset
+            systemPrompt = nil
         default:
+            // Translation, coach, explain, deSlop, aiPrompt: no system prompt —
+            // the user prompt fully specifies the task; a proofreader framing would conflict.
             prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
             temperature = Constants.grammarTemperature + temperatureOffset
+            systemPrompt = nil
         }
-        return chatBody(model: model, prompt: prompt, temperature: temperature,
-                        maxTokens: maxTokens(for: text, isFluency: promptType.isFluency))
+        return chatBody(model: model, prompt: prompt, systemPrompt: systemPrompt,
+                        temperature: temperature,
+                        maxTokens: maxTokens(for: text, promptType: promptType))
     }
 
     func performCorrection(
@@ -169,7 +183,14 @@ extension LLMService {
             url: url, apiKey: apiKey, extraHeaders: extraHeaders
         )
         CrashLogger.log("performCorrection: done")
-        let corrected = validateCorrection(original: text, corrected: rawCorrected, isFluency: promptType.isFluency)
+        let corrected: String
+        switch promptType {
+        case .grammar, .fluency:
+            corrected = validateCorrection(original: text, corrected: rawCorrected, isFluency: promptType.isFluency)
+        default:
+            // Translation, coach, explain, etc.: pass raw output through — no word-change guards.
+            corrected = rawCorrected.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         return CorrectionResult(
             original: text, corrected: corrected,
             modelID: model, confidence: Constants.defaultConfidence, promptType: promptType.label
@@ -275,7 +296,7 @@ extension LLMService {
     func chatBody(
         model: String,
         prompt: String,
-        systemPrompt: String? = "You are a text corrector. Output ONLY the corrected text in the same language as the input. Do not translate. Do not explain. Do not add context. Do not respond conversationally. Do not use prefixes like 'Here is the corrected text:'. Do not wrap the output in quotes. Preserve original punctuation and formatting. Output ONLY the corrected text, nothing else.",
+        systemPrompt: String? = "You are a proofreader. Copy the input text unchanged. Only fix clear errors: misspelled words, wrong verb conjugation, wrong grammatical agreement. Do NOT rephrase, reorder words, or substitute synonyms — every correct word stays exactly as written. Output only the (possibly unchanged) text. No explanations, no translations, no prefixes, no quotes.",
         temperature: Double,
         maxTokens: Int = 1024,
         stream: Bool = false
