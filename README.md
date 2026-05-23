@@ -116,6 +116,8 @@ Parrot uses the macOS Accessibility API to read and write text directly in the f
 
 ## Status
 
+**Current release: 0.9.2**
+
 | Feature | Status |
 |---|---|
 | Grammar / Fluency / Translate correction | ✔ shipped |
@@ -126,6 +128,14 @@ Parrot uses the macOS Accessibility API to read and write text directly in the f
 | Homebrew cask | ✔ shipped |
 | Notarized release (no right-click needed) | ◻︎ in progress |
 | Mac App Store | ◻︎ planned |
+
+### What's new in 0.9.2
+
+- **Grammar quality** — fixed obvious syntax errors being missed due to over-aggressive validation guards; error-heavy sentences now correct fully
+- **Article allomorphy** — *un/uno*, *il/lo*, *i/gli* (IT), *a/an* (EN), *de le/du* (FR) handled correctly without hard-coded rules
+- **No tense/mood/gender changes** — grammar mode now preserves verb tense, subjunctive, conditional, and grammatical gender exactly
+- **WhatsApp and Electron apps** — text replacement now works in WhatsApp, Slack, Discord, VS Code, Notion, and all other Electron-based apps
+- **macOS 26 stability** — fixed constraint-loop crash (`NSHostingView` re-entrancy) on macOS Tahoe
 
 ---
 
