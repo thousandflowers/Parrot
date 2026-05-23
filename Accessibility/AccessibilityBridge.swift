@@ -183,7 +183,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
         if targetPID != 0 {
             let bid = await AppDetector.shared.frontAppBundleID(forPID: targetPID)
             if let b = bid, await ElectronFallbackHandler.shared.isElectronApp(bundleID: b) {
-                try await injectViaClipboard(correctedText: correctedText)
+                try await injectViaClipboard(correctedText: correctedText, targetPID: targetPID)
                 return
             }
         }
@@ -219,7 +219,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
 
     private static let clipboardTokenType = NSPasteboard.PasteboardType("com.parrot.clipboard-token")
 
-    private func injectViaClipboard(correctedText: String) async throws {
+    private func injectViaClipboard(correctedText: String, targetPID: pid_t = 0) async throws {
         // NSPasteboard is not thread-safe — all reads/writes must happen on the main thread.
         let originalItems: [NSPasteboardItem] = await MainActor.run {
             NSPasteboard.general.pasteboardItems?.compactMap { item in
@@ -243,6 +243,18 @@ actor AccessibilityBridge: AXBridgeProtocol {
             pb.clearContents()
             pb.setString(correctedText, forType: .string)
             pb.setString(token, forType: Self.clipboardTokenType)
+        }
+
+        // Re-activate the target app so Cmd+V lands in the right window.
+        // This is required for Electron apps (WhatsApp, Teams, etc.) where clicking
+        // the suggestion panel may have shifted the first-responder.
+        let pid = targetPID != 0 ? targetPID : _lastKnownFrontAppPID
+        if pid != 0 {
+            await MainActor.run {
+                NSRunningApplication(processIdentifier: pid)?.activate(options: [])
+            }
+            // Wait for the app to become key before we post the keystroke.
+            try await Task.sleep(for: .milliseconds(80))
         }
 
         let source = CGEventSource(stateID: .hidSystemState)

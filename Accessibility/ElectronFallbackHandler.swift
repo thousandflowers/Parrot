@@ -6,16 +6,38 @@ actor ElectronFallbackHandler {
     static let shared = ElectronFallbackHandler()
 
     private let electronBundleIDs: Set<String> = [
+        // Chromium-based browsers
         "com.google.Chrome",
         "com.google.Chrome.canary",
-        "com.slack.Slack",
-        "com.discord.Discord",
-        "com.microsoft.VSCode",
-        "com.microsoft.VSCodeInsiders",
-        "org.mozilla.firefox",
-        "com.obsidian.md",
+        "com.brave.Browser",
+        "com.microsoft.edgemac",
+        "com.operasoftware.Opera",
+        "com.vivaldi.Vivaldi",
+        "com.arc.the.browser",
         "company.thebrowser.dia",
         "company.thebrowser.Browser",
+        // Firefox
+        "org.mozilla.firefox",
+        "org.mozilla.firefoxdeveloperedition",
+        // Messaging / chat (Electron)
+        "net.whatsapp.WhatsApp",        // WhatsApp Desktop (current)
+        "com.facebook.archon",          // WhatsApp Desktop (legacy)
+        "com.facebook.archon.mas",      // WhatsApp Desktop (legacy MAS)
+        "com.slack.Slack",
+        "com.discord.Discord",
+        "com.microsoft.teams2",         // Microsoft Teams (new)
+        "com.microsoft.Teams",          // Microsoft Teams (old)
+        "com.skype.skype",
+        "com.beeper.beeper",
+        // Productivity (Electron)
+        "com.microsoft.VSCode",
+        "com.microsoft.VSCodeInsiders",
+        "com.todesktop.230313mzl4w4u92", // Notion
+        "notion.id",
+        "com.linear.linear",
+        "com.obsidian.md",
+        "md.obsidian",
+        "com.figma.Desktop",
     ]
 
     private static let clipboardTokenType = NSPasteboard.PasteboardType("com.parrot.clipboard-token")
