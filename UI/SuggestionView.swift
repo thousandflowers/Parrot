@@ -1,6 +1,37 @@
 import SwiftUI
 import AVFoundation
 
+@MainActor
+private final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
+    private let synthesizer = AVSpeechSynthesizer()
+    @Published var isSpeaking = false
+    private var continuationTask: Task<Void, Never>?
+
+    func speak(_ text: String) {
+        stop()
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        synthesizer.delegate = self
+        synthesizer.speak(utterance)
+        isSpeaking = true
+    }
+
+    func stop() {
+        synthesizer.stopSpeaking(at: .immediate)
+        continuationTask?.cancel()
+        continuationTask = nil
+        isSpeaking = false
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in self.isSpeaking = false }
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in self.isSpeaking = false }
+    }
+}
+
 struct SuggestionView: View {
     let result: CorrectionResult?
     let state: SuggestionState
@@ -10,11 +41,16 @@ struct SuggestionView: View {
     let onUndo: () -> Void
     let onTranslate: (String) -> Void
     let onCustomAction: (String) -> Void
+    let onIgnoreWord: (String) -> Void
+    let onRunFlow: (Flow) -> Void
 
+    @StateObject private var speech = SpeechController()
     @State private var noErrorsShown = false
-    @State private var synthesizer = AVSpeechSynthesizer()
-    @State private var isSpeaking = false
     @State private var loadingMessageIndex: Int = 0
+    @State private var showSideBySideDiff = false
+    @State private var appeared = false
+    @State private var closeHovered = false
+    @State private var appliedProgress: Double = 1.0
 
     private static let loadingMessages = [
         "Analyzing grammar...",
@@ -32,19 +68,31 @@ struct SuggestionView: View {
     }
 
     private func speakCorrected(_ text: String) {
-        if isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
-            isSpeaking = false
+        if speech.isSpeaking {
+            speech.stop()
             return
         }
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-        synthesizer.speak(utterance)
-        isSpeaking = true
-        Task {
-            while synthesizer.isSpeaking { try? await Task.sleep(for: .milliseconds(100)) }
-            isSpeaking = false
+        speech.speak(text)
+    }
+
+    private func firstChangedWord(in result: CorrectionResult) -> String? {
+        // Skip word-diff for CJK text (no whitespace word boundaries)
+        if result.correctedText.unicodeScalars.contains(where: {
+            ($0.value >= 0x4E00 && $0.value <= 0x9FFF) ||
+            ($0.value >= 0x3040 && $0.value <= 0x30FF) ||
+            ($0.value >= 0xAC00 && $0.value <= 0xD7AF)
+        }) { return nil }
+        let origWords = result.originalText.components(separatedBy: .whitespaces)
+            .filter { !$0.isEmpty }
+            .map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters) }
+        let corrWords = result.correctedText.components(separatedBy: .whitespaces)
+            .filter { !$0.isEmpty }
+            .map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters) }
+        for (i, cw) in corrWords.enumerated() {
+            guard cw.count > 2 else { continue }
+            if i >= origWords.count || cw != origWords[i] { return cw }
         }
+        return nil
     }
 
     var body: some View {
@@ -60,17 +108,20 @@ struct SuggestionView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
         }
-        .frame(width: 340)
+        .frame(width: 340, height: 280)
         .animation(.easeOut(duration: 0.18), value: stateHash)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(.separator.opacity(0.5), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(.separator, lineWidth: 0.5)
         )
-        .shadow(color: .black.opacity(0.12), radius: 12, x: 0, y: 4)
+        .shadow(color: .black.opacity(0.14), radius: 18, x: 0, y: 6)
+        .scaleEffect(appeared ? 1.0 : 0.93)
+        .onAppear {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) { appeared = true }
+        }
         .onDisappear {
-            synthesizer.stopSpeaking(at: .immediate)
-            isSpeaking = false
+            speech.stop()
         }
     }
 
@@ -81,25 +132,29 @@ struct SuggestionView: View {
         HStack(spacing: 8) {
             headerIcon
                 .frame(width: 16, height: 16)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(headerTitle)
-                    .font(.subheadline.weight(.semibold))
-                if let tone = toneLabel {
-                    Text(tone)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+            Text(headerTitle)
+                .font(.subheadline.weight(.semibold))
+            if let tone = toneLabel {
+                Text("·")
+                    .foregroundStyle(.quaternary)
+                Text(tone)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
             Spacer()
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(closeHovered ? Color.primary.opacity(0.65) : .secondary)
                     .frame(width: 20, height: 20)
-                    .background(.quaternary, in: Circle())
+                    .background(Circle().fill(Color.primary.opacity(closeHovered ? 0.12 : 0.06)))
+                    .scaleEffect(closeHovered ? 1.12 : 1.0)
+                    .animation(.easeOut(duration: 0.12), value: closeHovered)
             }
             .buttonStyle(.plain)
+            .onHover { closeHovered = $0 }
             .accessibilityLabel("Close")
+            .frame(minWidth: 44, minHeight: 44)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -123,32 +178,35 @@ struct SuggestionView: View {
         switch state {
         case .loading:
             ProgressView().scaleEffect(0.7)
+        case .streaming:
+            Image(systemName: "waveform").foregroundStyle(Color.accentColor)
         case .suggestion:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.statusOk)
         case .fluencySuggestion:
             Image(systemName: "sparkles").foregroundStyle(Color.accentColor)
         case .noErrors:
             Image(systemName: "checkmark.shield.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(Color.statusOk)
                 .scaleEffect(noErrorsShown ? 1.0 : 0.4)
                 .onAppear {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) { noErrorsShown = true }
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { noErrorsShown = true }
                 }
                 .onDisappear { noErrorsShown = false }
         case .error:
-            Image(systemName: "xmark.octagon.fill").foregroundStyle(.red)
+            Image(systemName: "xmark.octagon.fill").foregroundStyle(Color.statusError)
         case .textTooLong:
-            Image(systemName: "text.alignleft").foregroundStyle(.orange)
+            Image(systemName: "text.alignleft").foregroundStyle(Color.statusWarning)
         case .applied:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.statusOk)
         case .modelMissing:
-            Image(systemName: "cpu.fill").foregroundStyle(.orange)
+            Image(systemName: "cpu.fill").foregroundStyle(Color.statusWarning)
         }
     }
 
     private var headerTitle: String {
         switch state {
         case .loading:           return String(localized: "panel.analyzing")
+        case .streaming:         return String(localized: "panel.streaming")
         case .suggestion:        return String(localized: "panel.corrected")
         case .fluencySuggestion: return String(localized: "panel.fluency")
         case .noErrors:          return String(localized: "panel.noErrors")
@@ -185,12 +243,41 @@ struct SuggestionView: View {
                 }
             }
 
+        case .streaming(let original, let current):
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if current.isEmpty {
+                            HStack(spacing: 6) {
+                                ProgressView().scaleEffect(0.7)
+                                Text("Generating correction…")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        } else {
+                            DiffHighlightView(original: original, corrected: current)
+                                .font(.callout)
+                        }
+                        Color.clear.frame(height: 1).id("streamEnd")
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(minHeight: 44, maxHeight: 260)
+                .onChange(of: current) { _, _ in
+                    proxy.scrollTo("streamEnd", anchor: .bottom)
+                }
+            }
+
         case .suggestion(let result, let explanation, let isLoading),
              .fluencySuggestion(let result, let explanation, let isLoading):
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    DiffHighlightView(original: result.originalText, corrected: result.correctedText)
-                        .font(.callout)
+                    if showSideBySideDiff {
+                        SideBySideDiffView(original: result.originalText, corrected: result.correctedText)
+                            .font(.callout)
+                    } else {
+                        DiffHighlightView(original: result.originalText, corrected: result.correctedText)
+                            .font(.callout)
+                    }
                     if isLoading {
                         Divider()
                         HStack(spacing: 6) {
@@ -227,7 +314,7 @@ struct SuggestionView: View {
             VStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.title3)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.statusError)
                 Text(error.errorDescription ?? "Unknown error")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -247,11 +334,26 @@ struct SuggestionView: View {
             .frame(maxWidth: .infinity)
 
         case .applied:
-            Label("Text replaced", systemImage: "checkmark.circle")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .frame(height: 48)
-                .frame(maxWidth: .infinity)
+            VStack(spacing: 10) {
+                Label("Text replaced", systemImage: "checkmark.circle")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.primary.opacity(0.1)).frame(height: 2)
+                        Capsule()
+                            .fill(Color.statusOk.opacity(0.7))
+                            .frame(width: geo.size.width * appliedProgress, height: 2)
+                    }
+                }
+                .frame(height: 2)
+            }
+            .frame(height: 48)
+            .frame(maxWidth: .infinity)
+            .onAppear {
+                appliedProgress = 1.0
+                withAnimation(.linear(duration: 4.8)) { appliedProgress = 0.0 }
+            }
 
         case .modelMissing:
             VStack(spacing: 8) {
@@ -276,62 +378,64 @@ struct SuggestionView: View {
         HStack(spacing: 6) {
             switch state {
             case .suggestion(let r, _, _), .fluencySuggestion(let r, _, _):
-                Button(String(localized: "panel.ignore")) { onDismiss() }
-                    .buttonStyle(.plain)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Button(String(localized: "panel.ignore")) {
+                    if let firstChanged = firstChangedWord(in: r) {
+                        onIgnoreWord(firstChanged)
+                    }
+                    onDismiss()
+                }
+                .buttonStyle(.plain)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
 
                 Spacer()
 
+                Button {
+                    showSideBySideDiff.toggle()
+                } label: {
+                    Image(systemName: showSideBySideDiff ? "rectangle.split.3x1.fill" : "rectangle.split.2x1")
+                        .font(.system(size: 14))
+                        .foregroundStyle(showSideBySideDiff ? Color.accentBrand : .secondary)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .help(showSideBySideDiff ? "Showing side-by-side — click for inline diff" : "Showing inline diff — click for side-by-side")
+                .accessibilityLabel(showSideBySideDiff ? "Side-by-side view" : "Inline diff view")
+
                 Menu {
-                    Button { speakCorrected(r.correctedText) }
-                        label: { Label(isSpeaking ? "Stop" : "Listen", systemImage: isSpeaking ? "stop.fill" : "speaker.wave.2") }
+                    menuListenAction(r)
                     Divider()
-                    let detectedLang = LanguageDetector.detect(text: r.originalText, fallbackLanguage: "en")
-                    let allLangs: [(String, String)] = [
-                        ("en", "English"), ("it", "Italian"), ("es", "Spanish"),
-                        ("fr", "French"), ("de", "German"), ("pt", "Portuguese"),
-                        ("ru", "Russian"), ("zh", "Chinese"), ("ja", "Japanese"),
-                        ("ko", "Korean"), ("ar", "Arabic"), ("nl", "Dutch"), ("tr", "Turkish")
-                    ]
-                    let filteredLangs = allLangs.filter { code, _ in
-                        !detectedLang.hasPrefix(code) && detectedLang != code
-                    }
-                    Menu("Translate to…") {
-                        ForEach(filteredLangs, id: \.0) { code, name in
-                            Button(name) { onTranslate(code) }
-                        }
-                    }
+                    menuTranslateTo(r)
                     Divider()
-                    Button("Explain corrections") { onExplain() }
+                    menuExplainAction
                     Divider()
-                    Button("Make formal")    { onCustomAction("Make the text more formal and professional.") }
-                    Button("Make informal")  { onCustomAction("Make the text more informal and conversational.") }
-                    Button("Shorten")        { onCustomAction("Shorten the text while keeping the main meaning.") }
-                    Button("Simplify")       { onCustomAction("Simplify the text to make it clearer and more direct.") }
+                    menuRewriteActions
                     let userPresets = PreferencesStore.shared.presets
                     if !userPresets.isEmpty {
                         Divider()
-                        Menu("Presets…") {
-                            ForEach(userPresets) { preset in
-                                Button(preset.name) { onCustomAction(preset.template) }
-                            }
-                        }
+                        menuPresets(userPresets)
+                    }
+                    let userFlows = PreferencesStore.shared.flows
+                    if !userFlows.isEmpty {
+                        Divider()
+                        menuFlows(userFlows)
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .font(.system(size: 15))
                         .foregroundStyle(.secondary)
+                        .frame(minWidth: 44, minHeight: 44)
                 }
                 .menuStyle(.button)
                 .buttonStyle(.plain)
+                .accessibilityLabel("More options")
 
                 Button(String(localized: "panel.apply")) { onApply() }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
 
-            case .loading:
+            case .loading, .streaming:
                 Spacer()
                 Button(String(localized: "panel.cancel")) { onDismiss() }
                     .buttonStyle(.plain)
@@ -359,6 +463,63 @@ struct SuggestionView: View {
                     .buttonStyle(.plain)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // MARK: - Footer menu sections
+
+    @ViewBuilder
+    private func menuListenAction(_ r: CorrectionResult) -> some View {
+        Button { speakCorrected(r.correctedText) }
+            label: { Label(speech.isSpeaking ? "Stop" : "Listen", systemImage: speech.isSpeaking ? "stop.fill" : "speaker.wave.2") }
+    }
+
+    @ViewBuilder
+    private func menuTranslateTo(_ r: CorrectionResult) -> some View {
+        let detectedLang = LanguageDetector.detect(text: r.originalText, fallbackLanguage: "en")
+        let allLangs: [(String, String)] = [
+            ("en", "English"), ("it", "Italian"), ("es", "Spanish"),
+            ("fr", "French"), ("de", "German"), ("pt", "Portuguese"),
+            ("ru", "Russian"), ("zh", "Chinese"), ("ja", "Japanese"),
+            ("ko", "Korean"), ("ar", "Arabic"), ("nl", "Dutch"), ("tr", "Turkish")
+        ]
+        let filteredLangs = allLangs.filter { code, _ in
+            !detectedLang.hasPrefix(code) && detectedLang != code
+        }
+        Menu("Translate to…") {
+            ForEach(filteredLangs, id: \.0) { code, name in
+                Button(name) { onTranslate(code) }
+            }
+        }
+    }
+
+    private var menuExplainAction: some View {
+        Button("Explain corrections") { onExplain() }
+    }
+
+    @ViewBuilder
+    private var menuRewriteActions: some View {
+        Button("Make formal")    { onCustomAction("Make the text more formal and professional.") }
+        Button("Make informal")  { onCustomAction("Make the text more informal and conversational.") }
+        Button("Shorten")        { onCustomAction("Shorten the text while keeping the main meaning.") }
+        Button("Simplify")       { onCustomAction("Simplify the text to make it clearer and more direct.") }
+    }
+
+    @ViewBuilder
+    private func menuPresets(_ presets: [Preset]) -> some View {
+        Menu("Presets…") {
+            ForEach(presets) { preset in
+                Button(preset.name) { onCustomAction(preset.template) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func menuFlows(_ flows: [Flow]) -> some View {
+        Menu("Flows…") {
+            ForEach(flows) { flow in
+                Button(flow.name) { onRunFlow(flow) }
             }
         }
     }

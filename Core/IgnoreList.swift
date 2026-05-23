@@ -15,6 +15,12 @@ struct IgnoreList {
         UserDefaults.standard.set(words, forKey: key)
     }
 
+    static func remove(_ word: String) {
+        var words = ignoredWords()
+        words.removeAll { $0 == word.lowercased() }
+        UserDefaults.standard.set(words, forKey: key)
+    }
+
     static func all() -> [String] {
         ignoredWords()
     }

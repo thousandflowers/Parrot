@@ -58,7 +58,8 @@ actor CustomRuleStore {
                             fixes.append(CustomRuleFix(ruleName: rule.name, original: String(result[range]), corrected: rule.replacement))
                         }
                     }
-                    result = regex.stringByReplacingMatches(in: result, options: [], range: nsRange, withTemplate: NSRegularExpression.escapedTemplate(for: rule.replacement))
+                    let template = rule.supportsBackreferences ? rule.replacement : NSRegularExpression.escapedTemplate(for: rule.replacement)
+                    result = regex.stringByReplacingMatches(in: result, options: [], range: nsRange, withTemplate: template)
                 } catch {
                     continue
                 }
@@ -79,7 +80,7 @@ actor CustomRuleStore {
     }
 
     private func save() {
-        try? JSONEncoder().encode(rules).write(to: fileURL)
+        try? JSONEncoder().encode(rules).write(to: fileURL, options: .atomic)
     }
 }
 

@@ -11,13 +11,20 @@ let package = Package(
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
     ],
     targets: [
+        .target(
+            name: "ParrotObjC",
+            path: "ObjCBridge",
+            publicHeadersPath: "."
+        ),
         .executableTarget(
             name: "Parrot",
             dependencies: [
                 .product(name: "Sparkle", package: "Sparkle"),
+                "ParrotObjC",
             ],
             path: ".",
             exclude: [
+                "ObjCBridge",
                 "Resources/Info.plist",
                 "Resources/Parrot.entitlements",
                 "Resources/en.lproj",
@@ -37,7 +44,13 @@ let package = Package(
                 "setup-dev.sh",
                 "build-app.sh",
                 "RefineClone.app",
-                "Parrot.app"
+                "Parrot.app",
+                "graphify-out",
+                "docs",
+                "Parrot_0.9.1.zip"
+            ],
+            linkerSettings: [
+                .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])
             ]
         ),
         .testTarget(

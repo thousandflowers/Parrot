@@ -15,6 +15,7 @@ struct CustomRulesView: View {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(.bordered)
+                .accessibilityLabel("Add rule")
             }
             .padding()
 
@@ -50,7 +51,9 @@ struct CustomRulesView: View {
             EditRuleView(rule: CustomRule(), onSave: { rule in
                 Task {
                     await CustomRuleStore.shared.add(rule)
-                    rules = await CustomRuleStore.shared.allRules()
+                    let result = await CustomRuleStore.shared.allRules()
+                    guard !Task.isCancelled else { return }
+                    rules = result
                 }
                 showingAddRule = false
             })
@@ -59,7 +62,9 @@ struct CustomRulesView: View {
             EditRuleView(rule: rule, onSave: { updatedRule in
                 Task {
                     await CustomRuleStore.shared.update(updatedRule)
-                    rules = await CustomRuleStore.shared.allRules()
+                    let result = await CustomRuleStore.shared.allRules()
+                    guard !Task.isCancelled else { return }
+                    rules = result
                 }
                 editingRule = nil
             })
@@ -106,12 +111,14 @@ struct CustomRuleRow: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Edit")
+                .accessibilityLabel("Edit rule")
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.statusError)
                 .help("Delete")
+                .accessibilityLabel("Delete rule")
             }
         }
         .padding(.vertical, 4)
@@ -120,6 +127,7 @@ struct CustomRuleRow: View {
 
 struct EditRuleView: View {
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var focusedField: Bool
     @State private var rule: CustomRule
     let onSave: (CustomRule) -> Void
 
@@ -132,6 +140,7 @@ struct EditRuleView: View {
         Form {
             Section("Identity") {
                 TextField("Rule name", text: $rule.name)
+                    .focused($focusedField)
             }
             Section("Pattern") {
                 TextField("Search for", text: $rule.pattern)
@@ -156,6 +165,7 @@ struct EditRuleView: View {
         }
         .formStyle(.grouped)
         .frame(width: 420)
+        .onAppear { focusedField = true }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
@@ -172,4 +182,17 @@ struct EditRuleView: View {
 
 #Preview {
     CustomRulesView()
+}
+
+#Preview {
+    EditRuleView(rule: CustomRule(
+        name: "Fix quotes",
+        pattern: "\"(.+?)\"",
+        replacement: "「$1」",
+        isEnabled: true,
+        isRegex: true,
+        isCaseSensitive: false,
+        language: "any"
+    ), onSave: { _ in })
+        .frame(width: 420)
 }

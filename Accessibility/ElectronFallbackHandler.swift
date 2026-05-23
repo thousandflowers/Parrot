@@ -14,6 +14,8 @@ actor ElectronFallbackHandler {
         "com.microsoft.VSCodeInsiders",
         "org.mozilla.firefox",
         "com.obsidian.md",
+        "company.thebrowser.dia",
+        "company.thebrowser.Browser",
     ]
 
     private static let clipboardTokenType = NSPasteboard.PasteboardType("com.parrot.clipboard-token")

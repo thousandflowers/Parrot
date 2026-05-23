@@ -6,15 +6,18 @@ enum ServiceType: String, Codable, CaseIterable {
     case remote
     case ollama
     case openRouter
+    case appleIntelligence
 }
 
-enum PromptType: Sendable {
+enum PromptType: Sendable, Codable, Equatable, Hashable {
     case grammar
     case fluency
     case coach
     case explain
     case custom(name: String, template: String)
     case translation(targetLanguage: String)
+    case deSlop
+    case aiPrompt
 
     var label: String {
         switch self {
@@ -24,6 +27,8 @@ enum PromptType: Sendable {
         case .explain: "explain"
         case .custom: "custom"
         case .translation(let lang): "translation:\(lang)"
+        case .deSlop: "deSlop"
+        case .aiPrompt: "aiPrompt"
         }
     }
 
@@ -31,6 +36,46 @@ enum PromptType: Sendable {
         if case .fluency = self { return true }
         return false
     }
+
+    enum CodingKeys: String, CodingKey {
+        case grammar, fluency, coach, explain, custom, translation, deSlop, aiPrompt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let _ = try? container.decodeNil(forKey: .grammar) { self = .grammar; return }
+        if let _ = try? container.decodeNil(forKey: .fluency) { self = .fluency; return }
+        if let _ = try? container.decodeNil(forKey: .coach) { self = .coach; return }
+        if let _ = try? container.decodeNil(forKey: .explain) { self = .explain; return }
+        if let custom = try? container.decode(NestedCustom.self, forKey: .custom) {
+            self = .custom(name: custom.name, template: custom.template); return
+        }
+        if let translation = try? container.decode(NestedTranslation.self, forKey: .translation) {
+            self = .translation(targetLanguage: translation.targetLanguage); return
+        }
+        if let _ = try? container.decodeNil(forKey: .deSlop) { self = .deSlop; return }
+        if let _ = try? container.decodeNil(forKey: .aiPrompt) { self = .aiPrompt; return }
+        throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: container.codingPath, debugDescription: "Unknown PromptType"))
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .grammar: try container.encodeNil(forKey: .grammar)
+        case .fluency: try container.encodeNil(forKey: .fluency)
+        case .coach: try container.encodeNil(forKey: .coach)
+        case .explain: try container.encodeNil(forKey: .explain)
+        case .custom(let name, let template):
+            try container.encode(NestedCustom(name: name, template: template), forKey: .custom)
+        case .translation(let targetLanguage):
+            try container.encode(NestedTranslation(targetLanguage: targetLanguage), forKey: .translation)
+        case .deSlop: try container.encodeNil(forKey: .deSlop)
+        case .aiPrompt: try container.encodeNil(forKey: .aiPrompt)
+        }
+    }
+
+    private struct NestedCustom: Codable { let name: String, template: String }
+    private struct NestedTranslation: Codable { let targetLanguage: String }
 }
 
 enum CorrectionError: Error, LocalizedError, Sendable {
@@ -49,6 +94,15 @@ enum CorrectionError: Error, LocalizedError, Sendable {
     case rateLimited
     case outputParsingFailed(raw: String)
     case textTooLong(length: Int, maxLength: Int)
+
+    var isRetryable: Bool {
+        switch self {
+        case .serverTimeout, .networkUnavailable, .modelNotLoaded, .serverNotRunning:
+            return true
+        default:
+            return false
+        }
+    }
 
     var errorDescription: String? {
         switch self {

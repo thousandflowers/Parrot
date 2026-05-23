@@ -8,16 +8,18 @@ struct PresetsTab: View {
     var body: some View {
         VStack(spacing: 0) {
             if prefs.presets.isEmpty {
-                VStack(spacing: 12) {
+                VStack(spacing: 10) {
                     Image(systemName: "star.slash")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 32))
+                        .foregroundStyle(Color.accentColor.opacity(0.5))
                         .accessibilityHidden(true)
                     Text("No saved presets")
-                        .foregroundStyle(.secondary)
-                    Text("Create presets with custom templates, language and model")
+                        .font(.headline)
+                    Text("Save your favorite combinations of template, language and model for quick reuse.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxHeight: .infinity)
             } else {
@@ -84,6 +86,7 @@ struct PresetEditSheet: View {
     let prefs: PreferencesStore
     let preset: Preset?
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var focusedField: Bool
 
     @State private var name: String
     @State private var template: String
@@ -109,6 +112,7 @@ struct PresetEditSheet: View {
                 .font(.title2.bold())
 
             TextField("Preset name", text: $name)
+                .focused($focusedField)
             TextField("Template (use {{TEXT}} for the text)", text: $template, axis: .vertical)
                 .lineLimit(4...8)
 
@@ -153,5 +157,14 @@ struct PresetEditSheet: View {
         }
         .padding(24)
         .frame(minWidth: 450)
+        .onAppear { focusedField = true }
     }
+}
+
+#Preview {
+    PresetsTab(prefs: PreferencesStore.shared)
+}
+
+#Preview {
+    PresetEditSheet(prefs: PreferencesStore.shared, preset: nil)
 }

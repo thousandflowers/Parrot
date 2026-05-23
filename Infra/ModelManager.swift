@@ -57,24 +57,7 @@ actor ModelManager: Sendable {
     ]
 
     nonisolated var currentModelPath: String? {
-        let id = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID) ?? ""
-        let cleanID = id.hasSuffix(".gguf") ? String(id.dropLast(5)) : id
-        if !cleanID.isEmpty {
-            let ownPath = modelsDir.appendingPathComponent("\(cleanID).gguf").path(percentEncoded: false)
-            if FileManager.default.fileExists(atPath: ownPath) {
-                return ownPath
-            }
-            let fullPathID = id.hasSuffix(".gguf") ? id : "\(id).gguf"
-            let external = adoptedModelPaths().first { ($0 as NSString).lastPathComponent == fullPathID || $0.contains(cleanID) }
-            if let ext = external, FileManager.default.fileExists(atPath: ext) {
-                return ext
-            }
-        }
-        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: modelsDir.path(percentEncoded: false)),
-              let firstModel = contents.first(where: { $0.hasSuffix(".gguf") }) else {
-            return nil
-        }
-        return modelsDir.appendingPathComponent(firstModel).path(percentEncoded: false)
+        resolveCurrentModelPath()
     }
 
     func getCurrentModelPath() async -> String? {
@@ -109,18 +92,26 @@ actor ModelManager: Sendable {
         let id = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID) ?? ""
         let cleanID = id.hasSuffix(".gguf") ? String(id.dropLast(5)) : id
         if !cleanID.isEmpty {
-            let ownPath = modelsDir.appendingPathComponent("\(cleanID).gguf").path(percentEncoded: false)
-            if FileManager.default.fileExists(atPath: ownPath) {
-                return ownPath
+            let dirPath = modelsDir.path(percentEncoded: false)
+            // Case-insensitive scan of own models dir
+            if let files = try? FileManager.default.contentsOfDirectory(atPath: dirPath) {
+                let target = "\(cleanID.lowercased()).gguf"
+                if let match = files.first(where: { $0.hasSuffix(".gguf") && $0.lowercased() == target }) {
+                    return modelsDir.appendingPathComponent(match).path(percentEncoded: false)
+                }
             }
-            let fullPathID = id.hasSuffix(".gguf") ? id : "\(id).gguf"
-            let external = adoptedModelPaths().first { ($0 as NSString).lastPathComponent == fullPathID || $0.contains(cleanID) }
+            // Case-insensitive check of external/adopted paths
+            let external = adoptedModelPaths().first {
+                let filename = ($0 as NSString).lastPathComponent
+                return filename.lowercased() == "\(cleanID.lowercased()).gguf" || $0.lowercased().contains(cleanID.lowercased())
+            }
             if let ext = external, FileManager.default.fileExists(atPath: ext) {
                 return ext
             }
         }
         guard let contents = try? FileManager.default.contentsOfDirectory(atPath: modelsDir.path(percentEncoded: false)),
               let firstModel = contents.first(where: { $0.hasSuffix(".gguf") }) else {
+            Logger.infra.debug("ModelManager: no .gguf models found in \(self.modelsDir.path(percentEncoded: false))")
             return nil
         }
         return modelsDir.appendingPathComponent(firstModel).path(percentEncoded: false)
@@ -176,40 +167,35 @@ actor ModelManager: Sendable {
         return results.sorted { $0.size > $1.size }
     }
 
+    func localModels() -> [DiscoveredModel] {
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: modelsDir.path(percentEncoded: false)) else { return [] }
+        return files
+            .filter { $0.hasSuffix(".gguf") }
+            .compactMap { filename in
+                let path = modelsDir.appendingPathComponent(filename).path(percentEncoded: false)
+                guard GGUFVersionCheck.isCompatible(filePath: path) else { return nil }
+                let attrs = (try? FileManager.default.attributesOfItem(atPath: path))
+                let size = (attrs?[.size] as? Int64) ?? 0
+                return DiscoveredModel(
+                    id: String(filename.dropLast(5)),
+                    name: String(filename.dropLast(5)),
+                    path: path,
+                    size: size,
+                    source: "Local"
+                )
+            }
+            .sorted { $0.name.lowercased() < $1.name.lowercased() }
+    }
+
     func recommendedModels() -> [ModelRecommendation] {
         let ramGB = getSystemRAM()
-
-        func rec(id: String, name: String, reason: String, ram: Int, urlString: String, warning: String? = nil) -> ModelRecommendation? {
-            guard let url = URL(string: urlString) else { return nil }
-            var r = ModelRecommendation(id: id, name: name, reason: reason, ramRequired: ram, url: url, expectedSHA256: nil)
-            r.warning = ram > ramGB ? "Requires ~\(ram)GB RAM (you have \(ramGB)GB). May use swap." : warning
-            return r
+        return ModelCatalog.all.map { model in
+            var m = model
+            m.warning = ramGB > 0 && ramGB < model.ramRequired
+                ? "Requires ~\(model.ramRequired)GB RAM (you have \(ramGB)GB). May use swap."
+                : nil
+            return m
         }
-
-        let all: [ModelRecommendation?] = [
-            rec(id: "qwen2.5-0.5b-instruct-q4_k_m",     name: "Qwen 2.5 0.5B",
-                reason: "Fastest — ideal for Macs with limited RAM", ram: 1,
-                urlString: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf"),
-            rec(id: "qwen2.5-1.5b-instruct-q4_k_m",    name: "Qwen 2.5 1.5B",
-                reason: "Fast, multilingual (great for Italian)", ram: 2,
-                urlString: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"),
-            rec(id: "Llama-3.2-1B-Instruct-Q4_K_M",     name: "Llama 3.2 1B",
-                reason: "Lightweight, good quality for English", ram: 2,
-                urlString: "https://huggingface.co/unsloth/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
-            rec(id: "gemma-2-2b-it-Q4_K_M",             name: "Gemma 2 2B IT",
-                reason: "Excellent multilingual quality", ram: 3,
-                urlString: "https://huggingface.co/lmstudio-community/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf"),
-            rec(id: "Llama-3.2-3B-Instruct-Q4_K_M",     name: "Llama 3.2 3B",
-                reason: "Good quality/speed balance", ram: 3,
-                urlString: "https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf"),
-            rec(id: "Phi-3.5-mini-instruct-Q4_K_M",     name: "Phi-3.5 Mini",
-                reason: "Microsoft — strong grammar reasoning", ram: 4,
-                urlString: "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf"),
-            rec(id: "gemma-4-E2B-it-Q4_K_M",            name: "Gemma 4 E2B IT",
-                reason: "Latest generation — maximum quality", ram: 4,
-                urlString: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf"),
-        ]
-        return all.compactMap { $0 }
     }
 
     private func getSystemRAM() -> Int {
@@ -319,28 +305,28 @@ actor ModelManager: Sendable {
         } else {
             totalExpected = httpResponse.expectedContentLength
             if FileManager.default.fileExists(atPath: partialURL.path(percentEncoded: false)) {
-                try? FileManager.default.removeItem(at: partialURL)
+                do {
+                    try FileManager.default.removeItem(at: partialURL)
+                } catch {
+                    Logger.infra.error("ModelManager: failed to remove stale partial file — \(error.localizedDescription, privacy: .public)")
+                }
             }
         }
 
         try FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
-        guard let fileHandle = FileHandle(forWritingAtPath: partialURL.path(percentEncoded: false)) else {
+
+        let fileHandle: FileHandle
+        if let fh = FileHandle(forWritingAtPath: partialURL.path(percentEncoded: false)) {
+            fileHandle = fh
+            try fileHandle.seekToEnd()
+        } else {
             FileManager.default.createFile(atPath: partialURL.path(percentEncoded: false), contents: nil)
             guard let fh = FileHandle(forWritingAtPath: partialURL.path(percentEncoded: false)) else {
                 throw URLError(.cannotCreateFile)
             }
-            defer { try? fh.close() }
-            try await writeChunked(from: asyncBytes, to: fh,
-                                   startOffset: existingSize, totalExpected: totalExpected,
-                                   progressHandler: progressHandler)
-            progressHandler?(1.0)
-            try fh.synchronize()
-            try? FileManager.default.removeItem(at: destURL)
-            try FileManager.default.moveItem(at: partialURL, to: destURL)
-            return destURL
+            fileHandle = fh
         }
         defer { try? fileHandle.close() }
-        try fileHandle.seekToEnd()
 
         try await writeChunked(from: asyncBytes, to: fileHandle,
                                startOffset: existingSize, totalExpected: totalExpected,
@@ -350,6 +336,7 @@ actor ModelManager: Sendable {
 
         try? FileManager.default.removeItem(at: destURL)
         try FileManager.default.moveItem(at: partialURL, to: destURL)
+        Logger.infra.debug("ModelManager: downloaded model to \(destURL.path(percentEncoded: false))")
         return destURL
     }
 
@@ -400,40 +387,37 @@ actor ModelManager: Sendable {
         }
         guard fileSize > Constants.minModelFileSize,
               GGUFVersionCheck.isCompatible(filePath: destURL.path(percentEncoded: false)) else {
-            try? FileManager.default.removeItem(at: destURL)
+            do { try FileManager.default.removeItem(at: destURL) }
+            catch { Logger.infra.error("ModelManager: failed to remove corrupt file — \(error.localizedDescription, privacy: .public)") }
             throw CorrectionError.modelCorrupted(expectedSHA: "file-validation-failed")
         }
 
         if let expected = expectedSHA256 {
-            let valid = verifySHA256(filePath: destURL.path(percentEncoded: false), expectedSHA: expected, progressHandler: verificationHandler)
+            let filePath = destURL.path(percentEncoded: false)
+            let valid = await Task.detached(priority: .utility) {
+                Self.verifySHA256Detached(filePath: filePath, expectedSHA: expected)
+            }.value
             guard valid else {
-                try? FileManager.default.removeItem(at: destURL)
+                do { try FileManager.default.removeItem(at: destURL) }
+                catch { Logger.infra.error("ModelManager: failed to remove sha256-mismatch file — \(error.localizedDescription, privacy: .public)") }
                 throw CorrectionError.modelCorrupted(expectedSHA: String(expected.prefix(12)))
             }
         }
 
         let partialURL = modelsDir.appendingPathComponent("\(destURL.lastPathComponent).partial")
-        try? FileManager.default.removeItem(at: partialURL)
+        do { try FileManager.default.removeItem(at: partialURL) }
+        catch { Logger.infra.error("ModelManager: failed to remove partial file — \(error.localizedDescription, privacy: .public)") }
 
         return destURL
     }
 
-    private func verifySHA256(filePath: String, expectedSHA: String, progressHandler: ((Double) -> Void)? = nil) -> Bool {
+    private static func verifySHA256Detached(filePath: String, expectedSHA: String) -> Bool {
         guard let handle = FileHandle(forReadingAtPath: filePath) else { return false }
         defer { try? handle.close() }
         var hasher = SHA256()
-        let fileSize: UInt64 = {
-            let attrs = try? FileManager.default.attributesOfItem(atPath: filePath)
-            return (attrs?[.size] as? UInt64) ?? 0
-        }()
-        var totalRead: UInt64 = 0
         while let chunk = try? handle.read(upToCount: Constants.sha256ChunkSize) {
             guard !chunk.isEmpty else { break }
             hasher.update(data: chunk)
-            totalRead += UInt64(chunk.count)
-            if fileSize > 0, let handler = progressHandler {
-                handler(Double(totalRead) / Double(fileSize))
-            }
         }
         let computedHex = hasher.finalize().compactMap { String(format: "%02x", $0) }.joined()
         return computedHex.lowercased() == expectedSHA.lowercased()

@@ -1,6 +1,10 @@
 import Foundation
 import OSLog
 
+extension Notification.Name {
+    static let historyDidChange = Notification.Name("historyDidChange")
+}
+
 struct HistoryEntry: Codable, Identifiable {
     let id: UUID
     let timestamp: Date
@@ -37,12 +41,21 @@ actor HistoryStore {
         if entries.count > maxEntries { entries = Array(entries.prefix(maxEntries)) }
         cachedEntries = entries
         save(entries)
+        NotificationCenter.default.post(name: .historyDidChange, object: nil)
     }
 
     func all() -> [HistoryEntry] {
         let entries = cachedEntries ?? load()
         cachedEntries = entries
         return entries
+    }
+
+    func getAllEntries() -> [HistoryEntry] { all() }
+
+    func replaceEntries(_ entries: [HistoryEntry]) {
+        cachedEntries = entries
+        save(entries)
+        NotificationCenter.default.post(name: .historyDidChange, object: nil)
     }
 
     func clear() {
@@ -52,7 +65,12 @@ actor HistoryStore {
 
     private func load() -> [HistoryEntry] {
         guard let data = try? Data(contentsOf: historyURL) else { return [] }
-        return (try? JSONDecoder().decode([HistoryEntry].self, from: data)) ?? []
+        do {
+            return try JSONDecoder().decode([HistoryEntry].self, from: data)
+        } catch {
+            Logger.core.error("HistoryStore: failed to decode history — \(error.localizedDescription, privacy: .public)")
+            return []
+        }
     }
 
     private func save(_ entries: [HistoryEntry]) {

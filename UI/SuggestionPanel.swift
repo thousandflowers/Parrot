@@ -3,6 +3,7 @@ import Cocoa
 
 enum SuggestionState: Sendable {
     case loading
+    case streaming(original: String, current: String)
     case suggestion(CorrectionResult, explanation: String? = nil, isLoadingExplanation: Bool = false)
     case fluencySuggestion(CorrectionResult, explanation: String? = nil, isLoadingExplanation: Bool = false)
     case noErrors
@@ -12,18 +13,63 @@ enum SuggestionState: Sendable {
     case modelMissing
 }
 
+// On macOS 26, NSHostingView.updateConstraints → updateWindowContentSizeExtremaIfNecessary
+// triggers graphDidChange → requestUpdate → needsUpdateConstraints = true while already
+// inside updateConstraints. AppKit's re-entrancy guard throws NSGenericException.
+// Fix: DEFER the re-entrant write (don't drop it) — SwiftUI needs it to complete rendering.
+// The deferred async write runs after the current constraint pass, so AppKit accepts it.
+final class FixedSizeHostingView<Content: View>: NSHostingView<Content> {
+    required init(rootView: Content) { super.init(rootView: rootView) }
+    required init?(coder: NSCoder) { fatalError() }
+
+    private var isInUpdateConstraints = false
+
+    override func updateConstraints() {
+        isInUpdateConstraints = true
+        defer { isInUpdateConstraints = false }
+        super.updateConstraints()
+    }
+
+    override var needsUpdateConstraints: Bool {
+        get { super.needsUpdateConstraints }
+        set {
+            if isInUpdateConstraints {
+                // Defer re-entrant write until after the current pass completes.
+                let v = newValue
+                DispatchQueue.main.async { [weak self] in
+                    self?.needsUpdateConstraints = v
+                }
+                return
+            }
+            super.needsUpdateConstraints = newValue
+        }
+    }
+}
+
 @MainActor
 final class SuggestionPanelController {
     static let shared = SuggestionPanelController()
 
     private var panel: NSPanel?
-    private var hostingView: NSHostingView<SuggestionView>?
+    private var hostingView: FixedSizeHostingView<SuggestionView>?
     private var currentResult: CorrectionResult?
     private var currentState: SuggestionState?
     private var explanationTask: Task<Void, Never>?
     private var undoTask: Task<Void, Never>?
+    private var clickMonitor: Any?
+    private var appObserver: NSObjectProtocol?
 
-    private init() {}
+    private init() {
+        appObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  app.bundleIdentifier != "com.thousandflowers.parrot" else { return }
+            Task { @MainActor in self?.close() }
+        }
+    }
 
     private var reduceMotion: Bool {
         NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -50,7 +96,10 @@ final class SuggestionPanelController {
     }
 
     private func clampToScreen(_ origin: NSPoint, size: NSSize) -> NSPoint {
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return origin }
+        let screen = NSScreen.screens.first(where: { $0.frame.contains(origin) })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        guard let screen else { return origin }
         let frame = screen.visibleFrame
         let clampedX = max(frame.minX, min(frame.maxX - size.width, origin.x))
         let clampedY = max(frame.minY, min(frame.maxY - size.height, origin.y))
@@ -69,19 +118,25 @@ final class SuggestionPanelController {
             onDismiss: { [weak self] in self?.close() },
             onUndo: { [weak self] in self?.undoCorrection() },
             onTranslate: { [weak self] lang in self?.translate(to: lang) },
-            onCustomAction: { [weak self] promptText in self?.applyCustomAction(promptText: promptText) }
+            onCustomAction: { [weak self] promptText in self?.applyCustomAction(promptText: promptText) },
+            onIgnoreWord: { [weak self] word in self?.ignoreWord(word) },
+            onRunFlow: { [weak self] flow in self?.runFlow(flow) }
         )
 
         if let hv = hostingView {
+            // Update rootView — SwiftUI reconciles safely within the existing constraint context.
+            // Never replace contentView on a visible/animated window: AutoLayout throws during
+            // the subsequent display cycle → AppKit _crashOnException → SIGTRAP (signal 5).
             hv.rootView = view
+            panel?.orderFrontRegardless()
         } else {
             let newPanel = createPanel(with: view)
             panel = newPanel
-            let mouseLoc = NSEvent.mouseLocation
-            let origin = clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - 20), size: newPanel.frame.size)
+            let origin = panelOrigin(panelSize: newPanel.frame.size)
             newPanel.setFrameOrigin(origin)
             newPanel.orderFrontRegardless()
             animateIn(newPanel)
+            installClickMonitor(for: newPanel)
         }
     }
 
@@ -104,6 +159,41 @@ final class SuggestionPanelController {
         showOrUpdate(result: nil, state: .loading)
     }
 
+    private var streamingTask: Task<Void, Never>?
+
+    func showOrUpdateStreaming(original: String, current: String) {
+        showOrUpdate(result: nil, state: .streaming(original: original, current: current))
+    }
+
+    func startStreaming(original: String, promptType: PromptType) {
+        streamingTask?.cancel()
+        streamingTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            var accumulated = ""
+            showOrUpdate(result: nil, state: .streaming(original: original, current: ""))
+            do {
+                let service = LLMServiceFactory.make()
+                for try await chunk in service.streamCorrect(text: original, promptType: promptType) {
+                    guard !Task.isCancelled else { return }
+                    accumulated = chunk
+                    showOrUpdate(result: nil, state: .streaming(original: original, current: accumulated))
+                }
+                // Streaming complete — build final result and show as suggestion
+                let finalResult = CorrectionResult(
+                    original: original,
+                    corrected: accumulated.isEmpty ? original : accumulated,
+                    modelID: "streaming",
+                    promptType: promptType.label
+                )
+                let state: SuggestionState = finalResult.hasChanges ? .suggestion(finalResult) : .noErrors
+                showOrUpdate(result: finalResult, state: state)
+            } catch {
+                guard !Task.isCancelled else { return }
+                showError(error as? CorrectionError ?? .outputParsingFailed(raw: error.localizedDescription))
+            }
+        }
+    }
+
     func showError(_ error: CorrectionError) {
         if case .modelNotLoaded = error {
             showOrUpdate(result: nil, state: .modelMissing)
@@ -112,9 +202,37 @@ final class SuggestionPanelController {
         }
     }
 
+    private func panelOrigin(panelSize: NSSize) -> NSPoint {
+        let bounds = AccessibilityBridge.shared.lastSelectionBoundsSync
+        if bounds != .zero {
+            // Position below selected text; flip if too close to bottom edge
+            let x = bounds.midX - panelSize.width / 2
+            let belowY = bounds.minY - panelSize.height - 8
+            let origin = NSPoint(x: x, y: belowY)
+            let clamped = clampToScreen(origin, size: panelSize)
+            // If clamping moved us up (panel was below screen), try above selection instead
+            if clamped.y > belowY + 4 {
+                let aboveY = bounds.maxY + 8
+                return clampToScreen(NSPoint(x: x, y: aboveY), size: panelSize)
+            }
+            return clamped
+        }
+        let mouseLoc = NSEvent.mouseLocation
+        return clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - panelSize.height / 2), size: panelSize)
+    }
+
+    private func installClickMonitor(for targetPanel: NSPanel) {
+        clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self, weak targetPanel] _ in
+            guard let self, let targetPanel else { return }
+            if !targetPanel.frame.contains(NSEvent.mouseLocation) {
+                Task { @MainActor in self.close() }
+            }
+        }
+    }
+
     private func createPanel(with view: SuggestionView) -> NSPanel {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 220),
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 280),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -126,8 +244,15 @@ final class SuggestionPanelController {
         panel.hasShadow = true
         panel.isMovableByWindowBackground = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // Clamp size: prevents NSHostingView.updateAnimatedWindowSize from calling setFrame
+        // with a different value during windowDidLayout, which triggers re-entrant constraint
+        // updates and crash on macOS 26. sizingOptions=[] alone is insufficient on macOS 26.
+        let fixedSize = NSSize(width: 340, height: 280)
+        panel.minSize = fixedSize
+        panel.maxSize = fixedSize
 
-        let hv = NSHostingView(rootView: view)
+        let hv = FixedSizeHostingView(rootView: view)
+        hv.sizingOptions = []
         hostingView = hv
         panel.contentView = hv
 
@@ -142,6 +267,7 @@ final class SuggestionPanelController {
                 try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText)
                 Task { await HistoryStore.shared.add(result: result) }
                 self.showOrUpdate(result: result, state: .applied(result))
+                self.undoTask?.cancel()
                 self.undoTask = Task { [weak self] in
                     try? await Task.sleep(for: .seconds(5))
                     guard !Task.isCancelled else { return }
@@ -264,11 +390,54 @@ final class SuggestionPanelController {
         }
     }
 
+    func ignoreWord(_ word: String) {
+        IgnoreList.ignore(word)
+    }
+
+    func runFlow(_ flow: Flow) {
+        guard let result = currentResult else { return }
+        showOrUpdate(result: nil, state: .loading)
+        Task { [weak self] in
+            guard let self else { return }
+            var text = result.originalText
+            var lastResult: CorrectionResult?
+            do {
+                for step in flow.steps {
+                    let newResult = try await RequestQueue.shared.enqueue(
+                        text: text,
+                        type: step.promptType,
+                        priority: .manual,
+                        overrideServiceType: nil,
+                        overrideCustomPrompt: step.customInstruction.map { CustomPrompt(id: UUID(), name: "Flow Step", template: $0, checkType: .custom) }
+                    )
+                    text = newResult.correctedText
+                    lastResult = newResult
+                }
+                guard let final = lastResult else { close(); return }
+                let combined = CorrectionResult(
+                    original: result.originalText,
+                    corrected: final.correctedText,
+                    modelID: "flow:\(flow.name)",
+                    promptType: "flow"
+                )
+                showOrUpdate(result: combined, state: .suggestion(combined))
+            } catch {
+                showError(error as? CorrectionError ?? .outputParsingFailed(raw: error.localizedDescription))
+            }
+        }
+    }
+
     func close() {
         undoTask?.cancel()
         undoTask = nil
         explanationTask?.cancel()
         explanationTask = nil
+        streamingTask?.cancel()
+        streamingTask = nil
+        if let monitor = clickMonitor {
+            NSEvent.removeMonitor(monitor)
+            clickMonitor = nil
+        }
         guard let panel = panel else { return }
         self.panel = nil
         self.hostingView = nil

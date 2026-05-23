@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parrot — Grammar & Style Correction for Every App on Your Mac</title>
+    <meta name="description" content="Select text anywhere, press ⌘⇧E, and the corrected version appears. Works offline, no subscription, open source.">
+    <meta property="og:title" content="Parrot — Grammar & Style Correction for Every App on Your Mac">
+    <meta property="og:description" content="Select text anywhere, press ⌘⇧E, and the corrected version appears. Works offline, no subscription, open source.">
+    <meta property="og:type" content="website">
+    <style>
+        :root {
+            --bg: #fafafa;
+            --text: #1d1d1f;
+            --text-secondary: #6e6e73;
+            --accent: #0071e3;
+            --accent-hover: #0077ed;
+            --border: #e5e5e7;
+            --card-bg: #ffffff;
+            --green: #34c759;
+            --code-bg: #f5f5f7;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #000000;
+                --text: #f5f5f7;
+                --text-secondary: #86868b;
+                --accent: #2997ff;
+                --accent-hover: #40a3ff;
+                --border: #333336;
+                --card-bg: #1c1c1e;
+                --code-bg: #2c2c2e;
+            }
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+        .container { max-width: 980px; margin: 0 auto; padding: 0 22px; }
+
+        /* Nav */
+        nav {
+            position: sticky; top: 0; z-index: 100;
+            background: color-mix(in srgb, var(--bg) 80%, transparent);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            border-bottom: 1px solid var(--border);
+        }
+        nav .container {
+            display: flex; align-items: center; justify-content: space-between;
+            height: 52px;
+        }
+        nav .logo { font-size: 20px; font-weight: 600; }
+        nav .links { display: flex; gap: 24px; }
+        nav .links a {
+            color: var(--text-secondary); text-decoration: none; font-size: 14px;
+            transition: color 0.2s;
+        }
+        nav .links a:hover { color: var(--text); }
+
+        /* Hero */
+        .hero {
+            padding: 120px 0 80px;
+            text-align: center;
+        }
+        .hero h1 {
+            font-size: clamp(40px, 6vw, 64px);
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1.05;
+            margin-bottom: 16px;
+        }
+        .hero h1 .emoji { font-style: normal; }
+        .hero .subtitle {
+            font-size: clamp(18px, 2.5vw, 24px);
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto 40px;
+            line-height: 1.4;
+        }
+        .hero .cta-group { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+        .btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 12px 24px; border-radius: 980px;
+            font-size: 16px; font-weight: 500; text-decoration: none;
+            transition: all 0.2s; cursor: pointer; border: none;
+        }
+        .btn-primary {
+            background: var(--accent); color: #fff;
+        }
+        .btn-primary:hover { background: var(--accent-hover); transform: scale(1.02); }
+        .btn-secondary {
+            background: transparent; color: var(--accent);
+            border: 1.5px solid var(--accent);
+        }
+        .btn-secondary:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+
+        /* Flow */
+        .flow {
+            padding: 60px 0;
+            text-align: center;
+        }
+        .flow .steps {
+            display: flex; justify-content: center; gap: 32px; flex-wrap: wrap;
+            margin-top: 32px;
+        }
+        .flow .step {
+            display: flex; align-items: center; gap: 12px;
+            font-size: 18px; font-weight: 500;
+        }
+        .flow .step .arrow { color: var(--text-secondary); font-size: 24px; }
+        .flow .step kbd {
+            background: var(--code-bg); border: 1px solid var(--border);
+            border-radius: 6px; padding: 4px 10px; font-size: 14px;
+            font-family: "SF Mono", SFMono-Regular, Consolas, monospace;
+        }
+
+        /* Features */
+        .features { padding: 80px 0; }
+        .features h2 {
+            font-size: 32px; font-weight: 600; text-align: center;
+            margin-bottom: 48px; letter-spacing: -0.02em;
+        }
+        .features .grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+        }
+        .features .card {
+            background: var(--card-bg); border: 1px solid var(--border);
+            border-radius: 16px; padding: 32px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .features .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px color-mix(in srgb, var(--text) 8%, transparent);
+        }
+        .features .card .icon { font-size: 32px; margin-bottom: 16px; }
+        .features .card h3 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+        .features .card p { color: var(--text-secondary); font-size: 15px; }
+
+        /* Comparison */
+        .comparison { padding: 80px 0; }
+        .comparison h2 {
+            font-size: 32px; font-weight: 600; text-align: center;
+            margin-bottom: 48px; letter-spacing: -0.02em;
+        }
+        .comparison table {
+            width: 100%; border-collapse: collapse;
+            font-size: 15px;
+        }
+        .comparison th, .comparison td {
+            padding: 14px 16px; text-align: center;
+            border-bottom: 1px solid var(--border);
+        }
+        .comparison th {
+            font-weight: 600; font-size: 16px;
+        }
+        .comparison th:first-child, .comparison td:first-child { text-align: left; }
+        .comparison .col-parrot {
+            background: color-mix(in srgb, var(--accent) 8%, transparent);
+            border-radius: 8px 8px 0 0;
+        }
+        .comparison .check { color: var(--green); font-weight: 700; }
+        .comparison .cross { color: #ff3b30; }
+
+        /* Privacy */
+        .privacy {
+            padding: 80px 0;
+            text-align: center;
+        }
+        .privacy h2 {
+            font-size: 32px; font-weight: 600; margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+        .privacy p {
+            color: var(--text-secondary); max-width: 600px; margin: 0 auto;
+            font-size: 17px; line-height: 1.6;
+        }
+        .privacy .badges {
+            display: flex; justify-content: center; gap: 24px; flex-wrap: wrap;
+            margin-top: 32px;
+        }
+        .privacy .badge {
+            background: var(--card-bg); border: 1px solid var(--border);
+            border-radius: 12px; padding: 16px 24px;
+            font-size: 15px; font-weight: 500;
+        }
+
+        /* Install */
+        .install { padding: 80px 0; }
+        .install h2 {
+            font-size: 32px; font-weight: 600; text-align: center;
+            margin-bottom: 48px; letter-spacing: -0.02em;
+        }
+        .install .methods {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+        }
+        .install .method {
+            background: var(--card-bg); border: 1px solid var(--border);
+            border-radius: 16px; padding: 32px;
+        }
+        .install .method h3 { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+        .install .method code {
+            display: block; background: var(--code-bg); border-radius: 8px;
+            padding: 12px 16px; font-size: 14px; font-family: "SF Mono", SFMono-Regular, Consolas, monospace;
+            overflow-x: auto; margin-top: 8px;
+        }
+
+        /* Footer */
+        footer {
+            padding: 40px 0;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        footer a { color: var(--accent); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .hero { padding: 80px 0 60px; }
+            .flow .steps { flex-direction: column; align-items: center; gap: 16px; }
+            .flow .step .arrow { transform: rotate(90deg); }
+            .comparison { overflow-x: auto; }
+            .comparison table { min-width: 600px; }
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <div class="container">
+        <div class="logo">🦜 Parrot</div>
+        <div class="links">
+            <a href="#features">Features</a>
+            <a href="#comparison">Comparison</a>
+            <a href="#install">Install</a>
+            <a href="https://github.com/thousandflowers/Parrot">GitHub</a>
+        </div>
+    </div>
+</nav>
+
+<section class="hero">
+    <div class="container">
+        <h1><span class="emoji">🦜</span> Grammar correction<br>for every app on your Mac</h1>
+        <p class="subtitle">Select text anywhere, press a shortcut, and the corrected version appears. Offline by default. No subscription. Open source.</p>
+        <div class="cta-group">
+            <a href="https://github.com/thousandflowers/Parrot/releases/latest" class="btn btn-primary">Download Parrot.dmg</a>
+            <a href="https://github.com/thousandflowers/Parrot" class="btn btn-secondary">View on GitHub</a>
+        </div>
+    </div>
+</section>
+
+<section class="flow">
+    <div class="container">
+        <div class="steps">
+            <div class="step">Select text in any app</div>
+            <div class="step"><span class="arrow">→</span></div>
+            <div class="step">Press <kbd>⌘⇧E</kbd></div>
+            <div class="step"><span class="arrow">→</span></div>
+            <div class="step">Review panel appears</div>
+            <div class="step"><span class="arrow">→</span></div>
+            <div class="step">Press <kbd>Return</kbd> to apply</div>
+        </div>
+    </div>
+</section>
+
+<section class="features" id="features">
+    <div class="container">
+        <h2>Why Parrot</h2>
+        <div class="grid">
+            <div class="card">
+                <div class="icon">🔒</div>
+                <h3>Fully offline by default</h3>
+                <p>Bundled llama-server runs locally. Your text never leaves your Mac. No telemetry, no analytics, no data collection.</p>
+            </div>
+            <div class="card">
+                <div class="icon">⚡</div>
+                <h3>Works in every app</h3>
+                <p>Mail, Slack, VS Code, Terminal, Figma, Notion — anywhere the macOS Accessibility API can reach. No browser extension needed.</p>
+            </div>
+            <div class="card">
+                <div class="icon">🎯</div>
+                <h3>4 correction modes</h3>
+                <p>Grammar (⌘⇧E), Fluency (⌘⇧T), Translate (⌘⇧U), Writing Coach (⌘⇧W). Plus custom prompts with your own hotkeys.</p>
+            </div>
+            <div class="card">
+                <div class="icon">🌍</div>
+                <h3>50+ languages</h3>
+                <p>Auto-detects the text's language and adapts prompts automatically. Not just English — Italian, Spanish, French, German, and more.</p>
+            </div>
+            <div class="card">
+                <div class="icon">🎨</div>
+                <h3>Diff highlight + Explain</h3>
+                <p>See exactly what changed in green. Ask the model to justify each correction inline. Hear the result with TTS.</p>
+            </div>
+            <div class="card">
+                <div class="icon">🏷️</div>
+                <h3>No subscription</h3>
+                <p>Free and open source (MIT). Bring your own API key for cloud models, or use the bundled local LLM — zero cost forever.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="comparison" id="comparison">
+    <div class="container">
+        <h2>Parrot vs the alternatives</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th></th>
+                    <th class="col-parrot">🦜 Parrot</th>
+                    <th>Grammarly</th>
+                    <th>LanguageTool</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Works in every app (Terminal, Xcode, Figma…)</td>
+                    <td class="check">✅</td>
+                    <td class="cross">❌</td>
+                    <td class="cross">❌</td>
+                </tr>
+                <tr>
+                    <td>Fully offline by default</td>
+                    <td class="check">✅</td>
+                    <td class="cross">❌</td>
+                    <td>Partial</td>
+                </tr>
+                <tr>
+                    <td>No daemon, no browser extension</td>
+                    <td class="check">✅</td>
+                    <td class="cross">❌</td>
+                    <td class="cross">❌</td>
+                </tr>
+                <tr>
+                    <td>Per-app rules</td>
+                    <td class="check">✅</td>
+                    <td class="cross">❌</td>
+                    <td class="cross">❌</td>
+                </tr>
+                <tr>
+                    <td>Custom prompts</td>
+                    <td class="check">✅</td>
+                    <td class="cross">❌</td>
+                    <td class="cross">❌</td>
+                </tr>
+                <tr>
+                    <td>No subscription</td>
+                    <td class="check">✅</td>
+                    <td class="cross">❌</td>
+                    <td>Partial</td>
+                </tr>
+                <tr>
+                    <td>Open source</td>
+                    <td class="check">✅</td>
+                    <td class="cross">❌</td>
+                    <td class="check">✅</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="privacy">
+    <div class="container">
+        <h2>Privacy by construction</h2>
+        <p>Local LLM inference means zero network requests. API keys stored in Keychain. No analytics, no crash reporting, no data collection of any kind.</p>
+        <div class="badges">
+            <div class="badge">🔐 0 bytes sent externally</div>
+            <div class="badge">📡 No telemetry</div>
+            <div class="badge">🔑 Keychain-secured keys</div>
+            <div class="badge">✈️ Works on a plane</div>
+        </div>
+    </div>
+</section>
+
+<section class="install" id="install">
+    <div class="container">
+        <h2>Install</h2>
+        <div class="methods">
+            <div class="method">
+                <h3>Download the app</h3>
+                <p>Get the latest release from GitHub:</p>
+                <code><a href="https://github.com/thousandflowers/Parrot/releases/latest" style="color: inherit; text-decoration: none;">https://github.com/thousandflowers/Parrot/releases/latest</a></code>
+            </div>
+            <div class="method">
+                <h3>Build from source</h3>
+                <p>Requires macOS 14+, Xcode 16+:</p>
+                <code>git clone https://github.com/thousandflowers/Parrot<br>cd Parrot<br>swift build -c release --arch arm64</code>
+            </div>
+            <div class="method">
+                <h3>Homebrew (coming soon)</h3>
+                <p>Once notarized:</p>
+                <code>brew install --cask parrot</code>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="privacy" style="padding: 60px 0; text-align: center; border-top: 1px solid var(--border);">
+    <div class="container">
+        <h2 style="font-size: 24px; font-weight: 600; margin-bottom: 12px;">Support Parrot</h2>
+        <p style="color: var(--text-secondary); max-width: 500px; margin: 0 auto 20px; font-size: 16px;">Parrot is free and open source. If you find it useful, consider sponsoring development.</p>
+        <a href="https://github.com/sponsors/thousandflowers" class="btn btn-secondary" style="display: inline-flex;">❤️ Sponsor on GitHub</a>
+    </div>
+</section>
+
+<footer>
+    <div class="container">
+        <p>🦜 Parrot — MIT License · <a href="https://github.com/thousandflowers/Parrot">GitHub</a> · <a href="https://github.com/thousandflowers/Parrot/issues/new?template=bug_report.md">Report a bug</a></p>
+        <p style="margin-top: 8px;">Built by <a href="https://github.com/thousandflowers">thousandflowers</a></p>
+    </div>
+</footer>
+
+</body>
+</html>

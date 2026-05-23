@@ -6,8 +6,8 @@ enum ErrorSeverity: Sendable {
 
     var nsColor: NSColor {
         switch self {
-        case .error:   return .refineError
-        case .warning: return .refineWarning
+        case .error:   return NSColor.systemRed
+        case .warning: return NSColor.systemOrange
         }
     }
 }

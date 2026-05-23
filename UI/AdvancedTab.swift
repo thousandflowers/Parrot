@@ -5,7 +5,7 @@ struct AdvancedTab: View {
     @State private var savedHFToken: String = ""
     @State private var tokenSaved = false
     @State private var cacheClearedMessage = false
-    @State private var lightweightMode = UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.lightweightMode)
+    @AppStorage(Constants.UserDefaultsKey.lightweightMode) private var lightweightMode = false
 
     var body: some View {
         Form {
@@ -19,7 +19,7 @@ struct AdvancedTab: View {
                 if tokenSaved {
                     Label("Token saved", systemImage: "checkmark.circle.fill")
                         .font(.caption)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Color.statusOk)
                 }
             } header: {
                 Label("HuggingFace", systemImage: "arrow.down.circle")
@@ -30,16 +30,13 @@ struct AdvancedTab: View {
 
             Section {
                 Toggle("Lightweight mode (fewer threads, lower CPU usage)", isOn: $lightweightMode)
-                    .onChange(of: lightweightMode) {
-                        UserDefaults.standard.set(lightweightMode, forKey: Constants.UserDefaultsKey.lightweightMode)
-                    }
 
                 Button("Clear response cache") {
                     Task {
-                        await ResultCache.shared.invalidateAll()
-                        ResponseCache.shared.invalidate()
+                        await CorrectionCache.shared.invalidateAll()
                         cacheClearedMessage = true
                         try? await Task.sleep(for: .seconds(3))
+                        guard !Task.isCancelled else { return }
                         cacheClearedMessage = false
                     }
                 }
@@ -47,7 +44,7 @@ struct AdvancedTab: View {
                 if cacheClearedMessage {
                     Label("Cache cleared", systemImage: "checkmark.circle.fill")
                         .font(.caption)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Color.statusOk)
                 }
 
                 Button("Show initial setup…") {
@@ -60,7 +57,7 @@ struct AdvancedTab: View {
             Section {
                 LabeledContent("Accessibility") {
                     Text(PreferencesStore.shared.isAccessibilityEnabled ? "Enabled" : "Not enabled")
-                        .foregroundStyle(PreferencesStore.shared.isAccessibilityEnabled ? .green : .orange)
+                        .foregroundStyle(PreferencesStore.shared.isAccessibilityEnabled ? Color.statusOk : Color.statusWarning)
                 }
                 LabeledContent("Bundle ID") {
                     Text(Constants.bundleID)
@@ -125,4 +122,8 @@ struct AdvancedTab: View {
             // Keychain write failed — no confirmation shown
         }
     }
+}
+
+#Preview {
+    AdvancedTab()
 }

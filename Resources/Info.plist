@@ -22,6 +22,17 @@
     <string>14.0</string>
     <key>LSUIElement</key>
     <true/>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.thousandflowers.parrot</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>parrot</string>
+            </array>
+        </dict>
+    </array>
     <key>NSAccessibilityUsageDescription</key>
     <string>Parrot needs accessibility access to read and correct text in other applications.</string>
     <key>NSAppleEventsUsageDescription</key>

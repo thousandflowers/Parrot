@@ -13,7 +13,7 @@
 "onboarding.accessibility.title" = "Accessibility Access";
 "onboarding.accessibility.body" = "Parrot needs accessibility access to read and correct text in other apps.";
 "onboarding.accessibility.granted" = "Access granted";
-"onboarding.accessibility.instructions" = "Open System Settings → Privacy & Security → Accessibility and enable Parrot.";
+"onboarding.accessibility.instructions" = "Open System Settings → Privacy & Security → Accessibility and enable Parrot.\n\nAfter granting permission, macOS will quit Parrot — relaunch it to continue.";
 "onboarding.accessibility.open_settings" = "Open Settings";
 "onboarding.model.title" = "AI Model Download";
 "onboarding.model.select_placeholder" = "Select model";
@@ -100,6 +100,6 @@
 
 /* Accessibility alert (AppDelegate) */
 "alert.accessibility.title" = "Accessibility Permissions Required";
-"alert.accessibility.body" = "Parrot uses Accessibility to read and correct text in other apps.\n\nOpen System Settings > Privacy & Security > Accessibility and add Parrot.";
+"alert.accessibility.body" = "Parrot uses Accessibility to read and correct text in other apps.\n\nOpen System Settings > Privacy & Security > Accessibility and add Parrot.\n\n⚠️ After granting permission, macOS will quit Parrot. Relaunch it from the Applications folder or Dock.";
 "alert.accessibility.open_settings" = "Open Settings";
 "alert.accessibility.ignore" = "Don't show again";

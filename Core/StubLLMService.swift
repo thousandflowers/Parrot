@@ -21,6 +21,10 @@ final class StubLLMService: LLMService, Sendable {
                 + "\n\n---\n[STUB · Custom rules applied]"
         case .translation(let lang):
             fakeCorrection = "[STUB · Translation to \(lang)]: \(text)"
+        case .deSlop:
+            fakeCorrection = applyGrammarCorrections(text) + "\n\n---\n[STUB · De-slopped]"
+        case .aiPrompt:
+            fakeCorrection = "[STUB · AI Prompt optimized]: \(applyGrammarCorrections(text))"
         }
 
         return CorrectionResult(
@@ -62,6 +66,8 @@ final class StubLLMService: LLMService, Sendable {
             case .coach: "[STUB · Coach]: \(applyGrammarCorrections(text))"
             case .explain: "Stub explanation..."
             case .translation(let lang): "[STUB · Translation to \(lang)]: \(text)"
+            case .deSlop: "[STUB · De-slopped]: \(applyGrammarCorrections(text))"
+            case .aiPrompt: "[STUB · AI Prompt]: \(applyGrammarCorrections(text))"
             }
             let words = corrected.components(separatedBy: " ")
             let task = Task {

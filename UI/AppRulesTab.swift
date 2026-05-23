@@ -112,3 +112,7 @@ struct AppRulesTab: View {
         }
     }
 }
+
+#Preview {
+    AppRulesTab(prefs: PreferencesStore.shared)
+}

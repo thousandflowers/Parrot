@@ -1,31 +1,57 @@
 import SwiftUI
 import AppKit
 
+extension NSColor {
+    static let statusOk = appearanceColor(
+        light: NSColor(displayP3Red: 0.20, green: 0.72, blue: 0.35, alpha: 1),
+        dark: NSColor(displayP3Red: 0.30, green: 0.82, blue: 0.48, alpha: 1)
+    )
+    static let statusWarning = appearanceColor(
+        light: NSColor(displayP3Red: 0.85, green: 0.55, blue: 0.10, alpha: 1),
+        dark: NSColor(displayP3Red: 0.95, green: 0.70, blue: 0.25, alpha: 1)
+    )
+    static let statusError = appearanceColor(
+        light: NSColor(displayP3Red: 0.80, green: 0.18, blue: 0.16, alpha: 1),
+        dark: NSColor(displayP3Red: 0.92, green: 0.30, blue: 0.24, alpha: 1)
+    )
+    static let statusInactive = appearanceColor(
+        light: NSColor(displayP3Red: 0.55, green: 0.55, blue: 0.55, alpha: 1),
+        dark: NSColor(displayP3Red: 0.50, green: 0.50, blue: 0.50, alpha: 1)
+    )
+
+    static let surfaceWarm = appearanceColor(
+        light: NSColor(displayP3Red: 0.97, green: 0.96, blue: 0.94, alpha: 1),
+        dark: NSColor(displayP3Red: 0.15, green: 0.14, blue: 0.13, alpha: 1)
+    )
+    static let borderWarm = appearanceColor(
+        light: NSColor(displayP3Red: 0.88, green: 0.86, blue: 0.83, alpha: 1),
+        dark: NSColor(displayP3Red: 0.30, green: 0.28, blue: 0.26, alpha: 1)
+    )
+
+    private static func appearanceColor(light: NSColor, dark: NSColor) -> NSColor {
+        NSColor(name: nil) { appearance in
+            let isDark = appearance.name == .darkAqua || appearance.name == .vibrantDark
+            return isDark ? dark : light
+        }
+    }
+}
+
 extension Color {
-    /// Stato positivo / conferma — verde adattivo a light e dark mode
-    static let statusOk = Color(nsColor: NSColor.systemGreen)
+    static let statusOk = Color(nsColor: .statusOk)
+    static let statusWarning = Color(nsColor: .statusWarning)
+    static let statusError = Color(nsColor: .statusError)
+    static let statusInactive = Color(nsColor: .statusInactive)
+    static let surfaceWarm = Color(nsColor: .surfaceWarm)
+    static let borderWarm = Color(nsColor: .borderWarm)
 
-    /// Avviso / attenzione — arancione adattivo a light e dark mode
-    static let statusWarning = Color(nsColor: NSColor.systemOrange)
-
-    /// Errore / critico — rosso adattivo a light e dark mode
-    static let statusError = Color(nsColor: NSColor.systemRed)
-
-    /// Stato inattivo / neutro — grigio adattivo (secondary label)
-    static let statusInactive = Color(nsColor: NSColor.secondaryLabelColor)
-
-    /// Colore accent / brand — blu adattivo a light e dark mode
-    static let accentBrand = Color(nsColor: NSColor.systemBlue)
-
-    /// Testo primario — mappa al colore primario del sistema (nero in light, bianco in dark)
+    static let accentBrand = Color.accentColor
+    static let accentGreen = Color(nsColor: .statusOk)
+    static let accentPurple = Color.accentColor
     static let textPrimary = Color.primary
-
-    /// Testo secondario — mappa al colore secondario del sistema
     static let textSecondary = Color.secondary
 }
 
 extension View {
-    /// Rimuove elementi AX "fantasma" (size 0x0) tipici di ScrollView/List su macOS
     func cleanAccessibilityTree() -> some View {
         self.accessibilityElement(children: .contain)
             .accessibilityHidden(false)

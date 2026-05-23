@@ -84,10 +84,7 @@ final class PreferencesCache {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                let before = self.cachedAccessibility
                 self.invalidateAccessibility()
-                let after = self.isAccessibilityEnabled
-                guard before != after else { return }
                 onChange()
             }
         }

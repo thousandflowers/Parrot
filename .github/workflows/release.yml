@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app
+
+      - name: Build release binary (arm64)
+        run: swift build -c release --arch arm64
+
+      - name: Build .app bundle
+        run: |
+          # Build unsigned app for GitHub release (users right-click → Open)
+          ./build-app.sh release
+        env:
+          SIGNING_IDENTITY: ""
+
+      - name: Create ZIP for Sparkle
+        run: |
+          ditto -c -k --keepParent Parrot.app "Parrot_${{ github.ref_name }}.zip"
+
+      - name: Generate Sparkle signature
+        id: sparkle
+        run: |
+          if [ -n "${SPARKLE_PRIVATE_KEY:-}" ]; then
+            SIG=$(sparkle_sign "Parrot_${{ github.ref_name }}.zip" <<< "$SPARKLE_PRIVATE_KEY")
+            echo "edSignature=$SIG" >> $GITHUB_OUTPUT
+          else
+            echo "No SPARKLE_PRIVATE_KEY — skipping signature"
+          fi
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+
+      - name: Update appcast.xml
+        if: steps.sparkle.outputs.edSignature != ''
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION_NUM="${VERSION#v}"
+          BUILD_NUM=$(date +%s)
+          FILE_SIZE=$(stat -f%z "Parrot_${VERSION}.zip")
+          PUB_DATE=$(LC_ALL=en_US date -u "+%a, %d %b %Y %H:%M:%S +0000")
+
+          # Generate new appcast entry
+          cat > appcast.xml << EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+              <channel>
+                  <title>Parrot</title>
+                  <link>https://github.com/thousandflowers/Parrot</link>
+                  <description>Parrot release notes</description>
+                  <language>en</language>
+                  <item>
+                      <title>Version ${VERSION_NUM}</title>
+                      <pubDate>${PUB_DATE}</pubDate>
+                      <sparkle:version>${BUILD_NUM}</sparkle:version>
+                      <sparkle:shortVersionString>${VERSION_NUM}</sparkle:shortVersionString>
+                      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+                      <enclosure
+                          url="https://github.com/thousandflowers/Parrot/releases/download/${VERSION}/Parrot_${VERSION}.zip"
+                          length="${FILE_SIZE}"
+                          type="application/octet-stream"
+                          sparkle:edSignature="${{ steps.sparkle.outputs.edSignature }}"
+                      />
+                      <sparkle:releaseNotesLink>https://github.com/thousandflowers/Parrot/releases/tag/${VERSION}</sparkle:releaseNotesLink>
+                  </item>
+              </channel>
+          </rss>
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Parrot.dmg
+            Parrot_${{ github.ref_name }}.zip
+            appcast.xml
+          generate_release_notes: true
+          draft: false

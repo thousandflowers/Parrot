@@ -6,6 +6,7 @@ final class RealtimeIndicatorController {
     static let shared = RealtimeIndicatorController()
 
     private var window: NSWindow?
+    private var hostingView: NSHostingView<RealtimeIndicatorView>?
 
     private init() {}
 
@@ -28,18 +29,25 @@ final class RealtimeIndicatorController {
                 y = mousePoint.y - 20
             }
 
+            let newView = RealtimeIndicatorView(hasErrors: errors)
+
             if let existing = window {
+                // Never update rootView on a visible window — NSHostingView.updateAnimatedWindowSize
+                // fires from windowDidLayout and causes a re-entrant constraint crash.
+                // Hide → replace contentView with fresh NSHostingView → show again.
+                existing.orderOut(nil)
+                let hv = NSHostingView(rootView: newView)
+                hv.sizingOptions = []
+                hostingView = hv
+                existing.contentView = hv
                 existing.setFrameOrigin(NSPoint(x: x, y: y))
-                existing.contentView = NSHostingView(rootView: RealtimeIndicatorView(hasErrors: errors))
-                if existing.alphaValue < 1.0 {
-                    existing.orderFront(nil)
-                    fadeIn(existing)
-                }
+                existing.orderFront(nil)
+                fadeIn(existing)
                 return
             }
 
             let panel = NSWindow(
-                contentRect: NSRect(x: x, y: y, width: 130, height: 36),
+                contentRect: NSRect(x: x, y: y, width: 130, height: 30),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -51,7 +59,10 @@ final class RealtimeIndicatorController {
             panel.hasShadow = true
             panel.isReleasedWhenClosed = false
 
-            panel.contentView = NSHostingView(rootView: RealtimeIndicatorView(hasErrors: errors))
+            let hv = NSHostingView(rootView: newView)
+            hv.sizingOptions = []
+            hostingView = hv
+            panel.contentView = hv
             window = panel
             panel.orderFront(nil)
             fadeIn(panel)
@@ -91,7 +102,7 @@ struct RealtimeIndicatorView: View {
             Image(systemName: hasErrors ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
                 .foregroundColor(hasErrors ? .statusWarning : .statusOk)
                 .font(.callout)
-            Text(hasErrors ? "Errori" : "OK")
+            Text(hasErrors ? String(localized: "realtime.errors") : String(localized: "realtime.ok"))
                 .font(.caption)
                 .fontWeight(.medium)
                 .foregroundColor(.textPrimary)
@@ -99,10 +110,10 @@ struct RealtimeIndicatorView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
-            VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
-                .cornerRadius(8)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.ultraThinMaterial)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(Color.primary.opacity(0.15), lineWidth: 0.5)
                 )
         )

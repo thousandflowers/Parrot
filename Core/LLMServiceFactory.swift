@@ -12,11 +12,17 @@ struct LLMServiceFactory {
 
     static func make(with serviceType: ServiceType) -> LLMService {
         switch serviceType {
-        case .stub:       return StubLLMService.shared
-        case .local:      return LocalLLMService.shared
-        case .remote:     return RemoteLLMService.shared
-        case .ollama:     return OllamaService.shared
-        case .openRouter: return OpenRouterService.shared
+        case .stub:              return StubLLMService.shared
+        case .local:             return LocalLLMService.shared
+        case .remote:            return RemoteLLMService.shared
+        case .ollama:            return OllamaService.shared
+        case .openRouter:        return OpenRouterService.shared
+        case .appleIntelligence:
+            if #available(macOS 26.0, *) {
+                return AppleIntelligenceService.shared
+            }
+            Logger.infra.warning("Apple Intelligence requires macOS 26+, falling back to .stub")
+            return StubLLMService.shared
         }
     }
 
@@ -56,6 +62,22 @@ struct LLMServiceFactory {
             return UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.ollamaModel) ?? "llama3.2"
         case .openRouter:
             return UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openRouterModel) ?? "openai/gpt-4o-mini"
+        case .appleIntelligence:
+            return "apple-intelligence"
         }
     }
+
+    static func resolveFallbackModelID(for serviceType: ServiceType) -> String? {
+        let key: String
+        switch serviceType {
+        case .local:   key = Constants.UserDefaultsKey.fallbackLocalModelID
+        case .remote:  key = Constants.UserDefaultsKey.fallbackOpenAIModel
+        case .ollama:  key = Constants.UserDefaultsKey.fallbackOllamaModel
+        case .openRouter: key = Constants.UserDefaultsKey.fallbackOpenRouterModel
+        default:       return nil
+        }
+        let fallback = UserDefaults.standard.string(forKey: key) ?? ""
+        return fallback.isEmpty ? nil : fallback
+    }
+
 }

@@ -43,7 +43,7 @@ struct TextCheckCoordinator: Sendable {
         overrideService: Bool = false,
         show: @escaping @MainActor (CorrectionResult) -> Void
     ) {
-        performCheck(frontAppPID: pid) { text, resolved, _, detectedTone, language in
+        performCheck(frontAppPID: pid) { text, resolved, _, detectedTone, language, bundleID in
             let customResult = await CustomRuleStore.shared.apply(to: text, language: language)
             let customText = customResult.text
             let ruleResult = await RuleBasedEngine.shared.check(customText, language: language)
@@ -51,14 +51,27 @@ struct TextCheckCoordinator: Sendable {
             let hasCustomFixes = !customResult.fixes.isEmpty
             let hasRuleFixes = ruleResult.hasFixes
 
-            if !type.isFluency {
+            let effectiveType: PromptType
+            if type == .grammar {
+                let isAIChat = await AppDetector.shared.isAIChatApp(bundleID: bundleID)
+                let autoDetect = await MainActor.run { PreferencesStore.shared.aiPromptAutoDetect }
+                if autoDetect && isAIChat {
+                    effectiveType = .aiPrompt
+                } else {
+                    effectiveType = type
+                }
+            } else {
+                effectiveType = type
+            }
+
+            if !effectiveType.isFluency && effectiveType != .aiPrompt && effectiveType != .deSlop && effectiveType != .coach {
                 if (hasCustomFixes || hasRuleFixes) && language != "en" {
                     return CorrectionResult(
                         original: text,
                         corrected: ruleResult.text,
                         modelID: hasCustomFixes ? "custom+rules" : "rule_based",
                         confidence: 1.0,
-                        promptType: type.label,
+                        promptType: effectiveType.label,
                         detectedTone: detectedTone?.rawValue,
                         source: .ruleBased
                     )
@@ -74,7 +87,7 @@ struct TextCheckCoordinator: Sendable {
                                 corrected: harperResult.text,
                                 modelID: "harper",
                                 confidence: 1.0,
-                                promptType: type.label,
+                                promptType: effectiveType.label,
                                 detectedTone: detectedTone?.rawValue,
                                 source: .ruleBased
                             )
@@ -91,9 +104,24 @@ struct TextCheckCoordinator: Sendable {
             } else {
                 serviceType = resolved.serviceType
             }
+
+            let kbContext = await KnowledgeBase.shared.contextForPrompt(text: ruleResult.text)
+            let finalPromptType: PromptType
+            let finalCustomPrompt: CustomPrompt?
+            if let kbContext, let cp = resolved.prompt {
+                finalPromptType = .custom(name: cp.name, template: cp.template + "\n\n" + kbContext)
+                finalCustomPrompt = nil
+            } else if let kbContext {
+                finalPromptType = effectiveType
+                finalCustomPrompt = CustomPrompt(id: UUID(), name: "KB Context", template: kbContext, checkType: .custom)
+            } else {
+                finalPromptType = effectiveType
+                finalCustomPrompt = resolved.prompt
+            }
+
             return try await RequestQueue.shared.enqueue(
-                text: ruleResult.text, type: type, priority: .manual,
-                overrideServiceType: serviceType, overrideCustomPrompt: resolved.prompt,
+                text: ruleResult.text, type: finalPromptType, priority: .manual,
+                overrideServiceType: serviceType, overrideCustomPrompt: finalCustomPrompt,
                 language: language
             )
         } onSuccess: { result in
@@ -173,18 +201,22 @@ struct TextCheckCoordinator: Sendable {
 
     func performCheck(
         frontAppPID: pid_t? = nil,
-        action: @escaping @Sendable (String, (serviceType: ServiceType?, prompt: CustomPrompt?), CFRange?, DetectedTone?, String) async throws -> CorrectionResult,
+        action: @escaping @Sendable (String, (serviceType: ServiceType?, prompt: CustomPrompt?), CFRange?, DetectedTone?, String, String?) async throws -> CorrectionResult,
         onSuccess: @escaping @MainActor (CorrectionResult) -> Void
     ) {
         runTask {
+            CrashLogger.log("performCheck: prepareCheck start")
             let prepared = try await self.prepareCheck(frontAppPID: frontAppPID)
+            CrashLogger.log("performCheck: prepareCheck done, text=\(prepared.text.prefix(30))")
             await MainActor.run { SuggestionPanelController.shared.showLoading() }
 
             let replacementRange: CFRange = prepared.replacementRange ?? CFRange(location: 0, length: 0)
             let detectedTone = await ToneDetector.shared.detect(text: prepared.text, language: prepared.resolvedLanguage)
+            CrashLogger.log("performCheck: running action, promptType=\(prepared.promptType.label)")
 
             let resolved = (serviceType: prepared.serviceType, prompt: prepared.customPrompt)
-            let rawResult = try await action(prepared.text, resolved, replacementRange, detectedTone, prepared.resolvedLanguage)
+            let rawResult = try await action(prepared.text, resolved, replacementRange, detectedTone, prepared.resolvedLanguage, prepared.bundleID)
+            CrashLogger.log("performCheck: action done")
 
             let anchorRange: CFRange = await AccessibilityBridge.shared.lastSelectedRange
             let anchorRect: CGRect? = anchorRange.length > 0
@@ -274,6 +306,18 @@ struct TextCheckCoordinator: Sendable {
             }
             try await Task.sleep(nanoseconds: 300_000_000)
             return try await fetchSelectedTextAndRange(frontAppPID: frontAppPID, attempt: attempt + 1)
+        } catch CorrectionError.textExtractionFailed where frontAppPID == nil {
+            // System-wide AX focus query can fail on macOS 26+ — fall back to last known PID
+            let pid = await AccessibilityBridge.shared.lastKnownFrontAppPID()
+            guard pid != 0 else { throw CorrectionError.textExtractionFailed(appName: "unknown") }
+            let bid = await AppDetector.shared.frontAppBundleID(forPID: pid)
+            if let b = bid, await ElectronFallbackHandler.shared.isElectronApp(bundleID: b) {
+                let text = try await ElectronFallbackHandler.shared.extractViaClipboard(pid: pid)
+                return (text, CFRange(location: 0, length: 0))
+            }
+            let text = try await AccessibilityBridge.shared.fetchSelectedText(fromPID: pid)
+            let range = await AccessibilityBridge.shared.lastSelectedRange
+            return (text, range)
         }
     }
 }

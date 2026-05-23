@@ -8,6 +8,7 @@ final class PreferencesStore {
 
     private let cache = PreferencesCache()
     private var _cachedAPIKeys: [String: String] = [:]
+    private var realtimeTask: Task<Void, Never>?
     /// Trigger per notificare @Observable dei cambiamenti a computed property
     private var _observationTrigger: Int = 0
 
@@ -29,10 +30,11 @@ final class PreferencesStore {
         get { bool(Constants.UserDefaultsKey.realtimeEnabled) }
         set {
             set(newValue, for: Constants.UserDefaultsKey.realtimeEnabled)
+            realtimeTask?.cancel()
             if newValue {
-                Task { await RealtimeMonitor.shared.start() }
+                realtimeTask = Task { await RealtimeMonitor.shared.start() }
             } else {
-                Task { await RealtimeMonitor.shared.stop() }
+                realtimeTask = Task { await RealtimeMonitor.shared.stop() }
             }
         }
     }
@@ -91,6 +93,36 @@ final class PreferencesStore {
     var openRouterModel: String { get { string(Constants.UserDefaultsKey.openRouterModel, fallback: "openai/gpt-4o-mini") } set { set(newValue, for: Constants.UserDefaultsKey.openRouterModel) } }
     var translationLanguage: String { get { string(Constants.UserDefaultsKey.translationLanguage, fallback: "en") } set { set(newValue, for: Constants.UserDefaultsKey.translationLanguage) } }
 
+    // MARK: - Model Fallback
+
+    var fallbackLocalModelID: String { get { string(Constants.UserDefaultsKey.fallbackLocalModelID, fallback: "") } set { set(newValue, for: Constants.UserDefaultsKey.fallbackLocalModelID) } }
+    var fallbackOpenAIModel: String { get { string(Constants.UserDefaultsKey.fallbackOpenAIModel, fallback: "") } set { set(newValue, for: Constants.UserDefaultsKey.fallbackOpenAIModel) } }
+    var fallbackOllamaModel: String { get { string(Constants.UserDefaultsKey.fallbackOllamaModel, fallback: "") } set { set(newValue, for: Constants.UserDefaultsKey.fallbackOllamaModel) } }
+    var fallbackOpenRouterModel: String { get { string(Constants.UserDefaultsKey.fallbackOpenRouterModel, fallback: "") } set { set(newValue, for: Constants.UserDefaultsKey.fallbackOpenRouterModel) } }
+
+    // MARK: - Inline Annotations
+
+    var inlineAnnotationsHoverOnly: Bool { get { bool(Constants.UserDefaultsKey.inlineAnnotationsHoverOnly) } set { set(newValue, for: Constants.UserDefaultsKey.inlineAnnotationsHoverOnly) } }
+    var aiPromptAutoDetect: Bool { get { bool(Constants.UserDefaultsKey.aiPromptAutoDetect) } set { set(newValue, for: Constants.UserDefaultsKey.aiPromptAutoDetect) } }
+
+    var treeTraversalDisabledBundleIDs: Set<String> {
+        get {
+            observe()
+            return Set(UserDefaults.standard.stringArray(forKey: Constants.UserDefaultsKey.treeTraversalDisabledBundleIDs) ?? [])
+        }
+        set {
+            let current = Set(UserDefaults.standard.stringArray(forKey: Constants.UserDefaultsKey.treeTraversalDisabledBundleIDs) ?? [])
+            if current != newValue {
+                UserDefaults.standard.set(Array(newValue), forKey: Constants.UserDefaultsKey.treeTraversalDisabledBundleIDs)
+                invalidate()
+            }
+        }
+    }
+
+    func isTreeTraversalDisabled(bundleID: String) -> Bool { treeTraversalDisabledBundleIDs.contains(bundleID) }
+    func disableTreeTraversal(_ bundleID: String) { var s = treeTraversalDisabledBundleIDs; s.insert(bundleID); treeTraversalDisabledBundleIDs = s }
+    func enableTreeTraversal(_ bundleID: String) { var s = treeTraversalDisabledBundleIDs; s.remove(bundleID); treeTraversalDisabledBundleIDs = s }
+
     // MARK: - Shortcuts
 
     var shortcutGrammar: ShortcutConfig    { get { shortcut(Constants.UserDefaultsKey.shortcutGrammar, fallback: .grammarDefault) }    set { setShortcut(newValue, for: Constants.UserDefaultsKey.shortcutGrammar) } }
@@ -102,6 +134,8 @@ final class PreferencesStore {
     var shortcutCoach: ShortcutConfig      { get { shortcut(Constants.UserDefaultsKey.shortcutCoach, fallback: .coachDefault) }        set { setShortcut(newValue, for: Constants.UserDefaultsKey.shortcutCoach) } }
     var shortcutApplyAll: ShortcutConfig   { get { shortcut(Constants.UserDefaultsKey.shortcutApplyAll, fallback: .applyAllDefault) }  set { setShortcut(newValue, for: Constants.UserDefaultsKey.shortcutApplyAll) } }
     var shortcutGrammarFluency: ShortcutConfig { get { shortcut(Constants.UserDefaultsKey.shortcutGrammarFluency, fallback: .grammarFluencyDefault) } set { setShortcut(newValue, for: Constants.UserDefaultsKey.shortcutGrammarFluency) } }
+    var shortcutDeSlop: ShortcutConfig { get { shortcut(Constants.UserDefaultsKey.shortcutDeSlop, fallback: .deSlopDefault) } set { setShortcut(newValue, for: Constants.UserDefaultsKey.shortcutDeSlop) } }
+    var shortcutAIPrompt: ShortcutConfig { get { shortcut(Constants.UserDefaultsKey.shortcutAIPrompt, fallback: .aiPromptDefault) } set { setShortcut(newValue, for: Constants.UserDefaultsKey.shortcutAIPrompt) } }
 
     // MARK: - Presets
 
@@ -113,15 +147,54 @@ final class PreferencesStore {
             return decoded
         }
         set {
-            guard let data = try? JSONEncoder().encode(newValue) else { return }
-            UserDefaults.standard.set(data, forKey: Constants.UserDefaultsKey.presets)
-            invalidate()
+            guard let newData = try? JSONEncoder().encode(newValue) else { return }
+            let currentData = UserDefaults.standard.data(forKey: Constants.UserDefaultsKey.presets)
+            if currentData != newData {
+                UserDefaults.standard.set(newData, forKey: Constants.UserDefaultsKey.presets)
+                invalidate()
+            }
         }
     }
 
     func addPreset(_ preset: Preset) { var p = presets; p.append(preset); presets = p }
     func updatePreset(_ preset: Preset) { update(&presets, with: preset) { $0.id == preset.id } }
     func deletePreset(_ preset: Preset) { presets.removeAll { $0.id == preset.id } }
+
+    // MARK: - Flows
+
+    var flows: [Flow] {
+        get {
+            observe()
+            guard let data = UserDefaults.standard.data(forKey: Constants.UserDefaultsKey.flows),
+                  let decoded = try? JSONDecoder().decode([Flow].self, from: data) else { return defaultFlows }
+            return decoded.isEmpty ? defaultFlows : decoded
+        }
+        set {
+            guard let newData = try? JSONEncoder().encode(newValue) else { return }
+            let currentData = UserDefaults.standard.data(forKey: Constants.UserDefaultsKey.flows)
+            if currentData != newData {
+                UserDefaults.standard.set(newData, forKey: Constants.UserDefaultsKey.flows)
+                invalidate()
+            }
+        }
+    }
+
+    private var defaultFlows: [Flow] {
+        [
+            Flow(name: "Grammar + Fluency", steps: [
+                .init(promptType: .grammar),
+                .init(promptType: .fluency),
+            ]),
+            Flow(name: "Formal Polish", steps: [
+                .init(promptType: .grammar),
+                .init(promptType: .custom(name: "Formal", template: "Make the text more formal and professional.")),
+            ]),
+        ]
+    }
+
+    func addFlow(_ flow: Flow) { var f = flows; f.append(flow); flows = f }
+    func updateFlow(_ flow: Flow) { update(&flows, with: flow) { $0.id == flow.id } }
+    func deleteFlow(_ flow: Flow) { flows.removeAll { $0.id == flow.id } }
 
     // MARK: - Custom Prompts & App Rules
 
@@ -142,8 +215,11 @@ final class PreferencesStore {
             return Set(UserDefaults.standard.stringArray(forKey: Constants.UserDefaultsKey.excludedBundleIDs) ?? [])
         }
         set {
-            UserDefaults.standard.set(Array(newValue), forKey: Constants.UserDefaultsKey.excludedBundleIDs)
-            invalidate()
+            let current = Set(UserDefaults.standard.stringArray(forKey: Constants.UserDefaultsKey.excludedBundleIDs) ?? [])
+            if current != newValue {
+                UserDefaults.standard.set(Array(newValue), forKey: Constants.UserDefaultsKey.excludedBundleIDs)
+                invalidate()
+            }
         }
     }
 
@@ -151,6 +227,38 @@ final class PreferencesStore {
     func addExclusion(_ bundleID: String) { var set = excludedBundleIDs; set.insert(bundleID); excludedBundleIDs = set }
     func removeExclusion(_ bundleID: String) { var set = excludedBundleIDs; set.remove(bundleID); excludedBundleIDs = set }
     func cleanup() { cache.cleanup() }
+
+    // MARK: - Snapshot (Sendable capture for background use)
+
+    struct Snapshot: Sendable {
+        let customPrompts: [CustomPrompt]
+        let appRules: [AppRule]
+        let excludedBundleIDs: Set<String>
+        let translationLanguage: String
+        let serviceType: ServiceType
+        let openAIModel: String
+        let ollamaModel: String
+        let openRouterModel: String
+        let selectedModelID: String
+        let language: String
+        let style: String
+    }
+
+    func snapshot() -> Snapshot {
+        Snapshot(
+            customPrompts: cache.customPrompts(),
+            appRules: cache.appRules(),
+            excludedBundleIDs: excludedBundleIDs,
+            translationLanguage: translationLanguage,
+            serviceType: serviceType,
+            openAIModel: openAIModel,
+            ollamaModel: ollamaModel,
+            openRouterModel: openRouterModel,
+            selectedModelID: selectedModelID,
+            language: language,
+            style: style
+        )
+    }
 
     // MARK: - Mutations
 
@@ -173,23 +281,26 @@ final class PreferencesStore {
 
     private func service(_ key: String) -> ServiceType {
         observe()
-        guard let raw = UserDefaults.standard.string(forKey: key), let type = ServiceType(rawValue: raw) else { return .stub }
+        guard let raw = UserDefaults.standard.string(forKey: key), let type = ServiceType(rawValue: raw) else { return .local }
         return type
     }
 
     private func set(_ value: String, for key: String) {
+        let current = UserDefaults.standard.string(forKey: key) ?? ""
         UserDefaults.standard.set(value, forKey: key)
-        invalidate()
+        if current != value { invalidate() }
     }
 
     private func set(_ value: Bool, for key: String) {
+        let current = UserDefaults.standard.bool(forKey: key)
         UserDefaults.standard.set(value, forKey: key)
-        invalidate()
+        if current != value { invalidate() }
     }
 
     private func set(_ value: ServiceType, for key: String) {
+        let currentRaw = UserDefaults.standard.string(forKey: key) ?? ""
         UserDefaults.standard.set(value.rawValue, forKey: key)
-        invalidate()
+        if currentRaw != value.rawValue { invalidate() }
     }
 
     private func shortcut(_ key: String, fallback: ShortcutConfig) -> ShortcutConfig {
@@ -200,9 +311,12 @@ final class PreferencesStore {
     }
 
     private func setShortcut(_ value: ShortcutConfig, for key: String) {
+        let currentData = UserDefaults.standard.data(forKey: key)
         guard let data = try? JSONEncoder().encode(value) else { return }
-        UserDefaults.standard.set(data, forKey: key)
-        invalidate()
+        if currentData != data {
+            UserDefaults.standard.set(data, forKey: key)
+            invalidate()
+        }
     }
 
     private func update<T>(_ values: inout [T], with value: T, matching predicate: (T) -> Bool) {

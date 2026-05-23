@@ -165,35 +165,23 @@ struct PromptEngine {
 
     private func escapeForPrompt(_ text: String) -> String {
         var escaped = text
-        if escaped.contains("<TEXT>") {
-            escaped = escaped.replacingOccurrences(of: "<TEXT>", with: "<\\TEXT>")
-        }
-        if escaped.contains("</TEXT>") {
-            escaped = escaped.replacingOccurrences(of: "</TEXT>", with: "<\\/TEXT>")
-        }
-        if escaped.contains("<CUSTOM>") {
-            escaped = escaped.replacingOccurrences(of: "<CUSTOM>", with: "<\\CUSTOM>")
-        }
-        if escaped.contains("</CUSTOM>") {
-            escaped = escaped.replacingOccurrences(of: "</CUSTOM>", with: "<\\/CUSTOM>")
-        }
+        escaped = escaped.replacingOccurrences(of: "</CUSTOM>", with: "<\\/CUSTOM>")
+        escaped = escaped.replacingOccurrences(of: "<CUSTOM>", with: "<\\CUSTOM>")
+        escaped = escaped.replacingOccurrences(of: "</TEXT>", with: "<\\/TEXT>")
+        escaped = escaped.replacingOccurrences(of: "<TEXT>", with: "<\\TEXT>")
         return escaped
     }
 
     func buildGrammarPrompt(for text: String, customInstruction: String? = nil) -> String {
         let extra = grammarFamilyInstruction
         let styleLine = styleInstruction
-        let flagged = flagSuspiciousWords(text)
         let safeText = escapeForPrompt(text)
 
         var lines: [String] = []
-        lines.append("Fix grammar, spelling, punctuation, and word choice errors only. Keep the original meaning and language. Output ONLY the corrected text in the SAME language as the input. Do NOT translate.")
+        lines.append("Fix ONLY grammar, spelling, and punctuation errors. Do NOT rephrase, restructure, or rewrite sentences that are already correct. Copy unchanged any sentence that has no errors. Preserve the original meaning, style, and formatting exactly. Output ONLY the corrected text in the SAME language as the input. Do NOT translate.")
         if let nativeLine = nativeLanguageInstruction { lines.append(nativeLine) }
         if !extra.isEmpty { lines.append(extra) }
         if !styleLine.isEmpty { lines.append(styleLine) }
-        if !flagged.isEmpty {
-            lines.append("Possibly misspelled words: \(flagged.joined(separator: ", ")).")
-        }
         if let custom = customInstruction { lines.append(custom) }
         lines.append("")
         lines.append(fewShotExamples())
@@ -353,7 +341,8 @@ struct PromptEngine {
         let styleLine = styleInstruction
         let safeText = escapeForPrompt(text)
         var lines: [String] = []
-        lines.append("Rewrite the text to improve readability, flow, and naturalness. Combine short choppy sentences. Use varied sentence structure. Preserve the original meaning exactly. Output only the rewritten text.")
+        lines.append("Rewrite the text to improve readability, flow, and naturalness. Combine short choppy sentences. Use varied sentence structure. Preserve the original meaning exactly. Output ONLY the rewritten text IN THE SAME LANGUAGE as the input. Do NOT translate.")
+        if let nativeLine = nativeLanguageInstruction { lines.append(nativeLine) }
         if !styleLine.isEmpty { lines.append(styleLine) }
         if let custom = customInstruction { lines.append(custom) }
         lines.append("")
@@ -367,6 +356,44 @@ struct PromptEngine {
         case "fr":
             lines.append("Input: \"Le projet est terminé. L'équipe a fêté ça. C'était bien.\"")
             lines.append("Output: \"Une fois le projet terminé, l'équipe a célébré — une expérience enrichissante.\"")
+            lines.append("Input: \"Je suis allé au marché. J'ai acheté des légumes. Je suis rentré.\"")
+            lines.append("Output: \"Je suis allé au marché, j'ai acheté des légumes et je suis rentré.\"")
+        case "de":
+            lines.append("Input: \"Das Projekt wurde abgeschlossen. Das Team hat gefeiert. Es war schön.\"")
+            lines.append("Output: \"Nach Abschluss des Projekts feierte das Team — ein rundum gelungener Abend.\"")
+            lines.append("Input: \"Ich ging in den Laden. Ich kaufte Milch. Ich kam nach Hause.\"")
+            lines.append("Output: \"Ich ging in den Laden, kaufte Milch und kam wieder nach Hause.\"")
+        case "es":
+            lines.append("Input: \"El proyecto terminó. El equipo celebró. Fue bueno.\"")
+            lines.append("Output: \"Al concluir el proyecto, el equipo celebró — fue una experiencia gratificante.\"")
+            lines.append("Input: \"Ella fue a la tienda. Compró leche. Regresó a casa.\"")
+            lines.append("Output: \"Ella fue a la tienda, compró leche y regresó a casa.\"")
+        case "pt":
+            lines.append("Input: \"O projeto foi concluído. A equipa celebrou. Foi bom.\"")
+            lines.append("Output: \"Após a conclusão do projeto, a equipa celebrou — foi uma experiência gratificante.\"")
+        case "ru":
+            lines.append("Input: \"Проект был завершён. Команда отпраздновала. Это было хорошо.\"")
+            lines.append("Output: \"После завершения проекта команда устроила праздник — это было незабываемо.\"")
+            lines.append("Input: \"Она пошла в магазин. Она купила молоко. Она вернулась домой.\"")
+            lines.append("Output: \"Она пошла в магазин, купила молоко и вернулась домой.\"")
+        case "zh", "yue":
+            lines.append("Input: \"项目完成了。团队庆祝了。那很好。\"")
+            lines.append("Output: \"项目完成后，团队举行了庆祝活动，整个过程令人难忘。\"")
+            lines.append("Input: \"她去了商店。她买了牛奶。她回来了。\"")
+            lines.append("Output: \"她去商店买了牛奶后便回来了。\"")
+        case "ja":
+            lines.append("Input: \"プロジェクトが完了しました。チームは祝いました。良かったです。\"")
+            lines.append("Output: \"プロジェクトが完了し、チームは盛大に祝いました。とても充実した経験でした。\"")
+            lines.append("Input: \"彼女は店に行きました。牛乳を買いました。家に帰りました。\"")
+            lines.append("Output: \"彼女は店に行って牛乳を買い、そのまま家に帰りました。\"")
+        case "ko":
+            lines.append("Input: \"프로젝트가 완료되었습니다. 팀이 축하했습니다. 좋았습니다.\"")
+            lines.append("Output: \"프로젝트가 완료되어 팀이 축하 행사를 열었고, 정말 보람 있는 시간이었습니다.\"")
+            lines.append("Input: \"그녀는 가게에 갔습니다. 우유를 샀습니다. 집에 왔습니다.\"")
+            lines.append("Output: \"그녀는 가게에 가서 우유를 사고 집으로 돌아왔습니다.\"")
+        case "ar":
+            lines.append("Input: \"انتهى المشروع. احتفل الفريق. كان ذلك جيداً.\"")
+            lines.append("Output: \"بعد انتهاء المشروع، احتفل الفريق بهذا الإنجاز احتفالاً رائعاً.\"")
         default:
             lines.append("Input: \"The project was completed. The team celebrated. It was good.\"")
             lines.append("Output: \"After completing the project, the team celebrated — it was a rewarding experience.\"")
@@ -486,15 +513,8 @@ struct PromptEngine {
         case .fluency:
             return buildFluencyPrompt(for: text, customInstruction: customInstruction)
         case .explain:
-            let safeText = escapeForPrompt(text)
-            Logger.core.debug("buildPrompt called with .explain — use buildExplainPrompt(original:corrected:) directly")
-            return """
-            Explain any errors in the following text.
-
-            <TEXT>\(safeText)</TEXT>\(customInstruction.map { "\n<CUSTOM>\($0)</CUSTOM>" } ?? "")
-
-            Output only your explanation. Do not include <TEXT>/<CUSTOM> tags.
-            """
+            assertionFailure("Use buildExplainPrompt(original:corrected:) instead of buildPrompt(for:type:) with .explain")
+            return buildGrammarPrompt(for: text, customInstruction: customInstruction)
         case .coach:
             return buildCoachPrompt(for: text)
         case .translation(let targetLanguage):
@@ -507,6 +527,46 @@ struct PromptEngine {
                 result += "\n<CUSTOM>\(instruction)</CUSTOM>"
             }
             return result
+        case .deSlop:
+            return buildDeSlopPrompt(for: text)
+        case .aiPrompt:
+            return buildAIPromptPrompt(for: text)
         }
+    }
+
+    func buildDeSlopPrompt(for text: String) -> String {
+        let safeText = escapeForPrompt(text)
+        let langName = englishLanguageName(for: language)
+        return """
+        Rewrite the following text to sound more human and natural. Remove AI-sounding patterns including:
+        - Overused AI phrases: "delve", "testament", "tapestry", "it's important to note", "in conclusion", "foster", "leverage"
+        - Overly perfect sentence structure that feels robotic
+        - Repetitive transition words and formulaic paragraph openings
+        - Excessive hedging or qualifier stacking
+        - Generic, soulless phrasing that could apply to anything
+
+        Preserve the original meaning, facts, and intent. Keep the same language. Output ONLY the rewritten text.
+
+        Input: "\(safeText)"
+        Output:
+        """
+    }
+
+    func buildAIPromptPrompt(for text: String) -> String {
+        let safeText = escapeForPrompt(text)
+        return """
+        Rewrite the following text to make it an effective prompt for an AI assistant. Apply these transformations:
+        - Clarify ambiguous references and implicit context
+        - Structure with clear sections: context, task, constraints, output format
+        - Remove filler and redundancy
+        - Add specific instructions about tone, length, and format if not already present
+        - Use markdown formatting for readability
+        - Preserve all original facts and intent
+
+        Output ONLY the optimized prompt text.
+
+        Input: "\(safeText)"
+        Output:
+        """
     }
 }

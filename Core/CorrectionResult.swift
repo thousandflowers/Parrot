@@ -14,7 +14,8 @@ struct CorrectionResult: Identifiable, Sendable, Codable {
     let detectedTone: String?
     let source: CorrectionSource
 
-    @_documentation(visibility: internal)
+    // These fields are intentionally excluded from Codable — they are UI-specific
+    // state tied to the current correction session and should not be persisted.
     var replacementRange: CFRange? = nil
     var anchorRect: CGRect? = nil
 
@@ -48,7 +49,6 @@ struct CorrectionResult: Identifiable, Sendable, Codable {
         confidence: Double? = nil,
         customInstruction: String? = nil,
         promptType: String = "",
-        replacementRange: CFRange? = nil,
         detectedTone: String? = nil,
         source: CorrectionSource = .llm
     ) {
@@ -62,7 +62,6 @@ struct CorrectionResult: Identifiable, Sendable, Codable {
         self.modelID = modelID
         self.customInstruction = customInstruction
         self.promptType = promptType
-        self.replacementRange = replacementRange
         self.detectedTone = detectedTone
         self.source = source
     }

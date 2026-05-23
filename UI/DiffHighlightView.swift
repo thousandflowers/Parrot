@@ -12,40 +12,50 @@ struct DiffHighlightView: View, Equatable {
     }
 
     private func computeDiff() -> (attributed: AttributedString, hasChanges: Bool) {
+        let maxWords = 300
         let origWords = original.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
         let corrWords = corrected.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
+
+        let truncatedOrig: [String]
+        let truncatedCorr: [String]
+        let wasTruncated: Bool
+        if origWords.count > maxWords || corrWords.count > maxWords {
+            truncatedOrig = Array(origWords.prefix(maxWords))
+            truncatedCorr = Array(corrWords.prefix(maxWords))
+            wasTruncated = true
+        } else {
+            truncatedOrig = origWords
+            truncatedCorr = corrWords
+            wasTruncated = false
+        }
 
         var result = AttributedString()
         var hasChanges = false
 
-        // Simple greedy word-level diff: align by longest common subsequence
-        let lcs = longestCommonSubsequence(origWords, corrWords)
+        let lcs = longestCommonSubsequence(truncatedOrig, truncatedCorr)
         var oi = 0, ci = 0, li = 0
 
-        while oi < origWords.count || ci < corrWords.count {
+        while oi < truncatedOrig.count || ci < truncatedCorr.count {
             if li < lcs.count {
-                // Emit deletions from original before next LCS match
-                while oi < origWords.count && li < lcs.count && origWords[oi] != lcs[li] {
-                    let rem = origWords[oi]
+                while oi < truncatedOrig.count && li < lcs.count && truncatedOrig[oi] != lcs[li] {
+                    let rem = truncatedOrig[oi]
                     var attr = AttributedString(rem + " ")
-                    attr.foregroundColor = NSColor.refineError
+                    attr.foregroundColor = NSColor.systemRed
                     attr.strikethroughStyle = .single
-                    attr.strikethroughColor = NSColor.refineError
+                    attr.strikethroughColor = NSColor.systemRed
                     result.append(attr)
                     oi += 1
                     hasChanges = true
                 }
-                // Emit insertions from corrected before next LCS match
-                while ci < corrWords.count && li < lcs.count && corrWords[ci] != lcs[li] {
-                    let add = corrWords[ci]
+                while ci < truncatedCorr.count && li < lcs.count && truncatedCorr[ci] != lcs[li] {
+                    let add = truncatedCorr[ci]
                     var attr = AttributedString(add + " ")
-                    attr.foregroundColor = NSColor.refineSuccess
-                    attr.backgroundColor = NSColor.refineSuccess.withAlphaComponent(0.15)
+                    attr.foregroundColor = NSColor.systemGreen
+                    attr.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.15)
                     result.append(attr)
                     ci += 1
                     hasChanges = true
                 }
-                // Emit common word
                 if li < lcs.count {
                     var attr = AttributedString(lcs[li] + " ")
                     attr.foregroundColor = .primary
@@ -55,26 +65,30 @@ struct DiffHighlightView: View, Equatable {
                     li += 1
                 }
             } else {
-                // Remaining original words (deletions beyond LCS)
-                while oi < origWords.count {
-                    var attr = AttributedString(origWords[oi] + " ")
-                    attr.foregroundColor = NSColor.refineError
+                while oi < truncatedOrig.count {
+                    var attr = AttributedString(truncatedOrig[oi] + " ")
+                    attr.foregroundColor = NSColor.systemRed
                     attr.strikethroughStyle = .single
-                    attr.strikethroughColor = NSColor.refineError
+                    attr.strikethroughColor = NSColor.systemRed
                     result.append(attr)
                     oi += 1
                     hasChanges = true
                 }
-                // Remaining corrected words (insertions beyond LCS)
-                while ci < corrWords.count {
-                    var attr = AttributedString(corrWords[ci] + " ")
-                    attr.foregroundColor = NSColor.refineSuccess
-                    attr.backgroundColor = NSColor.refineSuccess.withAlphaComponent(0.15)
+                while ci < truncatedCorr.count {
+                    var attr = AttributedString(truncatedCorr[ci] + " ")
+                    attr.foregroundColor = NSColor.systemGreen
+                    attr.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.15)
                     result.append(attr)
                     ci += 1
                     hasChanges = true
                 }
             }
+        }
+
+        if wasTruncated {
+            var attr = AttributedString("…")
+            attr.foregroundColor = NSColor.tertiaryLabelColor
+            result.append(attr)
         }
 
         return (result, hasChanges)

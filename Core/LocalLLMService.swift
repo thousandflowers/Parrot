@@ -53,7 +53,7 @@ actor LocalLLMService: @preconcurrency LLMService {
     }
 
     func explain(original: String, corrected: String) async throws -> String {
-        let lang = LanguageDetector.detect(text: original, fallbackLanguage: resolvedLanguage)
+        let lang = LanguageDetector.detect(text: corrected, fallbackLanguage: resolvedLanguage)
         let engine = PromptEngine(language: lang)
         let prompt = engine.buildExplainPrompt(original: original, corrected: corrected, customInstruction: nil)
         let port = try await ensureServerRunning()

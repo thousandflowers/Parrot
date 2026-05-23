@@ -2,13 +2,25 @@ import Foundation
 import Darwin
 import Metal
 
+extension Notification.Name {
+    static let serverStateDidChange = Notification.Name("serverStateDidChange")
+}
+
 actor ServerManager: Sendable {
     static let shared = ServerManager()
 
     private var process: Process?
     private var startupTask: Task<Void, Error>?
+    private var forceKillTask: Task<Void, Never>?
     private var isExternalServer: Bool = false
-    var currentPort: Int = 0
+    private var _currentPort: Int = 0
+    var currentPort: Int {
+        get { _currentPort }
+        set {
+            _currentPort = newValue
+            NotificationCenter.default.post(name: .serverStateDidChange, object: nil)
+        }
+    }
 
     func ensureRunning(modelPath: String) async throws -> Int {
         if let existingTask = startupTask {
@@ -51,8 +63,7 @@ actor ServerManager: Sendable {
 
     private func findExistingServer() async -> Int? {
         // Only probe llama-server ports — NOT 11434 (Ollama), which would cause wrong model to be used
-        let candidatePorts = [8080, 11435]
-        for port in candidatePorts {
+        for port in Constants.candidateServerPorts {
             if await checkServerHealth(port: port) {
                 return port
             }
@@ -111,7 +122,7 @@ actor ServerManager: Sendable {
             self.process = process
 
             do {
-                for healthAttempt in 0..<20 {
+                for healthAttempt in 0..<Constants.serverHealthAttempts {
                     if await checkServerHealth(port: currentPort) { return }
                     let delayMs = min(2000, 250 * Int(pow(2.0, Double(healthAttempt))))
                     try await Task.sleep(for: .milliseconds(delayMs))
@@ -132,8 +143,9 @@ actor ServerManager: Sendable {
     }
 
     func stop() async {
-        await ServerHealthMonitor.shared.stopMonitoring()
-        
+        startupTask?.cancel()
+        startupTask = nil
+
         if isExternalServer {
             self.currentPort = 0
             self.isExternalServer = false
@@ -149,7 +161,7 @@ actor ServerManager: Sendable {
         let pid = process.processIdentifier
         process.terminate()
 
-        let deadline = Date().addingTimeInterval(5)
+        let deadline = Date().addingTimeInterval(Constants.serverStopTimeout)
         while _isProcessRunning(pid) && Date() < deadline {
             do {
                 try await Task.sleep(for: .milliseconds(100))
@@ -162,14 +174,22 @@ actor ServerManager: Sendable {
 
         if _isProcessRunning(pid) {
             kill(pid_t(pid), SIGKILL)
-            waitpid(pid_t(pid), nil, 0)
+            // Non-blocking reap: SIGKILL ensures fast exit; avoid blocking the cooperative thread pool.
+            waitpid(pid_t(pid), nil, WNOHANG)
         }
         self.process = nil
         currentPort = 0
     }
 
     nonisolated func forceKill() {
-        Task { await stop() }
+        Task { @MainActor in
+            await Self.shared.internalForceKill()
+        }
+    }
+
+    private func internalForceKill() {
+        forceKillTask?.cancel()
+        forceKillTask = Task { await stop() }
     }
 
     private func allocatePort() throws -> (port: Int, socket: Int32) {
@@ -249,9 +269,11 @@ actor ServerManager: Sendable {
 
     private func gpuLayers() -> String {
         guard MTLCreateSystemDefaultDevice() != nil else { return "0" }
-        let ramGB = ProcessInfo.processInfo.physicalMemory / (1024 * 1024 * 1024)
-        if ramGB >= 16 { return "999" }
-        if ramGB >= 8  { return "20" }
+        // Subtract 4 GB OS + app overhead from physical to get usable unified memory
+        let physGB = Int(ProcessInfo.processInfo.physicalMemory / (1024 * 1024 * 1024))
+        let usableGB = max(0, physGB - 4)
+        if usableGB >= 12 { return "999" }
+        if usableGB >= 4  { return "20" }
         return "0"
     }
 
@@ -271,15 +293,6 @@ actor ServerManager: Sendable {
     }
 
     private func _isProcessRunning(_ pid: Int32) -> Bool {
-        for _ in 0..<3 {
-            var status: Int32 = 0
-            let result = waitpid(pid, &status, WNOHANG)
-            if result == 0 { return true }
-            if result == pid { return false }
-            if result == -1 && errno == ECHILD { return false }
-            if result == -1 && errno == EINTR { continue }
-            return kill(pid, 0) == 0
-        }
-        return kill(pid, 0) == 0
+        kill(pid, 0) == 0
     }
 }

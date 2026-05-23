@@ -79,25 +79,30 @@ actor RequestQueue {
                 continue
             }
             
-            do {
-                let service: LLMService
-                let serviceType: ServiceType
-                if let overrideType = request.overrideServiceType {
-                    service = LLMServiceFactory.make(with: overrideType)
-                    serviceType = overrideType
-                } else {
-                    service = LLMServiceFactory.make()
-                    serviceType = LLMServiceFactory.resolveDefaultServiceType()
-                }
-                let modelID = resolveModelID(for: serviceType)
+            let service: LLMService
+            let serviceType: ServiceType
+            if let overrideType = request.overrideServiceType {
+                service = LLMServiceFactory.make(with: overrideType)
+                serviceType = overrideType
+            } else {
+                service = LLMServiceFactory.make()
+                serviceType = LLMServiceFactory.resolveDefaultServiceType()
+            }
+            let modelID = resolveModelID(for: serviceType)
 
-                let promptType: PromptType
-                if let customPrompt = request.overrideCustomPrompt {
+            let promptType: PromptType
+            if let customPrompt = request.overrideCustomPrompt {
+                switch request.promptType {
+                case .grammar, .fluency, .coach, .aiPrompt, .deSlop:
                     promptType = .custom(name: customPrompt.name, template: customPrompt.template)
-                } else {
+                default:
                     promptType = request.promptType
                 }
+            } else {
+                promptType = request.promptType
+            }
 
+            do {
                 if let cached = await CorrectionCache.shared.get(text: request.text, promptType: promptType.label, modelID: modelID, language: request.language) {
                     request.continuation.yield(.success(cached))
                     request.continuation.finish()
@@ -109,6 +114,29 @@ actor RequestQueue {
                 request.continuation.yield(.success(result))
                 request.continuation.finish()
             } catch {
+                // Attempt fallback model on retryable errors
+                if let corrError = error as? CorrectionError, corrError.isRetryable,
+                   let fallbackModelID = LLMServiceFactory.resolveFallbackModelID(for: serviceType),
+                   !fallbackModelID.isEmpty,
+                   fallbackModelID != modelID,
+                   let modelKey = self.modelKey(for: serviceType) {
+                    let originalModel = UserDefaults.standard.string(forKey: modelKey) ?? ""
+                    UserDefaults.standard.set(fallbackModelID, forKey: modelKey)
+                    do {
+                        let fallbackResult = try await service.correct(text: request.text, promptType: promptType, language: request.language)
+                        await CorrectionCache.shared.set(fallbackResult, text: request.text, promptType: promptType.label, modelID: fallbackModelID, language: request.language)
+                        request.continuation.yield(.success(fallbackResult))
+                        request.continuation.finish()
+                        if !originalModel.isEmpty {
+                            UserDefaults.standard.set(originalModel, forKey: modelKey)
+                        }
+                        continue
+                    } catch {
+                        if !originalModel.isEmpty {
+                            UserDefaults.standard.set(originalModel, forKey: modelKey)
+                        }
+                    }
+                }
                 request.continuation.yield(.failure(error))
                 request.continuation.finish()
             }
@@ -120,6 +148,16 @@ actor RequestQueue {
     // nonisolated is safe here — delegates to a pure static factory method with no actor state.
     private nonisolated func resolveModelID(for serviceType: ServiceType) -> String {
         LLMServiceFactory.resolveModelID(for: serviceType)
+    }
+
+    private nonisolated func modelKey(for serviceType: ServiceType) -> String? {
+        switch serviceType {
+        case .local:      return Constants.UserDefaultsKey.selectedModelID
+        case .remote:     return Constants.UserDefaultsKey.openAIModel
+        case .ollama:     return Constants.UserDefaultsKey.ollamaModel
+        case .openRouter: return Constants.UserDefaultsKey.openRouterModel
+        default:          return nil
+        }
     }
 }
 

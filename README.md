@@ -5,16 +5,15 @@
 ![Swift 5.10](https://img.shields.io/badge/Swift-5.10-orange?style=flat-square)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 ![Tests](https://img.shields.io/badge/tests-92%20passing-brightgreen?style=flat-square)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/thousandflowers?style=flat-square&label=Support)](https://github.com/sponsors/thousandflowers)
 
 **Grammar and style correction for every app on your Mac — offline, instant, no subscription.**
 
-Parrot lives in your menu bar. Select text anywhere, press **⌘⇧E**, and the corrected version appears in a floating panel next to your cursor. One keypress applies it. Nothing leaves your Mac.
+🌐 **[parrot.sh](https://parrot.sh)** — Parrot lives in your menu bar. Select text anywhere, press **⌘⇧E**, and the corrected version appears in a floating panel next to your cursor. One keypress applies it. Nothing leaves your Mac.
 
 ---
 
 ## Screenshots
-
-> _Demo GIF coming soon. In the meantime:_
 
 | Suggestion panel | Menu bar |
 |---|---|
@@ -105,7 +104,7 @@ NOTARIZE_PASSWORD="@keychain:altool" \
 |---|---|---|
 | `⌘⇧E` | Grammar | Fixes spelling, grammar, punctuation |
 | `⌘⇧T` | Fluency | Rewrites for clarity without changing meaning |
-| `⌘⇧U` | Translate | Translates to EN / IT / ES / FR / DE |
+| `⌘⇧Y` | Translate | Translates to your target language |
 | `⌘⇧W` | Writing coach | Suggests structural improvements |
 | Custom | Presets | "Make formal", "Shorten", "Simplify" — one click |
 
@@ -163,10 +162,11 @@ Parrot/
 ## Roadmap
 
 - [ ] Notarized release (proper Gatekeeper pass, no right-click needed)
-- [ ] PopClip extension (select text in PopClip → correct with one tap)
+- [x] PopClip extension (select text in PopClip → correct with one tap)
 - [ ] Native TTS voices per language
 - [ ] iCloud sync for custom rules and history
-- [ ] Homebrew cask (`brew install --cask parrot`)
+- [ ] Homebrew cask (`brew install --cask parrot`) — pending notarized release
+- [ ] Landing page at parrot.sh
 
 ---
 

@@ -7,24 +7,46 @@ final class DirectApplyToast {
     private static var undoOriginal: String?
     private static var undoPID: pid_t?
 
+    private static var reduceMotion: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
+    private static let successMessages: [String] = [
+        "✓ Text corrected",
+        "✓ All good!",
+        "✓ Done",
+        "✓ Polished",
+        "✓ Sorted",
+    ]
+    private static var messageIndex = 0
+
     static func show(message: String) {
         dismissTask?.cancel()
-        currentWindow?.orderOut(nil)
+        dismissAnimated(currentWindow)
 
         var unused: NSButton?
-        let panel = buildPanel(message: message, showUndo: false, undoButton: &unused)
+        // Rotate success messages for positive outcomes
+        let display = message.hasPrefix("✓") ? message : message
+        let panel = buildPanel(message: display, showUndo: false, undoButton: &unused)
         currentWindow = panel
-        panel.orderFrontRegardless()
+        showAnimated(panel)
 
         dismissTask = Task {
             try? await Task.sleep(for: .seconds(2))
-            currentWindow?.orderOut(nil)
+            guard !Task.isCancelled else { return }
+            dismissAnimated(currentWindow)
+            currentWindow = nil
         }
+    }
+
+    static func showSuccess() {
+        messageIndex = (messageIndex + 1) % successMessages.count
+        show(message: successMessages[messageIndex])
     }
 
     static func showUndo(message: String, original: String, corrected: String, pid: pid_t) {
         dismissTask?.cancel()
-        currentWindow?.orderOut(nil)
+        dismissAnimated(currentWindow)
         undoOriginal = original
         undoPID = pid
 
@@ -35,11 +57,13 @@ final class DirectApplyToast {
         undoButton?.action = #selector(performUndoAction)
 
         currentWindow = panel
-        panel.orderFrontRegardless()
+        showAnimated(panel)
 
         dismissTask = Task {
             try? await Task.sleep(for: .seconds(5))
-            currentWindow?.orderOut(nil)
+            guard !Task.isCancelled else { return }
+            dismissAnimated(currentWindow)
+            currentWindow = nil
         }
     }
 
@@ -53,9 +77,34 @@ final class DirectApplyToast {
                 // Cmd+Z available as manual fallback
             }
         }
-        currentWindow?.orderOut(nil)
+        dismissAnimated(currentWindow)
         currentWindow = nil
         show(message: "Correction undone")
+    }
+
+    private static func showAnimated(_ panel: NSPanel) {
+        panel.orderFrontRegardless()
+        guard !reduceMotion, let layer = panel.contentView?.layer else { return }
+        layer.opacity = 0
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.18
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            layer.opacity = 1
+        }
+    }
+
+    private static func dismissAnimated(_ panel: NSPanel?) {
+        guard let panel, !reduceMotion, let layer = panel.contentView?.layer else {
+            panel?.orderOut(nil)
+            return
+        }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.12
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            layer.opacity = 0
+        } completionHandler: {
+            panel.orderOut(nil)
+        }
     }
 
     private static func buildPanel(message: String, showUndo: Bool, undoButton: inout NSButton?) -> NSPanel {
@@ -75,13 +124,13 @@ final class DirectApplyToast {
         let containerView = NSView(frame: NSRect(origin: .zero, size: size))
         containerView.wantsLayer = true
         containerView.layer?.cornerRadius = 10
-        containerView.layer?.backgroundColor = NSColor(red: 0.12, green: 0.12, blue: 0.16, alpha: 0.95).cgColor
-        containerView.layer?.borderWidth = 0.5
-        containerView.layer?.borderColor = NSColor.white.withAlphaComponent(0.1).cgColor
+        containerView.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.96).cgColor
+        containerView.layer?.borderWidth = 1
+        containerView.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.25).cgColor
 
         let label = NSTextField(labelWithString: message)
         label.font = .systemFont(ofSize: 13, weight: .medium)
-        label.textColor = .white
+        label.textColor = NSColor.labelColor
         label.alignment = .center
         label.lineBreakMode = .byTruncatingTail
         label.translatesAutoresizingMaskIntoConstraints = false

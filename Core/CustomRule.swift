@@ -8,6 +8,7 @@ struct CustomRule: Identifiable, Codable, Equatable, Sendable {
     var isEnabled: Bool
     var isRegex: Bool
     var isCaseSensitive: Bool
+    var supportsBackreferences: Bool
     var language: String
 
     init(
@@ -18,6 +19,7 @@ struct CustomRule: Identifiable, Codable, Equatable, Sendable {
         isEnabled: Bool = true,
         isRegex: Bool = false,
         isCaseSensitive: Bool = false,
+        supportsBackreferences: Bool = false,
         language: String = "any"
     ) {
         self.id = id
@@ -27,6 +29,7 @@ struct CustomRule: Identifiable, Codable, Equatable, Sendable {
         self.isEnabled = isEnabled
         self.isRegex = isRegex
         self.isCaseSensitive = isCaseSensitive
+        self.supportsBackreferences = supportsBackreferences
         self.language = language
     }
 }

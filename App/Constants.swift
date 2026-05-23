@@ -16,12 +16,17 @@ enum Constants {
     static let defaultMaxTokens = 1024
     static let defaultContextSize = 4096
     static let serverHealthAttempts = 20
+    static let candidateServerPorts = [8080, 11435]
+    static let serverStopTimeout: TimeInterval = 5
     static let queueTimeout: TimeInterval = 60
     static let downloadTimeout: TimeInterval = 3600
     static let downloadProgressMinInterval: TimeInterval = 0.1
     static let sha256ChunkSize = 1_048_576
     static let minModelFileSize = 10_000_000
     static let cacheMaxMemoryBytes = 10 * 1024 * 1024
+    /// Maximum text length accepted for correction.
+    /// Chosen to balance token budget (~2K tokens for 1.5B models) with UX usefulness.
+    /// Texts longer than this are rejected with a user-facing error.
     static let maxTextLength = 8000
 
     static let securityExcludedBundleIDs: Set<String> = [
@@ -60,7 +65,17 @@ enum Constants {
         static let shortcutCoach = "shortcutCoach"
         static let shortcutApplyAll = "shortcutApplyAll"
         static let shortcutGrammarFluency = "shortcutGrammarFluency"
+        static let shortcutDeSlop = "shortcutDeSlop"
+        static let shortcutAIPrompt = "shortcutAIPrompt"
         static let presets = "presets"
+        static let flows = "flows"
         static let translationLanguage = "translationLanguage"
+        static let inlineAnnotationsHoverOnly = "inlineAnnotationsHoverOnly"
+        static let aiPromptAutoDetect = "aiPromptAutoDetect"
+        static let treeTraversalDisabledBundleIDs = "treeTraversalDisabledBundleIDs"
+        static let fallbackLocalModelID = "fallbackLocalModelID"
+        static let fallbackOpenAIModel = "fallbackOpenAIModel"
+        static let fallbackOllamaModel = "fallbackOllamaModel"
+        static let fallbackOpenRouterModel = "fallbackOpenRouterModel"
     }
 }

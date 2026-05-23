@@ -49,3 +49,7 @@ struct PromptTab: View {
         }
     }
 }
+
+#Preview {
+    PromptTab(prefs: PreferencesStore.shared)
+}

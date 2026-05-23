@@ -66,8 +66,16 @@ enum FeedbackLogger {
     }
 
     private static func rotateLog() {
-        guard let content = try? String(contentsOf: feedbackURL, encoding: .utf8) else { return }
-        let lines = content.components(separatedBy: "\n").filter { !$0.isEmpty }
+        guard let handle = try? FileHandle(forReadingFrom: feedbackURL) else { return }
+        defer { try? handle.close() }
+
+        var lines: [String] = []
+        while let lineData = try? handle.read(upToCount: 4096), !lineData.isEmpty {
+            if let chunk = String(data: lineData, encoding: .utf8) {
+                let chunkLines = chunk.components(separatedBy: "\n").filter { !$0.isEmpty }
+                lines.append(contentsOf: chunkLines)
+            }
+        }
         guard lines.count > 200 else { return }
         let kept = lines.suffix(lines.count - 200).joined(separator: "\n") + "\n"
         try? kept.write(to: feedbackURL, atomically: true, encoding: .utf8)

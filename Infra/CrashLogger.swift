@@ -1,32 +1,41 @@
 import Foundation
+import Darwin
 
 enum CrashLogger {
     private static let logDir: URL = {
-        let base = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first!
+        guard let base = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first else {
+            return URL(fileURLWithPath: "/tmp/ParrotLogs")
+        }
         return base.appendingPathComponent("Logs/Parrot")
     }()
 
     private static let crashLogURL = logDir.appendingPathComponent("crash.log")
     private static let debugLogURL = logDir.appendingPathComponent("debug.log")
 
+    nonisolated(unsafe) static var crashFD: Int32 = -1
+    nonisolated(unsafe) static var debugFD: Int32 = -1
+
     static func install() {
         try? FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
         NSSetUncaughtExceptionHandler(_exceptionHandler)
+
+        crashFD = open(crashLogURL.path, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+        debugFD = open(debugLogURL.path, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+
         let fatalSignals: [Int32] = [SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGTRAP]
         for sig in fatalSignals {
             var new = sigaction()
             new.__sigaction_u.__sa_sigaction = _signalHandler
-            new.sa_flags = SA_SIGINFO
+            new.sa_flags = SA_SIGINFO | SA_RESETHAND
             sigaction(sig, &new, nil)
         }
         log("CrashLogger installed")
     }
 
     static func log(_ message: String, file: StaticString = #file, line: UInt = #line) {
-        let timestamp = ISO8601DateFormatter().string(from: Date())
-        let entry = "[\(timestamp)] \(message)  (\(file):\(line))\n"
+        let entry = "[\(ISO8601DateFormatter().string(from: Date()))] \(message)  (\(file):\(line))\n"
         if let data = entry.data(using: .utf8) {
-            try? data.append(to: debugLogURL)
+            _ = data.withUnsafeBytes { write(debugFD, $0.baseAddress, $0.count) }
         }
         NSLog("[Parrot] \(message)")
     }
@@ -42,7 +51,7 @@ enum CrashLogger {
         """
         let entry = "\(preamble)\n\n\(detail)\n\n"
         if let data = entry.data(using: .utf8) {
-            try? data.append(to: crashLogURL)
+            _ = data.withUnsafeBytes { write(crashFD, $0.baseAddress, $0.count) }
         }
     }
 }
@@ -64,34 +73,16 @@ private let _signalHandler: @convention(c) (Int32, UnsafeMutablePointer<__siginf
     var restore = sigaction()
     restore.__sigaction_u.__sa_handler = SIG_DFL
     sigaction(signal, &restore, nil)
-    CrashLogger.writeCrash(
-        title: "Fatal signal \(signalDescription(signal))",
-        detail: "Signal \(signal) (\(String(cString: strsignal(signal))))"
-    )
+
+    let fd = CrashLogger.crashFD
+    var header = "CRASH: signal \(signal)\nStack trace:\n"
+    _ = header.withUTF8 { write(fd, $0.baseAddress, $0.count) }
+
+    var frames = [UnsafeMutableRawPointer?](repeating: nil, count: 64)
+    let count = backtrace(&frames, 64)
+    backtrace_symbols_fd(&frames, count, fd)
+    var trailer = "\n"
+    _ = trailer.withUTF8 { write(fd, $0.baseAddress, $0.count) }
+
     raise(signal)
-}
-
-private func signalDescription(_ signal: Int32) -> String {
-    switch signal {
-    case SIGABRT: return "SIGABRT (abort)"
-    case SIGSEGV: return "SIGSEGV (segmentation fault)"
-    case SIGBUS:  return "SIGBUS (bus error)"
-    case SIGILL:  return "SIGILL (illegal instruction)"
-    case SIGFPE:  return "SIGFPE (floating point exception)"
-    case SIGTRAP: return "SIGTRAP (trace trap)"
-    default:      return "signal \(signal)"
-    }
-}
-
-private extension Data {
-    func append(to url: URL) throws {
-        if FileManager.default.fileExists(atPath: url.path) {
-            let handle = try FileHandle(forWritingTo: url)
-            try handle.seekToEnd()
-            try handle.write(contentsOf: self)
-            try handle.close()
-        } else {
-            try write(to: url, options: .atomic)
-        }
-    }
 }

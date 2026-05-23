@@ -3,11 +3,19 @@
   "name": "Parrot",
   "description": "Correggi il testo selezionato con Parrot",
   "icon": "Parrot.png",
-  "entitlements": ["dynamic-urls"],
+  "entitlements": ["accessibility", "dynamic-urls"],
   "actions": [
     {
-      "title": "Correggi",
+      "title": "Correggi Grammatica",
       "url": "parrot://correct?text={popclip text url}"
+    },
+    {
+      "title": "Migliora Stile",
+      "url": "parrot://correct?mode=fluency&text={popclip text url}"
+    },
+    {
+      "title": "Traduci",
+      "url": "parrot://correct?mode=translate&text={popclip text url}"
     }
   ]
 }

@@ -90,13 +90,14 @@ final class HoverAnnotationPopup {
             annotation: annotation,
             onApply: { [weak self] in self?.applyCurrentAnnotation() }
         )
-        if let hv = hostingView {
-            hv.rootView = view
-        } else {
-            let hv = NSHostingView(rootView: view)
-            hostingView = hv
-            panel?.contentView = hv
-        }
+        // Never update rootView on a visible window — NSHostingView.updateAnimatedWindowSize
+        // fires from windowDidLayout and causes a re-entrant constraint crash.
+        // Always create a fresh NSHostingView; hide panel first if it is currently visible.
+        if panel?.isVisible == true { panel?.orderOut(nil) }
+        let hv = NSHostingView(rootView: view)
+        hv.sizingOptions = []
+        hostingView = hv
+        panel?.contentView = hv
     }
 }
 
@@ -110,7 +111,7 @@ struct HoverAnnotationView: View {
         HStack(spacing: 5) {
             if annotation.suggestedFix.isEmpty {
                 Text(annotation.originalSnippet)
-                    .strikethrough(true, color: .red)
+                    .strikethrough(true, color: Color.statusError)
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -124,9 +125,9 @@ struct HoverAnnotationView: View {
             Button(action: onApply) {
                 Image(systemName: "checkmark")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .frame(width: 16, height: 16)
-                    .background(Color.refineSuccess, in: .circle)
+                    .background(Color.statusOk, in: .circle)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Applica")
@@ -138,7 +139,7 @@ struct HoverAnnotationView: View {
         .background(.regularMaterial, in: .rect(cornerRadius: 7))
         .overlay(
             RoundedRectangle(cornerRadius: 7)
-                .strokeBorder(Color.refineSuccess.opacity(0.3), lineWidth: 0.5)
+                .strokeBorder(Color.statusOk.opacity(0.3), lineWidth: 0.5)
         )
     }
 }

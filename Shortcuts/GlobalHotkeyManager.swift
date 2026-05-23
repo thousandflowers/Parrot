@@ -1,5 +1,6 @@
 import Cocoa
 import Carbon
+import OSLog
 
 @MainActor
 final class GlobalHotkeyManager {
@@ -15,13 +16,14 @@ final class GlobalHotkeyManager {
     init() { Self.current = self }
 
     func registerHotkeys() {
-        installEventHandlerIfNeeded()
         unregisterAll()
+        installEventHandlerIfNeeded()
         registerFromPrefs()
     }
 
     func updateHotkeys() {
         unregisterAll()
+        installEventHandlerIfNeeded()
         registerFromPrefs()
     }
 
@@ -38,6 +40,8 @@ final class GlobalHotkeyManager {
             (prefs.shortcutCoach,          { TextCheckCoordinator.shared.checkCoach() }),
             (prefs.shortcutApplyAll,       { InlineHighlightController.shared.applyAllAnnotations() }),
             (prefs.shortcutGrammarFluency, { TextCheckCoordinator.shared.checkGrammarThenFluency() }),
+            (prefs.shortcutDeSlop,         { TextCheckCoordinator.shared.checkDeSlop() }),
+            (prefs.shortcutAIPrompt,       { TextCheckCoordinator.shared.checkAIPrompt() }),
         ]
         for (config, action) in entries {
             register(keyCode: config.keyCode, modifiers: config.modifiers,
@@ -73,12 +77,13 @@ final class GlobalHotkeyManager {
         InstallEventHandler(GetEventDispatcherTarget(), callback, 1, [eventSpec], selfPtr, &eventHandler)
     }
 
-    private func unregisterAll() {
+    func unregisterAll() {
         hotKeyRefs.forEach { UnregisterEventHotKey($0) }
         hotKeyRefs.removeAll()
         actionsLock.lock()
         actions.removeAll()
         actionsLock.unlock()
+        if let handler = eventHandler { RemoveEventHandler(handler); eventHandler = nil }
     }
 
     private func register(keyCode: UInt32, modifiers: UInt32, label: String, action: @escaping () -> Void, enabled: Bool = true) {
@@ -103,8 +108,12 @@ final class GlobalHotkeyManager {
         actionsLock.unlock()
     }
 
+    func shutdown() {
+        unregisterAll()
+    }
+
     deinit {
-        hotKeyRefs.forEach { UnregisterEventHotKey($0) }
-        if let handler = eventHandler { RemoveEventHandler(handler) }
+        // shutdown() should be called explicitly from AppDelegate.applicationWillTerminate
+        // This deinit is a safety net for development/debugging scenarios
     }
 }

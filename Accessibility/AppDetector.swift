@@ -74,4 +74,26 @@ actor AppDetector {
         guard result == .success, let appName = name as? String else { return "unknown" }
         return appName
     }
+
+    func isAIChatApp(bundleID: String?) -> Bool {
+        guard let bundleID else { return false }
+        return aiChatBundleIDs.contains(bundleID)
+            || aiChatBundleIDPrefixes.contains { bundleID.hasPrefix($0) }
+    }
+
+    private let aiChatBundleIDs: Set<String> = [
+        "com.openai.chat",
+        "com.anthropic.clause",
+        "com.anthropic.clause.mac",
+        "com.google.Chrome.app.chatgpt",
+        "com.microsoft.VSCode",
+        "com.github.GitHubClient",
+        "com.copilot.VSCode",
+    ]
+
+    private let aiChatBundleIDPrefixes: [String] = [
+        "com.anthropic.",
+        "com.openai.",
+        "com.google.Chrome.app.",
+    ]
 }

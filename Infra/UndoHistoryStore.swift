@@ -61,6 +61,6 @@ actor UndoHistoryStore {
     }
 
     private func save() {
-        try? JSONEncoder().encode(entries).write(to: fileURL)
+        try? JSONEncoder().encode(entries).write(to: fileURL, options: .atomic)
     }
 }

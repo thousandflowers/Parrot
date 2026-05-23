@@ -141,6 +141,13 @@
         "en": { "stringUnit": { "state": "translated", "value": "Analyzing..." } }
       }
     },
+    "panel.streaming": {
+      "extractionState": "manual",
+      "localizations": {
+        "it": { "stringUnit": { "state": "translated", "value": "Correggendo..." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Correcting..." } }
+      }
+    },
     "onboarding.welcome": {
       "extractionState": "manual",
       "localizations": {

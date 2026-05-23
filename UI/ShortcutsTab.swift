@@ -19,6 +19,12 @@ struct ShortcutsTab: View {
                 ShortcutRow(label: "Writing coach",
                             shortcut: $prefs.shortcutCoach,
                             defaultValue: .coachDefault)
+                ShortcutRow(label: "De-slop (remove AI-sounding patterns)",
+                            shortcut: $prefs.shortcutDeSlop,
+                            defaultValue: .deSlopDefault)
+                ShortcutRow(label: "Optimize for AI prompt",
+                            shortcut: $prefs.shortcutAIPrompt,
+                            defaultValue: .aiPromptDefault)
             } header: {
                 Text("Analysis")
             }
@@ -55,6 +61,23 @@ struct ShortcutsTab: View {
         }
         .formStyle(.grouped)
         .padding(.vertical, 8)
+        .onChange(of: allShortcutsHash) { _, _ in GlobalHotkeyManager.current?.updateHotkeys() }
+    }
+
+    private var allShortcutsHash: Int {
+        var hasher = Hasher()
+        hasher.combine(prefs.shortcutGrammar)
+        hasher.combine(prefs.shortcutFluency)
+        hasher.combine(prefs.shortcutTranslate)
+        hasher.combine(prefs.shortcutCoach)
+        hasher.combine(prefs.shortcutReplace)
+        hasher.combine(prefs.shortcutApplyDirect)
+        hasher.combine(prefs.shortcutApplyAll)
+        hasher.combine(prefs.shortcutEditor)
+        hasher.combine(prefs.shortcutGrammarFluency)
+        hasher.combine(prefs.shortcutDeSlop)
+        hasher.combine(prefs.shortcutAIPrompt)
+        return hasher.finalize()
     }
 }
 
@@ -180,4 +203,8 @@ struct ShortcutRecorder: View {
     private func stopCapture() {
         if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
     }
+}
+
+#Preview {
+    ShortcutsTab(prefs: PreferencesStore.shared)
 }

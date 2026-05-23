@@ -1,7 +1,7 @@
 import Carbon
 import Cocoa
 
-struct ShortcutConfig: Codable, Equatable, Sendable {
+struct ShortcutConfig: Codable, Equatable, Hashable, Sendable {
     var keyCode: UInt32
     var modifiers: UInt32  // Carbon modifiers (cmdKey, shiftKey, etc.)
     var isEnabled: Bool
@@ -69,9 +69,11 @@ struct ShortcutConfig: Codable, Equatable, Sendable {
     static let fluencyDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(cmdKey | shiftKey))
     static let editorDefault  = ShortcutConfig(keyCode: UInt32(kVK_ANSI_F), modifiers: UInt32(cmdKey | shiftKey))
     static let replaceDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(cmdKey | shiftKey))
-    static let translateDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_Y), modifiers: UInt32(cmdKey | shiftKey))
+    static let translateDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_U), modifiers: UInt32(cmdKey | shiftKey))
     static let applyDirectDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_A), modifiers: UInt32(cmdKey | shiftKey))
     static let coachDefault    = ShortcutConfig(keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(cmdKey | shiftKey))
     static let applyAllDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_U), modifiers: UInt32(cmdKey | shiftKey))
     static let grammarFluencyDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_B), modifiers: UInt32(cmdKey | shiftKey))
+    static let deSlopDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_D), modifiers: UInt32(cmdKey | shiftKey))
+    static let aiPromptDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_P), modifiers: UInt32(cmdKey | shiftKey))
 }

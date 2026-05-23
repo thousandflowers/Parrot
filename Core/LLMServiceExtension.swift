@@ -115,9 +115,12 @@ extension LLMService {
     }
 
     private func maxTokens(for text: String, isFluency: Bool) -> Int {
-        isFluency
-            ? max(256, min(text.count * 2, 1024))
-            : max(128, min(text.count + 100, 512))
+        // text.count is characters; ~4 chars/token for Latin, so divide by 4.
+        // CJK is ~1.5 chars/token — this formula underestimates, which is safe (generous output).
+        let approxInputTokens = max(64, text.count / 4)
+        return isFluency
+            ? max(256, min(approxInputTokens * 2 + 128, 2048))
+            : max(256, min(approxInputTokens + approxInputTokens / 4 + 64, 2048))
     }
 
     private func buildChatBody(
@@ -150,6 +153,7 @@ extension LLMService {
         apiKey: String?,
         extraHeaders: [String: String] = [:]
     ) async throws -> CorrectionResult {
+        CrashLogger.log("performCorrection: start model=\(model) type=\(promptType.label)")
         let lang = language.isEmpty
             ? LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
             : language
@@ -158,6 +162,7 @@ extension LLMService {
             body: buildChatBody(text: text, promptType: promptType, engine: engine, model: model),
             url: url, apiKey: apiKey, extraHeaders: extraHeaders
         )
+        CrashLogger.log("performCorrection: done")
         let corrected = validateCorrection(original: text, corrected: rawCorrected, isFluency: promptType.isFluency)
         return CorrectionResult(
             original: text, corrected: corrected,
@@ -181,16 +186,30 @@ extension LLMService {
 
         // Strip wrapping quotes added by some models
         if let q = text.first, (q == "\"" || q == "'"), text.last == q, text.count > 2 {
-            text = String(text.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+            text = String(text.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        // If the model added explanations after the corrected text (blank line separator), take only the first block
+        // If the model appended an explanation after a blank line, strip it.
+        // Only truncate if the text after the blank line looks like meta-commentary —
+        // NOT if it looks like a legitimate second paragraph of a multi-paragraph correction.
         if let blankLine = text.range(of: "\n\n") {
-            let firstBlock = String(text[..<blankLine.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
-            // For fluency, allow slightly longer first block (rewrites can expand sentences)
-            let maxRatio = isFluency ? 3 : 2
-            if !firstBlock.isEmpty && firstBlock.count <= original.count * maxRatio {
-                text = firstBlock
+            let afterBreak = String(text[blankLine.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            let commentaryMarkers = [
+                "note:", "notes:", "correction:", "corrections:", "change:", "changes:",
+                "explanation:", "i've ", "i have ", "here's ", "here is ", "the following",
+                "i corrected", "i fixed", "i changed",
+                "nota:", "note che", "ho corretto", "correzioni:", "spiegazione:",
+                "j'ai ", "voici ", "j'ai corrigé",
+                "ich habe ", "hier ist", "korrektur:",
+                "he corregido", "aquí está",
+            ]
+            let looksLikeCommentary = commentaryMarkers.contains(where: { afterBreak.hasPrefix($0) })
+            if looksLikeCommentary {
+                let firstBlock = String(text[..<blankLine.lowerBound])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !firstBlock.isEmpty { text = firstBlock }
             }
         }
 

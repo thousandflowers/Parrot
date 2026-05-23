@@ -30,7 +30,11 @@ actor ServerHealthMonitor: Sendable {
 
     private func checkHealth() async {
         let port = await ServerManager.shared.currentPort
-        guard port > 0 else { return }
+        guard port > 0 else {
+            consecutiveFailures = 0
+            stopMonitoring()
+            return
+        }
 
         guard let url = URL(string: "http://127.0.0.1:\(port)/health") else { return }
         do {
@@ -62,6 +66,7 @@ actor ServerHealthMonitor: Sendable {
             Logger.server.info("ServerHealthMonitor: server restarted successfully")
         } catch {
             Logger.server.error("ServerHealthMonitor: restart failed — \(error.localizedDescription, privacy: .public)")
+            consecutiveFailures = 0
             await MainActor.run {
                 SuggestionPanelController.shared.showError(.serverTimeout)
             }

@@ -8,7 +8,7 @@ final class OnboardingController {
     static let shared = OnboardingController()
 
     private var window: NSWindow?
-    private static let completedKey = "hasCompletedOnboarding"
+    private static let completedKey = "hasCompletedOnboarding_v2"
 
     func showIfNeeded() {
         guard !UserDefaults.standard.bool(forKey: Self.completedKey) else { return }
@@ -40,6 +40,7 @@ final class OnboardingController {
 
         window = w
         w.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
 
@@ -51,7 +52,7 @@ struct OnboardingView: View {
     @State private var step = 0
     @State private var prefs = PreferencesStore.shared
 
-    private let totalSteps = 7
+    private let totalSteps = 8
 
     var body: some View {
         VStack(spacing: 0) {
@@ -77,6 +78,7 @@ struct OnboardingView: View {
         case 3: ServiceStep(prefs: prefs)
         case 4: LanguageStyleStep()
         case 5: ShortcutsStep()
+        case 6: TryItStep()
         default: ReadyStep(prefs: prefs)
         }
     }
@@ -133,25 +135,28 @@ struct OnboardingView: View {
 // MARK: - Step 0: Install
 
 private struct InstallStep: View {
-    @State private var isInApplications = Bundle.main.bundlePath.hasPrefix("/Applications")
+    @State private var isInApplications: Bool = {
+        let appPath = "/Applications/Parrot.app"
+        return FileManager.default.fileExists(atPath: appPath)
+    }()
 
     var body: some View {
         VStack(spacing: 22) {
             Spacer()
 
-            VStack(spacing: 6) {
+            VStack(spacing: 8) {
                 Image(systemName: "arrow.down.app.fill")
-                    .font(.system(size: 44))
+                    .font(.system(size: 48))
                     .foregroundStyle(Color.accentColor)
                     .symbolRenderingMode(.hierarchical)
 
                 Text("Install Parrot")
-                    .font(.title2.bold())
+                    .font(.title.weight(.bold))
 
                 if isInApplications {
                     Label("Parrot is installed in your Applications folder", systemImage: "checkmark.circle.fill")
-                        .font(.callout)
-                        .foregroundStyle(.green)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(Color.statusOk)
                 } else {
                     Text("Drag Parrot to Applications to complete installation.")
                         .font(.callout)
@@ -162,15 +167,26 @@ private struct InstallStep: View {
 
             // Drag diagram
             HStack(spacing: 0) {
-                VStack(spacing: 8) {
+                VStack(spacing: 10) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.accentColor.opacity(0.12))
-                            .frame(width: 76, height: 76)
-                        Text("🦜").font(.system(size: 42))
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.accentColor.opacity(0.15), Color.accentColor.opacity(0.06)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 96, height: 96)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .strokeBorder(Color.accentColor.opacity(0.12), lineWidth: 0.5)
+                            )
+                            .shadow(color: Color.accentColor.opacity(0.1), radius: 8, x: 0, y: 2)
+                        Text("🦜").font(.system(size: 52))
                     }
                     Text("Parrot.app")
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
@@ -179,26 +195,37 @@ private struct InstallStep: View {
                     .foregroundStyle(.tertiary)
                     .frame(width: 80)
 
-                VStack(spacing: 8) {
+                VStack(spacing: 10) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.blue.opacity(0.10))
-                            .frame(width: 76, height: 76)
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.accentBrand.opacity(0.12), Color.accentBrand.opacity(0.05)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 96, height: 96)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .strokeBorder(Color.accentBrand.opacity(0.12), lineWidth: 0.5)
+                            )
+                            .shadow(color: Color.accentBrand.opacity(0.08), radius: 8, x: 0, y: 2)
                         Image(systemName: "folder.fill")
-                            .font(.system(size: 42))
-                            .foregroundStyle(.blue)
+                            .font(.system(size: 48))
+                            .foregroundStyle(Color.accentBrand)
                             .symbolRenderingMode(.hierarchical)
                     }
                     Text("Applications")
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             .padding(20)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(.separator.opacity(0.4), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.15), lineWidth: 0.5)
             )
 
             if !isInApplications {
@@ -211,7 +238,7 @@ private struct InstallStep: View {
             // Gatekeeper note
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "lock.shield.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.statusWarning)
                     .font(.callout)
                     .padding(.top, 1)
                 Text("If macOS shows **\"Apple cannot verify…\"**: right-click Parrot → **Open** → **Open** in the dialog. This only happens once.")
@@ -232,32 +259,37 @@ private struct InstallStep: View {
 // MARK: - Step 1: Welcome
 
 private struct WelcomeStep: View {
+    @State private var welcomePulse = false
+
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
 
             Text("🦜")
-                .font(.system(size: 64))
+                .font(.system(size: 72))
+                .scaleEffect(welcomePulse ? 1.0 : 0.85)
+                .animation(.spring(response: 0.5, dampingFraction: 0.6).delay(0.1), value: welcomePulse)
+                .onAppear { welcomePulse = true }
 
             VStack(spacing: 10) {
                 Text("Welcome to Parrot")
-                    .font(.largeTitle.bold())
+                    .font(.largeTitle.weight(.bold))
 
-                Text("Your writing assistant for Mac")
+                Text("Your minimal, clever writing companion for Mac")
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
 
             VStack(spacing: 12) {
-                FeatureRow(icon: "text.badge.checkmark", color: .green,
+                FeatureRow(icon: "text.badge.checkmark", color: .accentGreen,
                            title: "Grammar anywhere",
                            subtitle: "Select text in any app and press ⌘⇧E")
-                FeatureRow(icon: "sparkles", color: .purple,
+                FeatureRow(icon: "sparkles", color: .accentPurple,
                            title: "Improve fluency",
                            subtitle: "Make your text more natural and readable")
-                FeatureRow(icon: "lock.shield", color: .blue,
-                           title: "Completely private",
-                           subtitle: "Everything runs locally — no data leaves your Mac")
+                FeatureRow(icon: "lock.shield", color: .accentBrand,
+                           title: "Your words stay yours",
+                           subtitle: "All processing is local. No data ever leaves your Mac.")
             }
             .padding(.horizontal, 48)
 
@@ -304,11 +336,11 @@ private struct AccessibilityStep: View {
 
             ZStack {
                 Circle()
-                    .fill(isGranted ? Color.green.opacity(0.12) : Color.orange.opacity(0.12))
+                    .fill(isGranted ? Color.statusOk.opacity(0.12) : Color.statusWarning.opacity(0.12))
                     .frame(width: 80, height: 80)
                 Image(systemName: isGranted ? "checkmark.shield.fill" : "hand.raised.fill")
                     .font(.system(size: 36))
-                    .foregroundStyle(isGranted ? Color.green : Color.orange)
+                    .foregroundStyle(isGranted ? Color.statusOk : Color.statusWarning)
                     .symbolRenderingMode(.hierarchical)
             }
             .animation(.spring(response: 0.4), value: isGranted)
@@ -346,7 +378,7 @@ private struct AccessibilityStep: View {
         }
         .padding()
         .task {
-            while !isGranted {
+            while !Task.isCancelled, !isGranted {
                 try? await Task.sleep(for: .milliseconds(600))
                 isGranted = AXIsProcessTrusted()
             }
@@ -384,14 +416,28 @@ private struct ServiceStep: View {
                         .padding(.horizontal, 4)
 
                     Picker("Service", selection: $prefs.serviceType) {
-                        Label("Local (llama.cpp — offline)", systemImage: "lock.shield")
+                        Label("Apple Intelligence (built-in)", systemImage: "apple.logo")
+                            .tag(ServiceType.appleIntelligence)
+                        Label("Local (llama.cpp — offline)", systemImage: "memory.chip")
                             .tag(ServiceType.local)
-                        Label("Ollama", systemImage: "server.rack")
-                            .tag(ServiceType.ollama)
-                        Label("OpenAI / Compatibile", systemImage: "cloud")
-                            .tag(ServiceType.remote)
-                        Label("OpenRouter", systemImage: "arrow.triangle.swap")
-                            .tag(ServiceType.openRouter)
+                        HStack(spacing: 6) {
+                            Image(systemName: "ellipsis.curlybraces")
+                                .foregroundStyle(.black)
+                            Text("Ollama")
+                        }
+                        .tag(ServiceType.ollama)
+                        HStack(spacing: 6) {
+                            Image(systemName: "brain.head.profile")
+                                .foregroundStyle(Color(red: 0.063, green: 0.639, blue: 0.498))
+                            Text("OpenAI / Compatibile")
+                        }
+                        .tag(ServiceType.remote)
+                        HStack(spacing: 6) {
+                            Image(systemName: "point.3.connected.trianglepath.dotted")
+                                .foregroundStyle(.purple)
+                            Text("OpenRouter")
+                        }
+                        .tag(ServiceType.openRouter)
                         Label("Stub (test)", systemImage: "testtube.2")
                             .tag(ServiceType.stub)
                     }
@@ -402,6 +448,9 @@ private struct ServiceStep: View {
 
                 serviceConfig
                     .padding(.horizontal, 48)
+                    .id("svc-\(prefs.serviceType.rawValue)")
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .animation(.easeOut(duration: 0.2), value: prefs.serviceType)
 
                 Spacer(minLength: 16)
             }
@@ -411,11 +460,49 @@ private struct ServiceStep: View {
     @ViewBuilder
     private var serviceConfig: some View {
         switch prefs.serviceType {
+        case .appleIntelligence:
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Uses Apple Intelligence — built into your Mac", systemImage: "apple.logo")
+                    .foregroundStyle(Color.accentBrand)
+                    .font(.callout)
+                Divider()
+                Text("No download needed. The model runs on-device via Apple Intelligence.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if #available(macOS 26.0, *) {
+                    if !AppleIntelligenceService.shared.isAvailable {
+                        Divider()
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label("Apple Intelligence not available", systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(Color.statusWarning)
+                                .font(.caption.weight(.semibold))
+                            Text(AppleIntelligenceService.shared.availabilityDescription)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+            .padding(12)
+            .background(.blue.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+
         case .local:
             VStack(alignment: .leading, spacing: 10) {
                 Label("Offline mode — no data leaves your Mac", systemImage: "lock.shield.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.statusOk)
                     .font(.callout)
+                Divider()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("How it works")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text("Parrot downloads a compact AI model (~2-4 GB) that runs entirely on your Mac. Once installed, it works without internet — your text never leaves the device.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Divider()
                 Text("Download an AI model now (optional):")
                     .font(.caption.weight(.semibold))
@@ -427,6 +514,10 @@ private struct ServiceStep: View {
 
         case .ollama:
             VStack(alignment: .leading, spacing: 8) {
+                Label("Ollama", systemImage: "ellipsis.curlybraces")
+                    .foregroundStyle(.black)
+                    .font(.callout)
+                Divider()
                 Text("Ollama URL")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -442,9 +533,15 @@ private struct ServiceStep: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(12)
+            .background(.black.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
 
         case .remote:
             VStack(alignment: .leading, spacing: 8) {
+                Label("OpenAI / Compatibile", systemImage: "brain.head.profile")
+                    .foregroundStyle(Color(red: 0.063, green: 0.639, blue: 0.498))
+                    .font(.callout)
+                Divider()
                 Text("API Key OpenAI")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -464,9 +561,15 @@ private struct ServiceStep: View {
                 TextField("gpt-4o-mini", text: $prefs.openAIModel)
                     .textFieldStyle(.roundedBorder)
             }
+            .padding(12)
+            .background(Color(red: 0.063, green: 0.639, blue: 0.498).opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
 
         case .openRouter:
             VStack(alignment: .leading, spacing: 8) {
+                Label("OpenRouter", systemImage: "point.3.connected.trianglepath.dotted")
+                    .foregroundStyle(.purple)
+                    .font(.callout)
+                Divider()
                 Text("API Key OpenRouter")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -484,6 +587,8 @@ private struct ServiceStep: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            .padding(12)
+            .background(.purple.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
 
         case .stub:
             Label("Test mode — no real AI", systemImage: "info.circle")
@@ -514,13 +619,13 @@ private struct LanguageStyleStep: View {
             }
 
             VStack(spacing: 12) {
-                FeatureRow(icon: "globe", color: .blue,
+                FeatureRow(icon: "globe", color: .accentBrand,
                            title: "Language",
                            subtitle: "Detected automatically from the selected text using Apple's NLP framework")
-                FeatureRow(icon: "text.alignleft", color: .purple,
+                FeatureRow(icon: "text.alignleft", color: .accentPurple,
                            title: "Writing style",
                            subtitle: "Inferred from context — formal email, casual chat, technical docs, academic writing")
-                FeatureRow(icon: "apps.iphone", color: .green,
+                FeatureRow(icon: "apps.iphone", color: .accentGreen,
                            title: "App-aware",
                            subtitle: "Adapts to Xcode, Slack, Mail, Pages and 15+ other apps automatically")
             }
@@ -558,11 +663,11 @@ private struct ShortcutsStep: View {
                 ShortcutRow(keys: "⌘⇧T", action: "Check Fluency",
                             detail: "Makes text more natural and readable")
                 Divider().padding(.horizontal, 48)
-                ShortcutRow(keys: "⌘⇧F", action: "Open floating editor",
-                            detail: "Dedicated editor with original/corrected comparison")
+                ShortcutRow(keys: "⌘⇧U", action: "Translate",
+                            detail: "Translates to your target language")
                 Divider().padding(.horizontal, 48)
-                ShortcutRow(keys: "⌘⇧Y", action: "Translate",
-                            detail: "Translates the selected text")
+                ShortcutRow(keys: "⌘⇧W", action: "Writing Coach",
+                            detail: "Get structured feedback on your writing")
             }
             .padding(.horizontal, 48)
 
@@ -609,61 +714,216 @@ private struct ShortcutRow: View {
     }
 }
 
-// MARK: - Step 5: Ready
+// MARK: - Step 6: Try It Now
 
-private struct ReadyStep: View {
-    let prefs: PreferencesStore
+private struct TryItStep: View {
+    @State private var sampleText = "He go to the store yesterday and buyed some milks."
+    @State private var isCorrecting = false
+    @State private var correctedText = ""
 
     var body: some View {
-        VStack(spacing: 28) {
+        VStack(spacing: 20) {
             Spacer()
 
-            Image(systemName: "party.popper.fill")
-                .font(.system(size: 56))
+            Image(systemName: "sparkles")
+                .font(.system(size: 40))
                 .foregroundStyle(Color.accentColor)
                 .symbolRenderingMode(.hierarchical)
 
             VStack(spacing: 8) {
-                Text("All set!")
-                    .font(.largeTitle.bold())
-                Text("Parrot is configured and ready to use.")
+                Text("Try it now")
+                    .font(.title2.bold())
+                Text("See Parrot in action with this sample text.")
                     .foregroundStyle(.secondary)
-                    .font(.title3)
+                    .font(.callout)
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                ReadyCheckRow(
-                    icon: "checkmark.circle.fill", color: .green,
-                    text: "AI engine: \(prefs.serviceType.rawValue.capitalized)"
-                )
-                ReadyCheckRow(
-                    icon: "checkmark.circle.fill", color: .green,
-                    text: "Language & style: auto-detected"
-                )
-                ReadyCheckRow(
-                    icon: "checkmark.circle.fill", color: .green,
-                    text: "Global shortcuts active"
-                )
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Original:")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                TextEditor(text: $sampleText)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(height: 60)
+                    .padding(8)
+                    .background(Color(NSColor.textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                    .disabled(isCorrecting)
             }
-            .padding(20)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(.separator.opacity(0.5), lineWidth: 0.5)
-            )
-            .padding(.horizontal, 60)
+            .padding(.horizontal, 48)
 
-            Text("Select text in any app and press ⌘⇧E to get started.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            if !correctedText.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Corrected:")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.statusOk)
+                    Text(correctedText)
+                        .font(.system(.body, design: .monospaced))
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.statusOk.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                }
+                .padding(.horizontal, 48)
+            }
+
+            Button(action: {
+                isCorrecting = true
+                correctedText = "He went to the store yesterday and bought some milk."
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    isCorrecting = false
+                }
+            }) {
+                if isCorrecting {
+                    ProgressView().scaleEffect(0.8)
+                } else if correctedText.isEmpty {
+                    Label("Correct this text", systemImage: "text.badge.checkmark")
+                } else {
+                    Label("Try again", systemImage: "arrow.clockwise")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isCorrecting)
+
+            Text("This is a demo — the real correction uses an AI model.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
 
             Spacer()
         }
         .padding()
     }
+}
 
+// MARK: - Step 6: Ready
 
+private struct ReadyStep: View {
+    let prefs: PreferencesStore
+    @State private var celebrationPulse = false
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                Spacer().frame(height: 8)
+
+                Image(systemName: "party.popper.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(Color.accentColor)
+                    .symbolRenderingMode(.hierarchical)
+                    .scaleEffect(celebrationPulse ? 1.0 : 0.7)
+                    .opacity(celebrationPulse ? 1.0 : 0.4)
+                    .animation(.spring(response: 0.5, dampingFraction: 0.65).delay(0.15), value: celebrationPulse)
+                    .onAppear { celebrationPulse = true }
+
+                VStack(spacing: 6) {
+                    Text("All set!")
+                        .font(.largeTitle.weight(.bold))
+                    Text("You're ready to write better, faster.")
+                        .foregroundStyle(.secondary)
+                        .font(.title3)
+                }
+
+                // Status recap
+                VStack(alignment: .leading, spacing: 10) {
+                    ReadyCheckRow(
+                        icon: "checkmark.circle.fill", color: .accentGreen,
+                        text: "AI engine: \(prefs.serviceType.rawValue.capitalized)"
+                    )
+                    ReadyCheckRow(
+                        icon: "checkmark.circle.fill", color: .accentGreen,
+                        text: "Language & style: auto-detected"
+                    )
+                    ReadyCheckRow(
+                        icon: "checkmark.circle.fill", color: .accentGreen,
+                        text: "Global shortcuts active"
+                    )
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(.separator.opacity(0.5), lineWidth: 0.5)
+                )
+                .padding(.horizontal, 40)
+
+                // Feature guide
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Start here")
+                        .font(.headline.weight(.semibold))
+
+                    FeatureGuideCard(
+                        icon: "text.badge.checkmark",
+                        title: "Quick check",
+                        description: "Select text in any app, press the shortcut key. Parrot analyzes and shows corrections instantly in a floating panel."
+                    )
+                    FeatureGuideCard(
+                        icon: "keyboard",
+                        title: "Keyboard shortcuts",
+                        description: "⌘⇧E checks grammar, ⌘⇧F checks fluency, ⌘⇧T translates, ⌘⇧I opens the floating editor. All configurable in Preferences."
+                    )
+                    FeatureGuideCard(
+                        icon: "switch.2",
+                        title: "Automatic & real-time modes",
+                        description: "Enable 'Automatic check' to analyze every text field you click into. 'Real time' checks while you type."
+                    )
+                    FeatureGuideCard(
+                        icon: "rectangle.and.pencil.and.ellipsis",
+                        title: "Floating editor",
+                        description: "Open the floating editor from the menu bar to paste or type text and get corrections without leaving your current app."
+                    )
+                    FeatureGuideCard(
+                        icon: "gearshape.2",
+                        title: "Custom rules & presets",
+                        description: "Create custom find-and-replace rules, save prompt presets, and adjust writing style preferences in Settings."
+                    )
+                    FeatureGuideCard(
+                        icon: "arrow.up.arrow.down.circle",
+                        title: "Translation & more",
+                        description: "Translate selected text, use presets for different writing contexts, and access advanced features from the menu bar."
+                    )
+                }
+                .padding(.horizontal, 40)
+
+                Text("Select text in any app and press ⌘⇧E. That's it.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+
+                Spacer().frame(height: 8)
+            }
+        }
+    }
+}
+
+private struct FeatureGuideCard: View {
+    let icon: String
+    let title: String
+    let description: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(.separator.opacity(0.3), lineWidth: 0.5)
+        )
+    }
 }
 
 private struct ReadyCheckRow: View {
@@ -700,7 +960,7 @@ private struct OnboardingModelDownloader: View {
                 ProgressView().scaleEffect(0.7).frame(maxWidth: .infinity, alignment: .leading)
             } else if isComplete {
                 Label("Model ready to use", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.statusOk)
                     .font(.caption)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
@@ -729,7 +989,7 @@ private struct OnboardingModelDownloader: View {
                         if let error = errorMessage {
                             Text(error)
                                 .font(.caption2)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(Color.statusError)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         HStack(spacing: 8) {
@@ -785,4 +1045,8 @@ private struct OnboardingModelDownloader: View {
             }
         }
     }
+}
+
+#Preview {
+    OnboardingView(onComplete: {})
 }

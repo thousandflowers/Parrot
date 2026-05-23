@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Discussions
+    url: https://github.com/thousandflowers/Parrot/discussions
+    about: Ask questions, share ideas, and talk about Parrot
+  - name: Documentation
+    url: https://github.com/thousandflowers/Parrot#readme
+    about: Read the README before opening an issue

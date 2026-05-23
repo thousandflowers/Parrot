@@ -1,4 +1,5 @@
 import Cocoa
+import OSLog
 
 actor AccessibilityBridge: AXBridgeProtocol {
     static let shared = AccessibilityBridge()
@@ -11,11 +12,21 @@ actor AccessibilityBridge: AXBridgeProtocol {
         CFGetTypeID(ref) == AXValueGetTypeID() ? (ref as! AXValue) : nil
     }
 
-    nonisolated static func asElementPublic(_ ref: CFTypeRef) -> AXUIElement? {
-        asElement(ref)
+    nonisolated static func asElementPublic(_ ref: CFTypeRef?) -> AXUIElement? {
+        guard let ref else { return nil }
+        return CFGetTypeID(ref) == AXUIElementGetTypeID() ? (ref as! AXUIElement) : nil
     }
 
-    private(set) var lastSelectionBounds: CGRect = .zero
+    private static let _boundsLock = OSAllocatedUnfairLock<CGRect>(initialState: .zero)
+
+    nonisolated var lastSelectionBoundsSync: CGRect { Self._boundsLock.withLock { $0 } }
+
+    private(set) var lastSelectionBounds: CGRect = .zero {
+        didSet {
+            let v = lastSelectionBounds
+            Self._boundsLock.withLock { $0 = v }
+        }
+    }
     private var pendingClipboardRestore: PendingClipboardRestore?
     private var _lastKnownFrontAppPID: pid_t = 0
 
@@ -166,6 +177,16 @@ actor AccessibilityBridge: AXBridgeProtocol {
         guard AXIsProcessTrusted() else {
             throw CorrectionError.accessibilityPermissionDenied
         }
+        // Chromium/Electron: AX setters claim success without touching DOM text.
+        // Detect via last known PID and go directly to clipboard.
+        let targetPID = _lastKnownFrontAppPID
+        if targetPID != 0 {
+            let bid = await AppDetector.shared.frontAppBundleID(forPID: targetPID)
+            if let b = bid, await ElectronFallbackHandler.shared.isElectronApp(bundleID: b) {
+                try await injectViaClipboard(correctedText: correctedText)
+                return
+            }
+        }
         let systemAX = AXUIElementCreateSystemWide()
         var frontAppRef: CFTypeRef?
         let appResult = AXUIElementCopyAttributeValue(
@@ -196,30 +217,39 @@ actor AccessibilityBridge: AXBridgeProtocol {
         try await injectViaClipboard(correctedText: correctedText)
     }
 
+    private static let clipboardTokenType = NSPasteboard.PasteboardType("com.parrot.clipboard-token")
+
     private func injectViaClipboard(correctedText: String) async throws {
-        let pasteboard = NSPasteboard.general
-        let originalItems: [NSPasteboardItem] = pasteboard.pasteboardItems?.compactMap { item in
-            let copy = NSPasteboardItem()
-            for type in item.types {
-                if let data = item.data(forType: type) { copy.setData(data, forType: type) }
-            }
-            return copy
-        } ?? []
+        // NSPasteboard is not thread-safe — all reads/writes must happen on the main thread.
+        let originalItems: [NSPasteboardItem] = await MainActor.run {
+            NSPasteboard.general.pasteboardItems?.compactMap { item in
+                let copy = NSPasteboardItem()
+                for type in item.types {
+                    if let data = item.data(forType: type) { copy.setData(data, forType: type) }
+                }
+                return copy
+            } ?? []
+        }
 
         if let existing = self.pendingClipboardRestore {
-            restoreClipboard(existing)
+            await restoreClipboard(existing)
             self.pendingClipboardRestore = nil
         }
 
-        pasteboard.clearContents()
-        pasteboard.setString(correctedText, forType: .string)
-        let sentinelCount = pasteboard.changeCount
+        let token = UUID().uuidString
+
+        await MainActor.run {
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(correctedText, forType: .string)
+            pb.setString(token, forType: Self.clipboardTokenType)
+        }
 
         let source = CGEventSource(stateID: .hidSystemState)
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: false) else {
             if !originalItems.isEmpty {
-                restoreClipboard(PendingClipboardRestore(items: originalItems, originalChangeCount: sentinelCount))
+                await restoreClipboard(PendingClipboardRestore(items: originalItems))
             }
             return
         }
@@ -230,30 +260,24 @@ actor AccessibilityBridge: AXBridgeProtocol {
 
         guard !originalItems.isEmpty else { return }
 
-        let pending = PendingClipboardRestore(items: originalItems, originalChangeCount: sentinelCount)
-        self.pendingClipboardRestore = pending
+        try await Task.sleep(for: .milliseconds(200))
 
-        for _ in 0..<30 {
-            try? await Task.sleep(for: .milliseconds(50))
-            if pasteboard.changeCount != sentinelCount {
-                if self.pendingClipboardRestore?.originalChangeCount == pending.originalChangeCount {
-                    restoreClipboard(pending)
-                    self.pendingClipboardRestore = nil
-                }
-                return
-            }
-        }
-
-        if self.pendingClipboardRestore?.originalChangeCount == pending.originalChangeCount {
-            restoreClipboard(pending)
-            self.pendingClipboardRestore = nil
+        let existingToken = await MainActor.run { NSPasteboard.general.string(forType: Self.clipboardTokenType) }
+        if existingToken == token {
+            await restoreClipboard(PendingClipboardRestore(items: originalItems))
+        } else {
+            let pending = PendingClipboardRestore(items: originalItems)
+            pending.persistToDisk()
+            self.pendingClipboardRestore = pending
         }
     }
 
-    private func restoreClipboard(_ pending: PendingClipboardRestore) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects(pending.items)
+    private func restoreClipboard(_ pending: PendingClipboardRestore) async {
+        await MainActor.run {
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.writeObjects(pending.items)
+        }
     }
 
     func frontAppBundleID() async -> String? {
@@ -315,6 +339,19 @@ actor AccessibilityBridge: AXBridgeProtocol {
         guard AXUIElementCopyAttributeValue(appAX, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
               let focused = focusedRef, let element = Self.asElement(focused) else { return nil }
 
+        if let rect = axBoundsForRange(range, on: element) { return rect }
+
+        // Tree-traversal fallback: walk AX subtree to find an element that exposes bounds.
+        // Disabled per-app via PreferencesStore.treeTraversalDisabledBundleIDs.
+        let bundleID = await AppDetector.shared.frontAppBundleID(forPID: pid)
+        let traversalDisabled = await MainActor.run {
+            bundleID.map { PreferencesStore.shared.isTreeTraversalDisabled(bundleID: $0) } ?? false
+        }
+        guard !traversalDisabled else { return nil }
+        return axSearchSubtree(of: element, range: range, depth: 0, maxDepth: 8)
+    }
+
+    private func axBoundsForRange(_ range: CFRange, on element: AXUIElement) -> CGRect? {
         var cfRange = range
         guard let axRangeValue = AXValueCreate(.cfRange, &cfRange) else { return nil }
         var boundsRef: CFTypeRef?
@@ -322,12 +359,31 @@ actor AccessibilityBridge: AXBridgeProtocol {
             element, kAXBoundsForRangeParameterizedAttribute as CFString, axRangeValue, &boundsRef
         ) == .success,
         let bv = boundsRef, let axBV = Self.asAXValue(bv) else { return nil }
-
         var rect = CGRect()
         AXValueGetValue(axBV, .cgRect, &rect)
+        guard rect != .zero else { return nil }
         let screenH = NSScreen.main?.frame.height ?? 0
         return CGRect(x: rect.origin.x, y: screenH - rect.origin.y - rect.height,
                       width: rect.width, height: rect.height)
+    }
+
+    // DFS through AX children. Skips subtrees with >300 children to avoid browser DOM spam.
+    private func axSearchSubtree(of element: AXUIElement, range: CFRange, depth: Int, maxDepth: Int) -> CGRect? {
+        guard depth < maxDepth else { return nil }
+        var childrenRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenRef) == .success,
+              let ref = childrenRef,
+              CFGetTypeID(ref) == CFArrayGetTypeID() else { return nil }
+        let arr = ref as! CFArray
+        let count = CFArrayGetCount(arr)
+        guard count > 0 && count < 300 else { return nil }
+        for i in 0..<count {
+            guard let raw = CFArrayGetValueAtIndex(arr, i) else { continue }
+            let child = Unmanaged<AXUIElement>.fromOpaque(raw).retain().takeRetainedValue()
+            if let rect = axBoundsForRange(range, on: child) { return rect }
+            if let rect = axSearchSubtree(of: child, range: range, depth: depth + 1, maxDepth: maxDepth) { return rect }
+        }
+        return nil
     }
 
     func fetchSurroundingText(pid: pid_t, selectionRange: CFRange, windowSize: Int = 600) async -> String {
@@ -430,5 +486,48 @@ actor AccessibilityBridge: AXBridgeProtocol {
 
 struct PendingClipboardRestore {
     let items: [NSPasteboardItem]
-    let originalChangeCount: Int
+
+    private static var stateFileURL: URL {
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let parrotDir = dir.appendingPathComponent("Parrot")
+        try? FileManager.default.createDirectory(at: parrotDir, withIntermediateDirectories: true)
+        return parrotDir.appendingPathComponent("clipboard_state.json")
+    }
+
+    func persistToDisk() {
+        let data = items.compactMap { item -> [String: Data]? in
+            var dict: [String: Data] = [:]
+            for type in item.types {
+                if let d = item.data(forType: type) {
+                    dict[type.rawValue] = d
+                }
+            }
+            return dict.isEmpty ? nil : dict
+        }
+        do {
+            let encoded = try JSONEncoder().encode(data)
+            try encoded.write(to: Self.stateFileURL, options: .atomic)
+        } catch {
+            Logger.ax.error("AccessibilityBridge: failed to persist clipboard state — \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func cleanupDiskState() {
+        try? FileManager.default.removeItem(at: Self.stateFileURL)
+    }
+
+    static func restoreFromDiskIfAvailable() -> [NSPasteboardItem]? {
+        guard let data = try? Data(contentsOf: stateFileURL),
+              let plist = try? JSONDecoder().decode([[String: Data]].self, from: data) else {
+            return nil
+        }
+        return plist.compactMap { dict -> NSPasteboardItem? in
+            let item = NSPasteboardItem()
+            for (typeRaw, data) in dict {
+                item.setData(data, forType: NSPasteboard.PasteboardType(rawValue: typeRaw))
+            }
+            return item.types.isEmpty ? nil : item
+        }
+    }
 }

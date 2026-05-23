@@ -55,11 +55,16 @@ extension TextCheckCoordinator {
                 return
             }
 
-            await MainActor.run { SuggestionPanelController.shared.showLoading() }
             var accumulated = ""
             let stream = service.streamCorrect(text: prepared.text, promptType: prepared.promptType)
             for try await chunk in stream {
                 accumulated = chunk
+                let snapshot = chunk
+                await MainActor.run {
+                    SuggestionPanelController.shared.showOrUpdateStreaming(
+                        original: prepared.text, current: snapshot
+                    )
+                }
             }
             try Task.checkCancellation()
             let finalText = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -72,19 +77,20 @@ extension TextCheckCoordinator {
                 detectedTone: detectedTone.rawValue
             )
             result.replacementRange = prepared.replacementRange
+            let finalResult = result
 
             // Store in cache
             await CorrectionCache.shared.set(
-                result,
+                finalResult,
                 text: prepared.text,
                 promptType: prepared.promptType.label,
                 modelID: modelID,
                 language: prepared.resolvedLanguage
             )
 
-            await MainActor.run { SuggestionPanelController.shared.show(result: result) }
+            await MainActor.run { SuggestionPanelController.shared.show(result: finalResult) }
             await showInlineAnnotations(
-                result: result,
+                result: finalResult,
                 textOffset: prepared.replacementRange?.location ?? 0,
                 pid: prepared.capturedPID
             )
@@ -94,7 +100,7 @@ extension TextCheckCoordinator {
     // MARK: - Translation
 
     func translateSelectedText(to language: String) {
-        performCheck(frontAppPID: nil) { text, _, _, _, _ in
+        performCheck(frontAppPID: nil) { text, _, _, _, _, _ in
             return try await RequestQueue.shared.enqueue(
                 text: text,
                 type: .translation(targetLanguage: language),
@@ -114,7 +120,7 @@ extension TextCheckCoordinator {
     // MARK: - Replace
 
     func checkAndReplace() {
-        performCheck(frontAppPID: nil) { text, resolved, _, _, language in
+        performCheck(frontAppPID: nil) { text, resolved, _, _, language, _ in
             return try await RequestQueue.shared.enqueue(
                 text: text, type: .grammar, priority: .manual,
                 overrideServiceType: resolved.serviceType,
@@ -138,7 +144,7 @@ extension TextCheckCoordinator {
     // MARK: - Apply Direct (no panel)
 
     func checkAndApplyDirect() {
-        performCheck(frontAppPID: nil) { text, resolved, _, _, language in
+        performCheck(frontAppPID: nil) { text, resolved, _, _, language, _ in
             return try await RequestQueue.shared.enqueue(
                 text: text, type: .grammar, priority: .manual,
                 overrideServiceType: resolved.serviceType,
@@ -148,7 +154,7 @@ extension TextCheckCoordinator {
         } onSuccess: { result in
             guard result.hasChanges else {
                 Task { @MainActor in
-                    DirectApplyToast.show(message: "No correction needed")
+                    DirectApplyToast.showSuccess()
                 }
                 return
             }
@@ -215,7 +221,7 @@ extension TextCheckCoordinator {
     // MARK: - LLM Only
 
     func checkLLMOnly(original: String) {
-        performCheck(frontAppPID: nil) { text, resolved, _, _, language in
+        performCheck(frontAppPID: nil) { text, resolved, _, _, language, _ in
             let serviceType: ServiceType? = resolved.serviceType ?? LLMServiceFactory.resolveDefaultServiceType()
             return try await RequestQueue.shared.enqueue(
                 text: text, type: .grammar, priority: .manual,
@@ -237,10 +243,53 @@ extension TextCheckCoordinator {
         }
     }
 
+    // MARK: - Direct text correction (for deep links / PopClip)
+
+    func correctText(_ text: String, mode: PromptType) {
+        let language = LanguageDetector.detect(text: text, fallbackLanguage: "en")
+        let serviceType = LLMServiceFactory.resolveDefaultServiceType()
+        let service = LLMServiceFactory.make(with: serviceType)
+        let modelID = LLMServiceFactory.resolveModelID(for: serviceType)
+
+        Task {
+            var accumulated = ""
+            let stream = service.streamCorrect(text: text, promptType: mode)
+            for try await chunk in stream {
+                accumulated = chunk
+                let snapshot = chunk
+                await MainActor.run {
+                    SuggestionPanelController.shared.showOrUpdateStreaming(
+                        original: text, current: snapshot
+                    )
+                }
+            }
+            try Task.checkCancellation()
+            let finalText = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
+            let result = CorrectionResult(
+                original: text,
+                corrected: finalText,
+                modelID: modelID,
+                confidence: 0.9,
+                promptType: mode.label,
+                detectedTone: ""
+            )
+
+            await CorrectionCache.shared.set(
+                result,
+                text: text,
+                promptType: mode.label,
+                modelID: modelID,
+                language: language
+            )
+
+            await MainActor.run { SuggestionPanelController.shared.show(result: result) }
+        }
+    }
+
     // MARK: - Writing Coach
 
     func checkCoach() {
-        performCheck(frontAppPID: nil) { text, _, _, _, language in
+        performCheck(frontAppPID: nil) { text, _, _, _, language, _ in
             return try await RequestQueue.shared.enqueue(
                 text: text, type: .coach, priority: .manual,
                 overrideServiceType: LLMServiceFactory.resolveDefaultServiceType(),
@@ -259,5 +308,79 @@ extension TextCheckCoordinator {
             )
             SuggestionPanelController.shared.show(result: coachResult)
         }
+    }
+
+    // MARK: - De-Slop
+
+    func checkDeSlop() {
+        performCheck(frontAppPID: nil) { text, _, _, _, language, _ in
+            return try await RequestQueue.shared.enqueue(
+                text: text, type: .deSlop, priority: .manual,
+                overrideServiceType: LLMServiceFactory.resolveDefaultServiceType(),
+                language: language
+            )
+        } onSuccess: { result in
+            SuggestionPanelController.shared.show(result: result)
+        }
+    }
+
+    // MARK: - AI Prompt Mode
+
+    func checkAIPrompt() {
+        performCheck(frontAppPID: nil) { text, _, _, _, language, _ in
+            return try await RequestQueue.shared.enqueue(
+                text: text, type: .aiPrompt, priority: .manual,
+                overrideServiceType: LLMServiceFactory.resolveDefaultServiceType(),
+                language: language
+            )
+        } onSuccess: { result in
+            SuggestionPanelController.shared.show(result: result)
+        }
+    }
+
+    // MARK: - Plagiarism
+
+    func checkPlagiarism() {
+        performCheck(frontAppPID: nil) { text, _, _, _, _, _ in
+            let methods: Set<PlagiarismMethod> = [.webSearch, .knowledgeBase, .llmAnalysis]
+            let result = await PlagiarismDetector.shared.detect(text: text, methods: methods)
+            let report = formatPlagiarismReport(result)
+            return CorrectionResult(
+                original: text,
+                corrected: text,
+                modelID: "plagiarism-detector",
+                explanation: report,
+                confidence: 1.0 - result.overallScore,
+                promptType: "plagiarism",
+                detectedTone: nil,
+                source: .ruleBased
+            )
+        } onSuccess: { result in
+            SuggestionPanelController.shared.show(result: result)
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func formatPlagiarismReport(_ result: PlagiarismResult) -> String {
+        let score = Int(result.overallScore * 100)
+        var lines: [String] = []
+        lines.append("Plagiarism Analysis")
+        lines.append("Overall Score: \(score)%")
+        lines.append("")
+        if result.findings.isEmpty {
+            lines.append("No potential plagiarism detected.")
+        } else {
+            lines.append("Findings:")
+            for finding in result.findings {
+                lines.append("  • Source: \(finding.source.rawValue)")
+                lines.append("    Match: \(Int(finding.confidence * 100))% similarity")
+                if let url = finding.url { lines.append("    URL: \(url)") }
+                let snippet = String(finding.matchText.prefix(150))
+                lines.append("    Text: \"\(snippet)\"")
+                lines.append("")
+            }
+        }
+        return lines.joined(separator: "\n")
     }
 }

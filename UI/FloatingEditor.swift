@@ -32,7 +32,7 @@ final class FloatingEditorController {
         newWindow.center()
         newWindow.setFrameAutosaveName("FloatingEditorWindow")
 
-        newWindow.contentView = NSHostingView(rootView: FloatingEditorView(onDismiss: { [weak self] in
+        newWindow.contentView = FixedSizeHostingView(rootView: FloatingEditorView(onDismiss: { [weak self] in
             self?.close()
         }))
 
@@ -67,6 +67,11 @@ struct FloatingEditorView: View {
     @State private var checkMode: CheckMode = .grammar
     @State private var checkTask: Task<Void, Never>?
     @State private var showDiff: Bool = true
+    @StateObject private var dictation = DictationService()
+    @State private var analysisResult: StoryAnalysisResult?
+    @State private var isAnalyzing = false
+    @State private var showAnalysis = false
+    @State private var recordingPulse = false
 
     enum CheckMode: String, CaseIterable {
         case grammar = "grammar"
@@ -90,6 +95,11 @@ struct FloatingEditorView: View {
         }
         .frame(minWidth: 560, minHeight: 320)
         .onDisappear { checkTask?.cancel() }
+        .sheet(isPresented: $showAnalysis) {
+            if let result = analysisResult {
+                StoryAnalysisSheet(result: result)
+            }
+        }
     }
 
     // MARK: - Toolbar
@@ -112,10 +122,78 @@ struct FloatingEditorView: View {
                     .foregroundStyle(.secondary)
             }
 
+            if dictation.authorizationStatus == .authorized {
+            Button {
+                if dictation.isListening {
+                    dictation.stopListening()
+                    if !dictation.transcribedText.isEmpty {
+                        inputText = dictation.transcribedText
+                    }
+                } else {
+                    dictation.startListening()
+                }
+            } label: {
+                Image(systemName: dictation.isListening ? "mic.fill" : "mic")
+                    .font(.system(size: 14))
+                    .foregroundStyle(dictation.isListening ? Color.statusError : .secondary)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .help(dictation.isListening ? "Stop dictation" : "Start dictation")
+            .accessibilityLabel(dictation.isListening ? "Stop dictation" : "Start dictation")
+
+            Button {
+                importFile()
+            } label: {
+                Image(systemName: "doc.badge.plus")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .help("Import file")
+            .accessibilityLabel("Import file")
+
+            if inputText.split(separator: " ").count > 100 {
+                Button {
+                    analyzeStory()
+                } label: {
+                    Image(systemName: "book")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .help("Analyze story/manuscript")
+                .accessibilityLabel("Analyze story")
+            }
+            } else {
+                Button {
+                    dictation.requestAuthorization()
+                } label: {
+                    Image(systemName: "mic.circle")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .help("Enable dictation")
+                .accessibilityLabel("Enable dictation")
+            }
+
             wordCountBadge
         }
+        .animation(.easeOut(duration: 0.18), value: isLoading)
+        .animation(.easeOut(duration: 0.2), value: inputText.isEmpty)
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+        .background(
+            LinearGradient(
+                colors: [Color.accentColor.opacity(0.04), .clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
     }
 
     @ViewBuilder
@@ -129,6 +207,7 @@ struct FloatingEditorView: View {
             }
             .font(.caption2)
             .foregroundStyle(.tertiary)
+            .transition(.opacity.combined(with: .scale(scale: 0.85)))
         }
     }
 
@@ -157,6 +236,28 @@ struct FloatingEditorView: View {
                 .background(.clear)
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
+                .accessibilityLabel("Text to analyze")
+
+            if dictation.isListening {
+                Divider()
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color.statusError)
+                        .frame(width: 6, height: 6)
+                        .opacity(recordingPulse ? 1 : 0.4)
+                        .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: recordingPulse)
+                        .onAppear { recordingPulse = true }
+                        .onDisappear { recordingPulse = false }
+                    Text(dictation.transcribedText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color(nsColor: .controlBackgroundColor))
+            }
         }
         .frame(minWidth: 240)
         .background(Color(nsColor: .textBackgroundColor))
@@ -190,10 +291,12 @@ struct FloatingEditorView: View {
                     } label: {
                         Image(systemName: "doc.on.doc")
                             .font(.caption)
+                            .frame(minWidth: 44, minHeight: 44)
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                     .help("Copy corrected text")
+                    .accessibilityLabel("Copy corrected text")
                 }
             }
             .padding(.horizontal, 12)
@@ -207,6 +310,7 @@ struct FloatingEditorView: View {
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
+                        .transition(.opacity)
                 } else if showDiff {
                     DiffHighlightView(
                         original: inputText,
@@ -216,14 +320,18 @@ struct FloatingEditorView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
                     .textSelection(.enabled)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                 } else {
                     Text(correctedText.isEmpty ? inputText : correctedText)
                         .font(.body)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
                         .textSelection(.enabled)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
+            .animation(.easeOut(duration: 0.22), value: correctedText.isEmpty)
+            .animation(.easeOut(duration: 0.15), value: showDiff)
             .frame(minWidth: 240)
             .padding(.bottom, 8)
         }
@@ -236,7 +344,7 @@ struct FloatingEditorView: View {
         HStack(spacing: 10) {
             if let error = errorMessage {
                 Image(systemName: "exclamationmark.circle.fill")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.statusError)
                     .font(.caption)
                 Text(error)
                     .font(.caption)
@@ -253,14 +361,17 @@ struct FloatingEditorView: View {
                 Button("Cancel") { checkTask?.cancel() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
             } else {
                 Button("Check") { checkText() }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.regular)
                     .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .keyboardShortcut(.return, modifiers: .command)
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
         }
+        .animation(.easeOut(duration: 0.18), value: isLoading)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
     }
@@ -277,7 +388,7 @@ struct FloatingEditorView: View {
         checkTask?.cancel()
 
         checkTask = Task { @MainActor in
-            defer { if !Task.isCancelled { isLoading = false } }
+            defer { isLoading = false }
             do {
                 let bundleID = await AccessibilityBridge.shared.frontAppBundleID()
                 let prefs = PreferencesStore.shared
@@ -303,6 +414,35 @@ struct FloatingEditorView: View {
                 guard !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    private func importFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.plainText, .utf8PlainText, .utf16PlainText, .rtf, .text]
+        panel.allowsMultipleSelection = false
+
+        guard case .OK = panel.runModal(), let url = panel.url else { return }
+        guard let content = try? String(contentsOf: url) else { return }
+        inputText = content
+    }
+
+    private func analyzeStory() {
+        guard !inputText.isEmpty else { return }
+        isAnalyzing = true
+        errorMessage = nil
+
+        Task { @MainActor in
+            do {
+                analysisResult = try await StoryAnalyzer.shared.analyze(text: inputText)
+                guard !Task.isCancelled else { return }
+                showAnalysis = true
+            } catch {
+                guard !Task.isCancelled else { return }
+                errorMessage = error.localizedDescription
+            }
+            guard !Task.isCancelled else { return }
+            isAnalyzing = false
         }
     }
 }

@@ -97,10 +97,4 @@ final class KeychainService: Sendable {
             throw KeychainError.invalidStatus(status)
         }
     }
-
-    func update(key: String, for provider: String) throws {
-        // save() tries SecItemAdd first; on duplicate, uses SecItemUpdate.
-        // No need for explicit delete — avoids non-atomic delete-then-save race.
-        try save(key: key, for: provider)
-    }
 }

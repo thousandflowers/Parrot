@@ -47,3 +47,7 @@ struct ExclusionsTab: View {
         }
     }
 }
+
+#Preview {
+    ExclusionsTab(prefs: PreferencesStore.shared)
+}

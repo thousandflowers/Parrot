@@ -1,92 +1,125 @@
-import Foundation
+import Cocoa
 
 actor RealtimeMonitor {
     static let shared = RealtimeMonitor()
 
-    private var monitorTask: Task<Void, Never>?
+    private var observer: AXObserver?
+    private var observedPID: pid_t = 0
     private var lastTextHash: Int?
     private var debounceTask: Task<Void, Never>?
     private var isEnabled = false
-    private var pollInterval: TimeInterval = 5.0
 
     func start() {
         guard !isEnabled else { return }
         isEnabled = true
-        stopInternal()
-        monitorTask = Task { [weak self] in
-            guard let self = self else { return }
-            while !Task.isCancelled {
-                let enabled = await self.isEnabled
-                guard enabled else { break }
-                
-                let interval = await self.pollInterval
-                try? await Task.sleep(for: .seconds(interval))
-                
-                guard !Task.isCancelled else { break }
-                let stillEnabled = await self.isEnabled
-                guard stillEnabled else { break }
-                await self.poll()
-            }
-        }
+        Task { await attachToFocusedApp() }
     }
 
     func stop() {
         isEnabled = false
-        stopInternal()
+        detachObserver()
+        debounceTask?.cancel()
+        debounceTask = nil
+        lastTextHash = nil
     }
 
     func frontAppChanged() {
         lastTextHash = nil
         Task { await RealtimeIndicatorController.shared.hide() }
+        Task { await attachToFocusedApp() }
     }
 
-    private func stopInternal() {
-        monitorTask?.cancel()
-        monitorTask = nil
-        debounceTask?.cancel()
-        debounceTask = nil
-    }
+    private func attachToFocusedApp() async {
+        guard isEnabled else { return }
+        guard AXIsProcessTrusted() else { return }
 
-    private func poll() async {
-        let pid = await AccessibilityBridge.shared.lastKnownFrontAppPID()
-        guard pid != 0 else { 
-            pollInterval = 5.0
-            return 
-        }
-        guard UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.realtimeEnabled) else {
-            pollInterval = 5.0
+        let systemAX = AXUIElementCreateSystemWide()
+        var frontAppRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            systemAX, kAXFocusedApplicationAttribute as CFString, &frontAppRef
+        ) == .success,
+        let frontApp = frontAppRef,
+        let frontAppAX = AccessibilityBridge.asElementPublic(frontApp) else {
             return
         }
+
+        var pid: pid_t = 0
+        AXUIElementGetPid(frontAppAX, &pid)
+        guard pid != 0 else { return }
+
+        if pid == observedPID { return }
+
+        detachObserver()
+
+        var newObserver: AXObserver?
+        guard AXObserverCreate(pid, axNotificationCallback, &newObserver) == .success,
+              let obs = newObserver else {
+            return
+        }
+
+        let notifications: [String] = [
+            "AXValueChanged",
+            "AXFocusedUIElementChanged",
+            "AXSelectedTextChanged"
+        ]
+
+        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+        for notif in notifications {
+            AXObserverAddNotification(obs, frontAppAX, notif as CFString, selfPtr)
+        }
+
+        // CFRunLoop ops must run on the run loop's own thread (main thread).
+        let runLoopSource = AXObserverGetRunLoopSource(obs)
+        await MainActor.run {
+            CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .defaultMode)
+        }
+
+        self.observer = obs
+        self.observedPID = pid
+        lastTextHash = nil
+    }
+
+    private func detachObserver() {
+        guard let obs = observer else { return }
+        let runLoopSource = AXObserverGetRunLoopSource(obs)
+        // CFRunLoop ops must run on the run loop's own thread (main thread).
+        DispatchQueue.main.async {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .defaultMode)
+        }
+        observer = nil
+        observedPID = 0
+    }
+
+    nonisolated func handleNotification() {
+        Task { await Self.shared.onAccessibilityEvent() }
+    }
+
+    private func onAccessibilityEvent() async {
+        guard isEnabled else { return }
+        guard UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.realtimeEnabled) else { return }
+
+        let pid = await AccessibilityBridge.shared.lastKnownFrontAppPID()
+        guard pid != 0 else { return }
 
         let bundleID = await AppDetector.shared.frontAppBundleID(forPID: pid)
         if let id = bundleID {
             let excluded = await MainActor.run { PreferencesStore.shared.isExcluded(bundleID: id) }
-            if excluded {
-                pollInterval = 10.0 // Very conservative for excluded apps
-                return
-            }
+            if excluded { return }
         }
 
-        guard let text = try? await fetchCurrentText(pid: pid), !text.isEmpty else { 
-            pollInterval = 5.0
-            return 
-        }
+        guard let text = try? await fetchCurrentText(pid: pid), !text.isEmpty else { return }
+
         let hash = text.hashValue
-        if hash == lastTextHash {
-            // Stable text, slow down
-            pollInterval = min(pollInterval + 1.0, 5.0)
-            return
-        }
-        
-        // Text changed, speed up to be responsive
+        guard hash != lastTextHash else { return }
         lastTextHash = hash
-        pollInterval = 2.0
 
         debounceTask?.cancel()
         debounceTask = Task {
             try? await Task.sleep(for: .milliseconds(800))
             guard !Task.isCancelled else { return }
-            await performCheck(text: text)
+            let bundleID = await AppDetector.shared.frontAppBundleID(forPID: pid)
+            let (promptType, overrideService, overridePrompt) = await resolvePromptInfo(for: bundleID)
+            await performCheck(text: text, promptType: promptType, overrideServiceType: overrideService, overrideCustomPrompt: overridePrompt)
         }
     }
 
@@ -99,14 +132,16 @@ actor RealtimeMonitor {
         }
     }
 
-    private func performCheck(text: String) async {
+    private func performCheck(text: String, promptType: PromptType, overrideServiceType: ServiceType?, overrideCustomPrompt: CustomPrompt?) async {
         guard !text.isEmpty else { return }
 
         do {
             let result = try await RequestQueue.shared.enqueue(
                 text: text,
-                type: .grammar,
-                priority: .autoCheck
+                type: promptType,
+                priority: .autoCheck,
+                overrideServiceType: overrideServiceType,
+                overrideCustomPrompt: overrideCustomPrompt
             )
             if result.originalText != result.correctedText {
                 await RealtimeIndicatorController.shared.show(errors: true)
@@ -117,4 +152,28 @@ actor RealtimeMonitor {
             await RealtimeIndicatorController.shared.hide()
         }
     }
+
+    private func resolvePromptInfo(for bundleID: String?) async -> (PromptType, ServiceType?, CustomPrompt?) {
+        guard let bundleID else { return (.grammar, nil, nil) }
+        let rules = await MainActor.run { PreferencesStore.shared.appRules }
+        guard let rule = rules.first(where: { $0.bundleID == bundleID && $0.isEnabled }) else { return (.grammar, nil, nil) }
+
+        let customPrompt: CustomPrompt? = if let promptID = rule.promptID {
+            await MainActor.run { PreferencesStore.shared.customPrompts.first(where: { $0.id == promptID }) }
+        } else { nil }
+
+        let promptType: PromptType = if let prompt = customPrompt {
+            .custom(name: prompt.name, template: prompt.template)
+        } else {
+            .grammar
+        }
+
+        return (promptType, rule.serviceType, customPrompt)
+    }
+}
+
+private func axNotificationCallback(observer: AXObserver, element: AXUIElement, notificationName: CFString, userInfo: UnsafeMutableRawPointer?) {
+    guard let userInfo else { return }
+    let monitor = Unmanaged<RealtimeMonitor>.fromOpaque(userInfo).takeUnretainedValue()
+    monitor.handleNotification()
 }

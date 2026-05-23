@@ -11,39 +11,158 @@ struct ModelsTab: View {
     @State private var downloadTask: Task<Void, Never>?
     @State private var downloadStatus: String = ""
     @State private var downloadedModels: Set<String> = []
+    @State private var localModels: [DiscoveredModel] = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Circle()
-                    .fill(serverIsRunning ? Color.statusOk : Color.statusError)
-                    .frame(width: 8, height: 8)
-                Text(serverIsRunning ? "Server running" : "Server stopped")
-                    .font(.caption)
-                Spacer()
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
-
-            if let error = downloadError {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.statusError)
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(.statusError)
+        Form {
+            Section {
+                Picker("Service", selection: $prefs.serviceType) {
+                    Text("Apple Intelligence").tag(ServiceType.appleIntelligence)
+                    Text("Local (llama.cpp)").tag(ServiceType.local)
+                    Text("Ollama").tag(ServiceType.ollama)
+                    Text("OpenAI / Compatible").tag(ServiceType.remote)
+                    Text("OpenRouter").tag(ServiceType.openRouter)
+                    Text("Stub (test)").tag(ServiceType.stub)
                 }
-                .padding(.horizontal)
-                .padding(.top, 4)
+
+                if prefs.serviceType == .appleIntelligence {
+                    if #available(macOS 26.0, *) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label(
+                                AppleIntelligenceService.shared.isAvailable ? "Apple Intelligence ready" : "Apple Intelligence not available",
+                                systemImage: AppleIntelligenceService.shared.isAvailable ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                            )
+                            .foregroundStyle(AppleIntelligenceService.shared.isAvailable ? Color.statusOk : Color.statusWarning)
+                            .font(.callout)
+                            if !AppleIntelligenceService.shared.isAvailable {
+                                Text(AppleIntelligenceService.shared.availabilityDescription)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    } else {
+                        Label("Apple Intelligence requires macOS 26", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Color.statusWarning)
+                            .font(.callout)
+                    }
+                }
+
+                if prefs.serviceType == .remote {
+                    OpenAIKeyField(prefs: prefs)
+                    TextField("Base URL", text: $prefs.openAIBaseURL)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("Model", text: $prefs.openAIModel)
+                        .textFieldStyle(.roundedBorder)
+                    VStack(alignment: .leading, spacing: 2) {
+                        TextField("Backup model (if primary fails)", text: $prefs.fallbackOpenAIModel)
+                            .textFieldStyle(.roundedBorder)
+                        Text("Optional. Used automatically when the primary model returns an error.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if prefs.serviceType == .ollama {
+                    TextField("Ollama URL", text: $prefs.ollamaBaseURL)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("Model", text: $prefs.ollamaModel)
+                        .textFieldStyle(.roundedBorder)
+                    VStack(alignment: .leading, spacing: 2) {
+                        TextField("Backup model (if primary fails)", text: $prefs.fallbackOllamaModel)
+                            .textFieldStyle(.roundedBorder)
+                        Text("Optional. Used automatically when the primary model returns an error.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if prefs.serviceType == .openRouter {
+                    OpenRouterKeyField(prefs: prefs)
+                    TextField("Model (e.g. openai/gpt-4o-mini)", text: $prefs.openRouterModel)
+                        .textFieldStyle(.roundedBorder)
+                    VStack(alignment: .leading, spacing: 2) {
+                        TextField("Backup model (if primary fails)", text: $prefs.fallbackOpenRouterModel)
+                            .textFieldStyle(.roundedBorder)
+                        Text("Optional. Used automatically when the primary model returns an error.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Label("AI Engine", systemImage: "cpu")
             }
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
+            Section {
+                if prefs.serviceType == .local {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(serverIsRunning ? Color.statusOk : Color.statusError)
+                            .frame(width: 8, height: 8)
+                        Text(serverIsRunning ? "llama-server running" : "llama-server not running")
+                            .font(.callout)
+                    }
+                    if !serverIsRunning {
+                        Text("The local server is not running. Check the configuration below.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if prefs.serviceType == .appleIntelligence {
+                    if #available(macOS 26.0, *) {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(AppleIntelligenceService.shared.isAvailable ? Color.statusOk : Color.statusWarning)
+                                .frame(width: 8, height: 8)
+                            Text(AppleIntelligenceService.shared.isAvailable ? "Apple Intelligence ready" : "Apple Intelligence not available")
+                                .font(.callout)
+                        }
+                        if !AppleIntelligenceService.shared.isAvailable {
+                            Text(AppleIntelligenceService.shared.availabilityDescription)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    } else {
+                        HStack(spacing: 8) {
+                            Circle().fill(Color.statusWarning).frame(width: 8, height: 8)
+                            Text("Apple Intelligence requires macOS 26").font(.callout)
+                        }
+                    }
+                }
+            } header: {
+                Label("Status", systemImage: "antenna.radiowaves.left.and.right")
+            }
+
+            if prefs.serviceType == .local {
+                LlamaInstallerSection()
+            }
+
+            Section {
+                Toggle("Auto-check", isOn: $prefs.autoCheckEnabled)
+                Toggle("Real-time check", isOn: $prefs.realtimeEnabled)
+            } header: {
+                Label("Behavior", systemImage: "bolt")
+            }
+
+            if prefs.serviceType == .local {
+                Section {
+                    if let error = downloadError {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.statusError)
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.statusError)
+                        }
+                        .padding(.vertical, 2)
+                    }
+
                     ForEach(models, id: \.id) { model in
                         ModelRow(
                             model: model,
                             isDownloaded: downloadedModels.contains(model.id),
-                            isSelected: prefs.selectedModelID == model.id && prefs.serviceType == .local,
+                            isSelected: prefs.selectedModelID.lowercased() == model.id.lowercased(),
                             isDownloading: activeDownloadID == model.id,
                             progress: activeDownloadID == model.id ? downloadProgress : 0,
                             status: activeDownloadID == model.id ? downloadStatus : "",
@@ -51,37 +170,72 @@ struct ModelsTab: View {
                             onSelect: { selectModel(model) }
                         )
                     }
+                } header: {
+                    Label("Models", systemImage: "brain")
+                } footer: {
+                    HStack(spacing: 8) {
+                        Button(action: openModelsFolder) {
+                            Label("Open Models Folder", systemImage: "folder")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .help("Opens ~/Library/Application Support/Parrot/Models/ — drop .gguf files here")
+
+                        Button(action: addModelFromFile) {
+                            Label("Add from file…", systemImage: "plus")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .help("Pick any .gguf file from anywhere on your Mac")
+                    }
+                    .padding(.top, 4)
                 }
-                .padding()
             }
-            .accessibilityElement(children: .contain)
-        }
-        Divider()
-        HStack(spacing: 8) {
-            Button(action: openModelsFolder) {
-                Label("Open Models Folder", systemImage: "folder")
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .help("Opens ~/Library/Application Support/Parrot/Models/ — drop .gguf files here")
 
-            Button(action: addModelFromFile) {
-                Label("Add from file…", systemImage: "plus")
+            if prefs.serviceType == .local && !uncatalogedLocalModels.isEmpty {
+                Section {
+                    ForEach(uncatalogedLocalModels) { model in
+                        LocalModelRow(
+                            model: model,
+                            isSelected: prefs.selectedModelID.lowercased() == model.id.lowercased(),
+                            onSelect: { selectLocalModel(model) }
+                        )
+                    }
+                } header: {
+                    Label("Custom Models", systemImage: "doc.badge.plus")
+                }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .help("Pick any .gguf file from anywhere on your Mac")
 
-            Spacer()
+            if prefs.serviceType == .local {
+                Section {
+                    VStack(alignment: .leading, spacing: 2) {
+                        TextField("Backup model (if primary fails)", text: $prefs.fallbackLocalModelID)
+                            .textFieldStyle(.roundedBorder)
+                        Text("Optional. If the selected model fails to load, Parrot will try this one instead. Enter a model ID from the list above.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Label("Fallback", systemImage: "arrow.triangle.swap")
+                }
+            }
+
+
         }
-        .padding(.horizontal)
-        .padding(.vertical, 6)
+        .formStyle(.grouped)
         .task {
             models = await ModelManager.shared.recommendedModels()
+            localModels = await ModelManager.shared.localModels()
             downloadedModels = await detectDownloadedModels()
         }
         .onDisappear {
             downloadTask?.cancel()
+        }
+    }
+
+    private var uncatalogedLocalModels: [DiscoveredModel] {
+        localModels.filter { local in
+            !models.contains { catalog in catalog.id.lowercased() == local.id.lowercased() }
         }
     }
 
@@ -92,6 +246,19 @@ struct ModelsTab: View {
             async let stop: Void = ServerManager.shared.stop()
             async let invalidate: Void = ModelManager.shared.invalidateCache()
             _ = await (stop, invalidate)
+            guard !Task.isCancelled else { return }
+            await LocalLLMService.shared.warmup()
+        }
+    }
+
+    private func selectLocalModel(_ model: DiscoveredModel) {
+        prefs.selectedModelID = model.id
+        prefs.serviceType = .local
+        Task {
+            async let stop: Void = ServerManager.shared.stop()
+            async let invalidate: Void = ModelManager.shared.invalidateCache()
+            _ = await (stop, invalidate)
+            guard !Task.isCancelled else { return }
             await LocalLLMService.shared.warmup()
         }
     }
@@ -105,7 +272,7 @@ struct ModelsTab: View {
 
     private func addModelFromFile() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.init(filenameExtension: "gguf")!]
+        panel.allowedContentTypes = [.init(filenameExtension: "gguf") ?? .data]
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         panel.message = "Select a GGUF model file to add to Parrot"
@@ -114,6 +281,7 @@ struct ModelsTab: View {
             await ModelManager.shared.adoptModel(path: url.path(percentEncoded: false))
             await ModelManager.shared.invalidateCache()
             let name = url.deletingPathExtension().lastPathComponent
+            guard !Task.isCancelled else { return }
             await MainActor.run {
                 prefs.selectedModelID = name
                 prefs.serviceType = .local
@@ -130,9 +298,12 @@ struct ModelsTab: View {
         guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir.path(percentEncoded: false)) else {
             return []
         }
-        let completedFiles = files.filter { !$0.hasSuffix(".partial") }
+        let completedFiles = files.filter { $0.hasSuffix(".gguf") }
         return Set(models.filter { model in
-            completedFiles.contains { $0.contains(model.id) || model.id.hasSuffix($0.replacingOccurrences(of: ".gguf", with: "")) }
+            completedFiles.contains { file in
+                file.localizedCaseInsensitiveContains(model.id) ||
+                model.id.localizedCaseInsensitiveCompare(file.replacingOccurrences(of: ".gguf", with: "")) == .orderedSame
+            }
         }.map(\.id))
     }
 
@@ -144,7 +315,6 @@ struct ModelsTab: View {
         downloadStatus = "Downloading..."
         downloadTask?.cancel()
         downloadTask = Task {
-            // Force-close any stalled URLSession from the previous download
             await ModelManager.shared.cancelActiveDownload()
 
             do {
@@ -175,7 +345,6 @@ struct ModelsTab: View {
                     downloadStatus = ""
                     downloadedModels.insert(rec.id)
                 }
-                // Invalidate model path cache then start the server immediately
                 await ModelManager.shared.invalidateCache()
                 await LocalLLMService.shared.warmup()
             } catch {
@@ -265,3 +434,152 @@ private struct ModelRow: View {
     }
 }
 
+// MARK: - Local (Custom) Model Row
+
+private struct LocalModelRow: View {
+    let model: DiscoveredModel
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.name)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                Text(formattedSize(model.size))
+                    .font(.caption)
+                    .foregroundColor(.textSecondary)
+            }
+            Spacer()
+            if isSelected {
+                Text("In use")
+                    .font(.caption)
+                    .foregroundColor(.statusOk)
+            } else {
+                Button("Use") { onSelect() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func formattedSize(_ bytes: Int64) -> String {
+        let gb = Double(bytes) / 1_073_741_824
+        if gb >= 1 { return String(format: "%.1f GB", gb) }
+        let mb = Double(bytes) / 1_048_576
+        return String(format: "%.0f MB", mb)
+    }
+}
+
+// MARK: - llama-server Installer
+
+private struct LlamaInstallerSection: View {
+    private var installer: LlamaInstaller { LlamaInstaller.shared }
+
+    var body: some View {
+        switch installer.phase {
+        case .unknown:
+            EmptyView()
+                .onAppear { installer.checkAvailability() }
+
+        case .available:
+            EmptyView()
+
+        case .unavailable:
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("llama-server not found", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Color.statusWarning)
+                        .font(.callout.weight(.medium))
+                    Text("The local AI engine is not installed. Parrot can install it automatically via Homebrew, or download a prebuilt binary from GitHub.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Install llama-server") { installer.install() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                }
+                .padding(.vertical, 2)
+            } header: {
+                Label("Engine Setup", systemImage: "wrench.and.screwdriver")
+            }
+
+        case .installing(let progress, let message):
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(message)
+                        .font(.callout)
+                    if progress < 0 {
+                        ProgressView()
+                            .progressViewStyle(.linear)
+                    } else {
+                        ProgressView(value: progress)
+                            .progressViewStyle(.linear)
+                    }
+                    Text("Do not close the app while installing.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 2)
+            } header: {
+                Label("Engine Setup", systemImage: "wrench.and.screwdriver")
+            }
+
+        case .failed(let message):
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Installation failed", systemImage: "xmark.circle.fill")
+                        .foregroundStyle(Color.statusError)
+                        .font(.callout.weight(.medium))
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Button("Try Again") { installer.install() }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                        Button("Install Homebrew first…") {
+                            NSWorkspace.shared.open(URL(string: "https://brew.sh")!)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+                .padding(.vertical, 2)
+            } header: {
+                Label("Engine Setup", systemImage: "wrench.and.screwdriver")
+            }
+        }
+    }
+}
+
+// MARK: - Key Fields
+
+private struct OpenAIKeyField: View {
+    let prefs: PreferencesStore
+    @State private var localKey: String = ""
+
+    var body: some View {
+        SecureField("API Key OpenAI", text: $localKey)
+            .onAppear { localKey = prefs.openAIAPIKey }
+            .onSubmit { prefs.openAIAPIKey = localKey }
+            .onDisappear { prefs.openAIAPIKey = localKey }
+    }
+}
+
+private struct OpenRouterKeyField: View {
+    let prefs: PreferencesStore
+    @State private var localKey: String = ""
+
+    var body: some View {
+        SecureField("API Key OpenRouter", text: $localKey)
+            .onAppear { localKey = prefs.openRouterAPIKey }
+            .onSubmit { prefs.openRouterAPIKey = localKey }
+            .onDisappear { prefs.openRouterAPIKey = localKey }
+    }
+}
+
+#Preview {
+    ModelsTab(prefs: PreferencesStore.shared, serverIsRunning: false)
+}
