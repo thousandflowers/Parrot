@@ -98,44 +98,80 @@ Parrot uses the macOS Accessibility API to read and write text directly in the f
 
 ## Features
 
-**Correction modes** — Grammar, Fluency, Translate, Writing coach, and fully custom prompts. Bind any mode to a shortcut.
+**Correction modes** — Grammar, Fluency, Grammar+Fluency combined, Translate, Writing coach, De-Slop (strips AI hedging and filler), AI Prompt Optimizer (reformats text into a cleaner prompt), and fully custom prompts. Bind any mode to a keyboard shortcut.
 
-**Diff panel** — See exactly which words changed, highlighted in green. Toggle to a clean result view. One-click apply, explain, translate, or undo.
+**Span-based diff panel** — Each correction is a standalone span: accept or reject individual changes instead of the whole suggestion. Every span shows a source badge (⚡ deterministic rule, 🔤 LanguageTool, 📖 Harper, 🤖 LLM) and an inline reason. Toggle to a clean result view. One-click apply, explain, translate, or undo.
+
+**Hybrid correction engine** — Four layers, no unnecessary LLM calls: deterministic rules for obvious errors → LanguageTool for 500+ grammar rules across 25+ languages (fully offline) → Harper for advanced English grammar (offline binary) → LLM for complex rewrites. Each layer only runs when the previous one isn't enough.
+
+**StyleProfiler** — Detects your writing style (formal, conversational, technical, narrative) and tone from a browser URL or pasted text, then adapts suggestions to match it.
+
+**Learns your style — offline.** Every time you reject a correction, Parrot logs the pair locally in `~/Library/Application Support/Parrot/feedback.jsonl`. After enough rejections it detects patterns (e.g. you always reject *"qui" → "qua"*) and injects them as a style note into future LLM prompts — so the same correction is not suggested again. No model is retrained; no data leaves your Mac. The log is capped at 10 MB and rotated automatically.
+
+**Smart Expand** — Detects draft emails and short notes, learns contact names from your macOS Contacts, and expands them into full messages with the right tone and length.
+
+**Inline annotations** — Real-time underlines appear as you pause typing, without needing to trigger a shortcut. Hover over an underline to see the suggestion and apply it with one click. Deep accessibility tree scanning can be toggled per app. Enable hover-only mode to keep underlines invisible until you need them.
 
 **Flows** — Chain multiple steps into a single action: *grammar → simplify → translate to French*. Save flows and trigger them with a shortcut.
 
-**Floating Editor** — A full split-screen editor for longer texts. Includes dictation input, file import, and a **Story Analyzer** that scores narrative structure, pacing, and style for manuscripts over 100 words.
+**Knowledge Base** — Store reference documents (style guides, glossaries, brand voice examples). Parrot automatically finds the most relevant entries for your current text and injects them as context into LLM prompts, so suggestions stay consistent with your terminology.
 
-**Intelligence** — Language auto-detection (50+ languages), per-app rules, real-time mode (auto-checks as you pause typing), correction history, ignore list. Grammar mode targets minimum changes and preserves verb tense, mood, gender, and voice — corrections are surgical, not rewrites. Article and determiner allomorphy (Italian *un/uno/il/lo/i/gli*, French contractions, English *a/an*) handled correctly across all supported languages.
+**Plagiarism detection** — Checks text against your Knowledge Base (Jaccard similarity), and optionally uses the LLM to identify AI-generated patterns and copied phrasing.
+
+**Floating Editor** — A full split-screen editor for longer texts. Includes dictation input (macOS Speech framework), file import, and a **Story Analyzer** that scores narrative structure, pacing, and style for manuscripts over 100 words.
+
+**Per-app rules** — Assign a different prompt, backend, or language to any app by bundle ID. Add the frontmost app with one click. Enable or disable rules without deleting them.
+
+**Custom rules** — Define regex patterns with backreference support, case sensitivity, and per-language filtering. Applied before any LLM call.
+
+**Presets** — Save language + model + temperature combinations and bind them to shortcuts for instant switching.
+
+**Export / Import** — Back up or share your entire configuration as JSON. Choose exactly which sections to include: Flows, Custom Prompts, Presets, App Rules, Shortcuts, Preferences.
+
+**Intelligence** — Language auto-detection (50+ languages, with CJK and RTL optimizations), real-time mode, correction history (200 entries), ignore list, response caching. Grammar mode targets minimum changes and preserves verb tense, mood, gender, and voice. Smart translation target detection infers target language from context (browser URL, app name, surrounding text) without a setting to configure.
 
 **Privacy and sync** — iCloud sync for settings and history across your Macs. Local-only mode keeps everything on device. API keys stored in Keychain, never on disk.
 
-**Backends** — llama.cpp (bundled, default), Apple Intelligence (macOS 26+, no download needed), Ollama, OpenAI, OpenRouter.
+**Backends** — llama.cpp (bundled, default), Apple Intelligence (macOS 26+, automatic fallback when llama-server is unavailable), LanguageTool (offline, bundled), Harper (offline, bundled), Ollama, OpenAI, OpenRouter. Model downloads from HuggingFace with optional token support (speeds downloads from ~500 KB/s to ~50 MB/s).
 
 ---
 
 ## Status
 
-**Current release: 0.9.2**
+**Current release: 0.9.3**
 
 | Feature | Status |
 |---|---|
-| Grammar / Fluency / Translate correction | ✔ shipped |
+| Grammar / Fluency / Translate / Coach / De-Slop / AI Prompt Optimizer | ✔ shipped |
+| Span-based diff panel (per-fix accept/reject, source badges) | ✔ shipped |
+| Hybrid engine: rules + LanguageTool + Harper + LLM | ✔ shipped |
+| Inline annotations (real-time underlines, hover popup) | ✔ shipped |
+| StyleProfiler + offline style learning from rejections | ✔ shipped |
+| Smart Expand — draft-to-full-email with Contacts integration | ✔ shipped |
+| Smart translation target detection | ✔ shipped |
+| Knowledge Base with context injection | ✔ shipped |
+| Plagiarism detection | ✔ shipped |
+| Flows, Story Analyzer | ✔ shipped |
+| Per-app rules, Custom rules (regex), Presets | ✔ shipped |
+| Export / Import configuration (JSON) | ✔ shipped |
 | Offline local LLM (llama-server bundled) | ✔ shipped |
-| Apple Intelligence backend (macOS 26) | ✔ shipped |
-| Flows, Story Analyzer, Knowledge Base | ✔ shipped |
+| Apple Intelligence backend (macOS 26, auto-fallback) | ✔ shipped |
 | iCloud sync | ✔ shipped |
 | Homebrew cask | ✔ shipped |
+| Animated menu bar icon | ✔ shipped |
 | Notarized release (no right-click needed) | ◻︎ in progress |
 | Mac App Store | ◻︎ planned |
 
-### What's new in 0.9.2
+### What's new in 0.9.3
 
-- **Grammar quality** — fixed obvious syntax errors being missed due to over-aggressive validation guards; error-heavy sentences now correct fully
-- **Article allomorphy** — *un/uno*, *il/lo*, *i/gli* (IT), *a/an* (EN), *de le/du* (FR) handled correctly without hard-coded rules
-- **No tense/mood/gender changes** — grammar mode now preserves verb tense, subjunctive, conditional, and grammatical gender exactly
-- **WhatsApp and Electron apps** — text replacement now works in WhatsApp, Slack, Discord, VS Code, Notion, and all other Electron-based apps
-- **macOS 26 stability** — fixed constraint-loop crash (`NSHostingView` re-entrancy) on macOS Tahoe
+- **Span-based UI** — accept or reject individual corrections instead of the whole suggestion; each span shows its source (⚡ rule / 🔤 LanguageTool / 🤖 LLM) and a reason
+- **LanguageTool integration** — 500+ grammar rules, 25+ languages, runs fully offline with no extra download
+- **Hybrid pipeline** — deterministic rules → LanguageTool → LLM, so fast rules fire instantly and the LLM is only called when needed
+- **StyleProfiler** — detects your writing tone from a URL or sample text, adapts suggestions to match your style
+- **Smart Expand** — turns draft notes and short email stubs into full messages; learns contact names from macOS Contacts
+- **Smart translation target** — infers target language from browser URL, app context, and recent messages; no manual language setting needed
+- **Apple Intelligence auto-fallback** — if llama-server fails to start, Parrot falls back to Apple Intelligence on macOS 26 automatically
+- **Animated menu bar bird** — the menu bar icon animates while a correction is in progress
 
 ---
 
