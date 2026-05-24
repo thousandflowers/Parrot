@@ -4,22 +4,10 @@ import Foundation
 @MainActor
 enum NativeGrammarEngine {
     private static func spellCheckerLocale(for language: String) -> String {
-        let primary = language.split(separator: "-").first.map(String.init) ?? language
-        switch primary {
-        case "en": return "en_US"
-        case "it": return "it_IT"
-        case "fr": return "fr_FR"
-        case "de": return "de_DE"
-        case "es": return "es_ES"
-        case "pt": return "pt_BR"
-        case "ru": return "ru_RU"
-        case "nl": return "nl_NL"
-        case "pl": return "pl_PL"
-        case "sv": return "sv_SE"
-        case "da": return "da_DK"
-        case "nb", "no": return "nb_NO"
-        default: return language
-        }
+        let available = NSSpellChecker.shared.availableLanguages
+        if available.contains(language) { return language }
+        let primary = String(language.split(separator: "-").first ?? Substring(language))
+        return available.first(where: { $0.hasPrefix(primary) }) ?? language
     }
 
     static func check(_ text: String, language: String) -> [CorrectionSpan] {

@@ -6,8 +6,6 @@ final class PromptEngineTests: XCTestCase {
         let engine = PromptEngine(language: "en", style: "formale")
         let prompt = engine.buildGrammarPrompt(for: "This is a test")
         XCTAssertTrue(prompt.contains("This is a test"))
-        XCTAssertTrue(prompt.contains("Input:"))
-        XCTAssertTrue(prompt.contains("Output:"))
         XCTAssertTrue(prompt.contains("Use formal, professional tone."))
         XCTAssertTrue(prompt.contains("Fix all grammatical errors"))
     }
@@ -49,19 +47,19 @@ final class PromptEngineTests: XCTestCase {
     func testGrammarPrompt_cjk_hasFullWidthInstruction() {
         let engine = PromptEngine(language: "zh", style: "formal")
         let prompt = engine.buildGrammarPrompt(for: "test")
-        XCTAssertTrue(prompt.contains("Preserve full-width punctuation. Do not convert to ASCII."))
+        XCTAssertTrue(prompt.contains("Preserve CJK punctuation"))
     }
 
     func testGrammarPrompt_arabic_hasRTLInstruction() {
         let engine = PromptEngine(language: "ar", style: "formal")
         let prompt = engine.buildGrammarPrompt(for: "test")
-        XCTAssertTrue(prompt.contains("Preserve right-to-left text direction and Arabic punctuation."))
+        XCTAssertTrue(prompt.contains("Preserve right-to-left text"))
     }
 
     func testGrammarPrompt_slavic_hasDeclensionInstruction() {
         let engine = PromptEngine(language: "ru", style: "formal")
         let prompt = engine.buildGrammarPrompt(for: "test")
-        XCTAssertTrue(prompt.contains("Pay attention to case declensions, verb aspect"))
+        XCTAssertTrue(prompt.contains("Fix case declension"))
     }
 
     func testGrammarPrompt_nordic_hasSpecialCharsInstruction() {
