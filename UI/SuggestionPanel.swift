@@ -438,7 +438,15 @@ final class SuggestionPanelController {
             spans: spans
         ) { [weak self] acceptedSpans in
             guard let self else { return }
-            let corrected = SpanApplicator.apply(spans: acceptedSpans, to: result.originalText)
+            // Accept-all: use authoritative corrected text (avoids offset inaccuracies in span map).
+            // Partial accept: reconstruct via SpanApplicator (rule spans are offset-correct; LLM spans
+            // may be slightly off if rule corrections changed the text, but partial accept is rare).
+            let corrected: String
+            if acceptedSpans.count == spans.count {
+                corrected = result.correctedText
+            } else {
+                corrected = SpanApplicator.apply(spans: acceptedSpans, to: result.originalText)
+            }
             var finalResult = CorrectionResult(
                 original: result.originalText,
                 corrected: corrected,

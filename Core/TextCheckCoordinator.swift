@@ -161,16 +161,16 @@ struct TextCheckCoordinator: Sendable {
                 language: language
             )
 
-            // Merge: rule spans + LLM diff spans
+            // Merge: rule spans + LLM diff spans (for UI display only)
             let llmSpans = spansFromCorrectionResult(llmResult, original: ruleResult.text)
             let allSpans = SpanMerger.merge(ruleMerged + llmSpans)
-            let correctedText = allSpans.isEmpty
-                ? llmResult.correctedText
-                : SpanApplicator.apply(spans: allSpans, to: text)
 
+            // llmResult.correctedText is authoritative — it already incorporates both rule
+            // corrections and LLM corrections. Never reconstruct final text from spans:
+            // span offsets can be inaccurate for large rewrites and produce garbled output.
             var spanResult = CorrectionResult(
                 original: text,
-                corrected: correctedText,
+                corrected: llmResult.correctedText,
                 modelID: llmResult.modelID,
                 confidence: llmResult.confidence,
                 promptType: effectiveType.label,
@@ -349,6 +349,21 @@ struct TextCheckCoordinator: Sendable {
 
     private func spansFromCorrectionResult(_ result: CorrectionResult, original: String) -> [CorrectionSpan] {
         guard result.hasChanges, let ops = result.diffOperations else { return [] }
+
+        // Large rewrites: fine-grained span mapping breaks down when most words change.
+        // Fall back to a single whole-text replacement span so the UI stays correct.
+        let origWordCount = original.split(whereSeparator: \.isWhitespace).count
+        if origWordCount > 0 && Double(ops.count) / Double(origWordCount) > 0.5 {
+            return [CorrectionSpan(
+                range: NSRange(location: 0, length: (original as NSString).length),
+                original: original,
+                replacement: result.correctedText,
+                reason: "AI correction",
+                confidence: result.confidence ?? 0.85,
+                source: .llm
+            )]
+        }
+
         return ops.compactMap { op in
             switch op.type {
             case .insert:

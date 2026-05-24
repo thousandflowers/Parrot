@@ -248,17 +248,17 @@ struct MenuBarView: View {
     private var actionsSection: some View {
         DisclosureGroup(isExpanded: $actionsExpanded) {
             VStack(spacing: 0) {
-                MenuAction(icon: "text.badge.checkmark", title: "Check Grammar", iconColor: .accentGreen, shortcut: shortcutString(prefs.shortcutGrammar)) { checkGrammar() }
+                MenuAction(icon: "text.badge.checkmark", title: "Check Grammar", iconColor: .accentGreen, shortcut: shortcutString(prefs.shortcutGrammar), hint: "Fix grammatical errors in selected text") { checkGrammar() }
                 Divider().padding(.leading, 44)
-                MenuAction(icon: "sparkles", title: "Check Fluency", iconColor: .secondary, shortcut: shortcutString(prefs.shortcutFluency)) { checkFluency() }
+                MenuAction(icon: "sparkles", title: "Check Fluency", iconColor: .secondary, shortcut: shortcutString(prefs.shortcutFluency), hint: "Improve clarity and flow of selected text") { checkFluency() }
                 Divider().padding(.leading, 44)
-                MenuAction(icon: "text.badge.star", title: "Grammar + Fluency", iconColor: .secondary, shortcut: shortcutString(prefs.shortcutGrammarFluency)) { checkGrammarFluency() }
+                MenuAction(icon: "text.badge.star", title: "Grammar + Fluency", iconColor: .secondary, shortcut: shortcutString(prefs.shortcutGrammarFluency), hint: "Fix grammar and improve fluency in one pass") { checkGrammarFluency() }
                 Divider().padding(.leading, 44)
-                MenuAction(icon: "character.book.closed", title: "Translate", iconColor: .secondary, shortcut: shortcutString(prefs.shortcutTranslate)) { checkTranslate() }
+                MenuAction(icon: "character.book.closed", title: "Translate", iconColor: .secondary, shortcut: shortcutString(prefs.shortcutTranslate), hint: "Translate selected text") { checkTranslate() }
                 Divider().padding(.leading, 44)
-                MenuAction(icon: "magnifyingglass", title: "Plagiarism Check", iconColor: .statusWarning) { checkPlagiarism() }
+                MenuAction(icon: "magnifyingglass", title: "Plagiarism Check", iconColor: .statusWarning, hint: "Check selected text for copied content") { checkPlagiarism() }
                 Divider().padding(.leading, 44)
-                MenuAction(icon: "text.cursor", title: "Open Editor", iconColor: .secondary, shortcut: shortcutString(prefs.shortcutEditor)) { openEditor() }
+                MenuAction(icon: "text.cursor", title: "Open Editor", iconColor: .secondary, shortcut: shortcutString(prefs.shortcutEditor), hint: "Open floating editor for longer texts") { openEditor() }
             }
         } label: {
             sectionLabel("ACTIONS", isExpanded: actionsExpanded)
@@ -372,6 +372,7 @@ private struct MenuAction: View {
     let title: String
     var iconColor: Color? = nil
     var shortcut: String? = nil
+    var hint: String? = nil
     let action: () -> Void
 
     var body: some View {
@@ -379,6 +380,9 @@ private struct MenuAction: View {
             MenuActionLabel(icon: icon, title: title, iconColor: iconColor, shortcut: shortcut)
         }
         .buttonStyle(MenuRowButtonStyle())
+        .accessibilityLabel(title)
+        .accessibilityHint(hint ?? "")
+        .accessibilityAddTraits(.isButton)
     }
 }
 

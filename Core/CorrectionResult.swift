@@ -92,6 +92,28 @@ struct CorrectionResult: Identifiable, Sendable, Codable {
         let diff = corrTokens.map(\.text).difference(from: origTokens.map(\.text))
         guard !diff.isEmpty else { return nil }
 
+        // Build index sets so we can align corrected tokens back to original positions.
+        // .remove offsets are in the original array; .insert offsets are in the corrected array.
+        var removedOrigIdxs = Set<Int>()
+        var insertedCorrIdxs = Set<Int>()
+        for change in diff {
+            switch change {
+            case .remove(let off, _, _): removedOrigIdxs.insert(off)
+            case .insert(let off, _, _): insertedCorrIdxs.insert(off)
+            }
+        }
+
+        // Map each corrected-token index that is NOT inserted to the corresponding original-token
+        // char offset. Kept tokens appear in the same relative order in both sequences.
+        var corrToOrigCharOffset: [Int: Int] = [:]
+        var origKeptIter = origTokens.indices.filter { !removedOrigIdxs.contains($0) }.makeIterator()
+        for ci in 0..<corrTokens.count {
+            guard !insertedCorrIdxs.contains(ci) else { continue }
+            if let oi = origKeptIter.next() {
+                corrToOrigCharOffset[ci] = origTokens[oi].charOffset
+            }
+        }
+
         var ops: [DiffOp] = []
         for change in diff {
             switch change {
@@ -101,13 +123,14 @@ struct CorrectionResult: Identifiable, Sendable, Codable {
                     : (origTokens.last.map { $0.charOffset + $0.text.count } ?? 0)
                 ops.append(DiffOp(type: .delete, offset: offset, length: word.count, replacement: nil))
             case .insert(let resultOffset, let word, _):
-                let offset: Int
-                if resultOffset < origTokens.count {
-                    offset = origTokens[resultOffset].charOffset
-                } else if let last = origTokens.last {
-                    offset = last.charOffset + last.text.count
-                } else {
-                    offset = 0
+                // Find the last kept (non-inserted) corrected token before this insert and use its
+                // original char offset as the insertion point, appending after that token's length.
+                var offset: Int = 0
+                for ci in stride(from: resultOffset - 1, through: 0, by: -1) {
+                    if let origOffset = corrToOrigCharOffset[ci] {
+                        offset = origOffset + corrTokens[ci].text.count
+                        break
+                    }
                 }
                 ops.append(DiffOp(type: .insert, offset: offset, length: word.count, replacement: String(word)))
             }
