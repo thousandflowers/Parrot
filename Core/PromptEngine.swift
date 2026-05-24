@@ -185,6 +185,7 @@ struct PromptEngine {
         if !extra.isEmpty { parts.append(extra) }
         if !styleLine.isEmpty { parts.append(styleLine) }
         if let custom = customInstruction { parts.append(custom) }
+        if let styleHint = StyleProfiler.buildHint(language: language) { parts.append(styleHint) }
         if !examples.isEmpty { parts.append("\nExamples:\n\(examples)") }
         parts.append("\n<TEXT>\(safeText)</TEXT>")
 
@@ -391,6 +392,19 @@ struct PromptEngine {
         return lines.joined(separator: "\n")
     }
 
+    func buildCombinedPrompt(for text: String) -> String {
+        let extra = grammarFamilyInstruction
+        let styleLine = styleInstruction
+        let safeText = escapeForPrompt(text)
+        var parts: [String] = []
+        parts.append("Fix all grammatical errors AND improve the fluency and natural flow of the text inside <TEXT>. Fix: misspellings, wrong verb forms, wrong agreement, broken phrases. Also: improve awkward phrasing, vary repetitive sentence structure, smooth transitions. Preserve the author's voice and original meaning — do not add information or change the intent. Output only the corrected text in the same language as the input.")
+        if !extra.isEmpty { parts.append(extra) }
+        if !styleLine.isEmpty { parts.append(styleLine) }
+        if let styleHint = StyleProfiler.buildHint(language: language) { parts.append(styleHint) }
+        parts.append("\n<TEXT>\(safeText)</TEXT>")
+        return parts.joined(separator: "\n")
+    }
+
     func buildExplainPrompt(original: String, corrected: String, customInstruction: String? = nil) -> String {
         let styleLine = styleInstruction
         let langName = englishLanguageName(for: language)
@@ -497,6 +511,8 @@ struct PromptEngine {
                 result += "\n<CUSTOM>\(instruction)</CUSTOM>"
             }
             return result
+        case .grammarAndFluency:
+            return buildCombinedPrompt(for: text)
         case .deSlop:
             return buildDeSlopPrompt(for: text)
         case .aiPrompt:

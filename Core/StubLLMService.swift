@@ -23,6 +23,8 @@ final class StubLLMService: LLMService, Sendable {
             fakeCorrection = "[STUB · Translation to \(lang)]: \(text)"
         case .deSlop:
             fakeCorrection = applyGrammarCorrections(text) + "\n\n---\n[STUB · De-slopped]"
+        case .grammarAndFluency:
+            fakeCorrection = applyFluencyCorrections(applyGrammarCorrections(text))
         case .aiPrompt:
             fakeCorrection = "[STUB · AI Prompt optimized]: \(applyGrammarCorrections(text))"
         }
@@ -62,7 +64,7 @@ final class StubLLMService: LLMService, Sendable {
         AsyncThrowingStream { continuation in
             let corrected = switch promptType {
             case .grammar, .custom: applyGrammarCorrections(text)
-            case .fluency: applyFluencyCorrections(text)
+            case .fluency, .grammarAndFluency: applyFluencyCorrections(text)
             case .coach: "[STUB · Coach]: \(applyGrammarCorrections(text))"
             case .explain: "Stub explanation..."
             case .translation(let lang): "[STUB · Translation to \(lang)]: \(text)"

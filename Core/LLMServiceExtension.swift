@@ -152,6 +152,10 @@ extension LLMService {
             prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
             temperature = Constants.fluencyTemperature + temperatureOffset
             systemPrompt = "You are a writing assistant. Rewrite text to improve readability, flow, and naturalness. Preserve the original meaning exactly — do not add, invent, or assume any information not in the original. Output only the rewritten text. Keep the exact same language as the input — do NOT translate to English or any other language."
+        case .grammarAndFluency:
+            prompt = engine.buildCombinedPrompt(for: text)
+            temperature = (Constants.grammarTemperature + Constants.fluencyTemperature) / 2.0 + temperatureOffset
+            systemPrompt = "You are a proofreader and writing assistant. Fix all grammatical errors AND improve the fluency and flow of the text. Preserve the original meaning exactly — do not add information or translate. Output only the corrected text in the same language as the input."
         case .coach:
             prompt = engine.buildCoachPrompt(for: text)
             temperature = Constants.grammarTemperature + temperatureOffset
@@ -196,7 +200,7 @@ extension LLMService {
         CrashLogger.log("performCorrection: done")
         let corrected: String
         switch promptType {
-        case .grammar, .fluency, .deSlop:
+        case .grammar, .fluency, .grammarAndFluency, .deSlop:
             let isFluency = promptType != .grammar
             corrected = validateCorrection(original: text, corrected: rawCorrected, isFluency: isFluency)
         default:

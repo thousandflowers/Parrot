@@ -116,7 +116,19 @@ struct TextCheckCoordinator: Sendable {
                 serviceType = resolved.serviceType
             }
 
-            let kbContext = await KnowledgeBase.shared.contextForPrompt(text: ruleResult.text)
+            var kbContext = await KnowledgeBase.shared.contextForPrompt(text: ruleResult.text)
+
+            // Task 15: Browser URL tone context — detect URL and inject domain hint
+            if let bundleID, await AppDetector.shared.isBrowser(bundleID: bundleID) {
+                let resolvedPID: pid_t
+                if let p = pid { resolvedPID = p } else { resolvedPID = await AccessibilityBridge.shared.lastKnownFrontAppPID() }
+                if resolvedPID != 0,
+                   let url = await AppDetector.shared.currentBrowserURL(pid: resolvedPID),
+                   let toneNote = AppDetector.toneNote(for: url) {
+                    kbContext = kbContext.map { $0 + "\n" + toneNote } ?? toneNote
+                }
+            }
+
             let finalPromptType: PromptType
             let finalCustomPrompt: CustomPrompt?
             if let kbContext, let cp = resolved.prompt {

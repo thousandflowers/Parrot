@@ -65,6 +65,16 @@ enum FeedbackLogger {
         }
     }
 
+    static func recentEntries(limit: Int = 30) -> [FeedbackEntry] {
+        guard let content = try? String(contentsOf: feedbackURL, encoding: .utf8) else { return [] }
+        let lines = content.components(separatedBy: "\n").filter { !$0.isEmpty }
+        let decoder = JSONDecoder()
+        return lines.suffix(limit).compactMap { line in
+            guard let data = line.data(using: .utf8) else { return nil }
+            return try? decoder.decode(FeedbackEntry.self, from: data)
+        }
+    }
+
     private static func rotateLog() {
         guard let handle = try? FileHandle(forReadingFrom: feedbackURL) else { return }
         defer { try? handle.close() }
