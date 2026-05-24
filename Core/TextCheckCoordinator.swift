@@ -53,17 +53,15 @@ struct TextCheckCoordinator: Sendable {
 
             let effectiveType: PromptType
             if type == .grammar {
-                let draftScore = DraftDetector.score(text)
-                if draftScore.isDraft {
-                    effectiveType = .expand
+                // DraftDetector auto-expand removed: silently changing grammar→expand
+                // confuses users and causes small models to hallucinate content.
+                // Expand must be triggered explicitly.
+                let isAIChat = await AppDetector.shared.isAIChatApp(bundleID: bundleID)
+                let autoDetect = await MainActor.run { PreferencesStore.shared.aiPromptAutoDetect }
+                if autoDetect && isAIChat {
+                    effectiveType = .aiPrompt
                 } else {
-                    let isAIChat = await AppDetector.shared.isAIChatApp(bundleID: bundleID)
-                    let autoDetect = await MainActor.run { PreferencesStore.shared.aiPromptAutoDetect }
-                    if autoDetect && isAIChat {
-                        effectiveType = .aiPrompt
-                    } else {
-                        effectiveType = type
-                    }
+                    effectiveType = type
                 }
             } else {
                 effectiveType = type

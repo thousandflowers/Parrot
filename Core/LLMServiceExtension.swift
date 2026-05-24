@@ -208,7 +208,18 @@ extension LLMService {
             let isFluency = promptType != .grammar
             corrected = validateCorrection(original: text, corrected: rawCorrected, isFluency: isFluency)
         default:
-            corrected = rawCorrected.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = rawCorrected.trimmingCharacters(in: .whitespacesAndNewlines)
+            switch promptType {
+            case .expand, .custom:
+                // Runaway generation guard: if the model generated more than 10× the input,
+                // something went wrong (repetition loop, assistant hallucination, etc.).
+                corrected = (!trimmed.isEmpty && trimmed.count <= text.count * 10) ? trimmed : text
+            case .translation(let _):
+                // Translations are approximately the same length — 4× guards against hallucination.
+                corrected = (!trimmed.isEmpty && trimmed.count <= max(200, text.count * 4)) ? trimmed : text
+            default:
+                corrected = trimmed
+            }
         }
         return CorrectionResult(
             original: text, corrected: corrected,
