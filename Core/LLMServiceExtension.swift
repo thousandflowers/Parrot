@@ -147,7 +147,7 @@ extension LLMService {
         case .grammar:
             prompt = engine.buildGrammarPrompt(for: text, customInstruction: nil)
             temperature = Constants.grammarTemperature + temperatureOffset
-            systemPrompt = "You are a proofreader. Fix only clear grammatical errors: misspellings, wrong verb forms, wrong agreement, missing required grammatical forms. Do NOT rephrase, reorder, or substitute synonyms. Do NOT translate under any circumstances — output must be in the SAME language as the input. If the text contains no errors, output it VERBATIM without any change. Output only the corrected text — no labels, no explanations, no quotes, no preamble."
+            systemPrompt = "You are a proofreader. Fix ONLY clear grammatical errors: misspellings, wrong verb forms, wrong agreement, missing required grammatical forms. ABSOLUTE RULES: (1) Every grammatically correct word MUST be kept unchanged. (2) Do NOT add any word, fact, or information not in the original text. (3) Preserve sentence type exactly — a statement ends with a period and stays a statement, a question ends with a question mark and stays a question. (4) Do NOT rephrase, reorder, or substitute synonyms. (5) Output must be in the SAME language as the input — do NOT translate. (6) If no errors exist, output the text VERBATIM. Output ONLY the corrected text — no labels, no explanations, no quotes."
         case .fluency:
             prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
             temperature = Constants.fluencyTemperature + temperatureOffset
@@ -155,7 +155,7 @@ extension LLMService {
         case .grammarAndFluency:
             prompt = engine.buildCombinedPrompt(for: text)
             temperature = (Constants.grammarTemperature + Constants.fluencyTemperature) / 2.0 + temperatureOffset
-            systemPrompt = "You are a proofreader and writing assistant. Fix all grammatical errors AND improve fluency and flow. Preserve the original meaning exactly — do not add information. Output must be in the SAME language as the input. Do NOT translate. Output only the corrected text."
+            systemPrompt = "You are a proofreader and writing assistant. Fix all grammatical errors AND improve fluency and flow. Preserve the original meaning exactly — do NOT add facts or information not in the original. Preserve sentence type (statement/question/exclamation). Output must be in the SAME language as the input. Do NOT translate. Output only the corrected text."
         case .coach:
             prompt = engine.buildCoachPrompt(for: text)
             temperature = Constants.grammarTemperature + temperatureOffset
@@ -272,12 +272,12 @@ extension LLMService {
             }
         }
 
-        // 5. Length sanity: grammar up to 4x, fluency up to 6x
-        let maxRatio = isFluency ? 6 : 4
+        // 5. Length sanity: grammar up to 2x (should not expand significantly), fluency up to 6x
+        let maxRatio = isFluency ? 6 : 2
         if text.count > original.count * maxRatio { return original }
 
-        // 6. For grammar: reject if >65% of words differ (over-correction)
-        if !isFluency && wordChangeFraction(original: original, corrected: text) > 0.65 {
+        // 6. For grammar: reject if >50% of words differ (over-correction / invented content)
+        if !isFluency && wordChangeFraction(original: original, corrected: text) > 0.50 {
             return original
         }
 
@@ -304,24 +304,28 @@ extension LLMService {
     }
 
     private func preservePunctuation(original: String, corrected: String) -> String {
-        let punctChars = CharacterSet(charactersIn: ".!?;:")
+        let sentenceEnders = CharacterSet(charactersIn: ".!?")
+        let allPunct = CharacterSet(charactersIn: ".!?;:")
         let trimmedCorrected = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let origLast = original.trimmingCharacters(in: .whitespacesAndNewlines).last,
-              let corrLast = trimmedCorrected.last,
-              origLast != corrLast,
+              origLast != trimmedCorrected.last,
               let origScalar = origLast.unicodeScalars.first,
-              let corrScalar = corrLast.unicodeScalars.first,
-              punctChars.contains(origScalar),
-              !punctChars.contains(corrScalar) else {
-            return corrected
+              sentenceEnders.contains(origScalar)
+        else { return corrected }
+        // Model changed punctuation type (e.g., "." → "?") — replace last char with original.
+        if let corrLast = trimmedCorrected.last,
+           let corrScalar = corrLast.unicodeScalars.first,
+           allPunct.contains(corrScalar) {
+            return String(trimmedCorrected.dropLast()) + String(origLast)
         }
+        // Model removed final punctuation — restore it.
         return trimmedCorrected + String(origLast)
     }
 
     func chatBody(
         model: String,
         prompt: String,
-        systemPrompt: String? = "You are a proofreader. Fix all grammatical errors in the input: misspellings, wrong verb forms, wrong agreement, missing required verb forms in subordinate clauses. You may add or replace words only to fix a clear grammatical error. Do NOT rephrase correct sentences, reorder words, or substitute synonyms. Output only the corrected text. No explanations, no translations, no prefixes, no quotes.",
+        systemPrompt: String? = "You are a proofreader. Fix only clear grammatical errors: misspellings, wrong verb forms, wrong agreement. Do NOT add information, do NOT change sentence type, do NOT rephrase, do NOT translate. Output only the corrected text.",
         temperature: Double,
         maxTokens: Int = 1024,
         stream: Bool = false
