@@ -1,5 +1,6 @@
 name: Release
 
+# Triggered by pushing a version tag: git tag v1.0.0 && git push origin v1.0.0
 on:
   push:
     tags:
@@ -8,83 +9,211 @@ on:
 permissions:
   contents: write
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+#
+#   APPLE_CERTIFICATE         base64-encoded Developer ID Application .p12
+#                             export from Keychain Access:
+#                             Keychain Access → My Certificates → right-click
+#                             "Developer ID Application: …" → Export → .p12
+#                             then: base64 -i cert.p12 | pbcopy
+#
+#   APPLE_CERTIFICATE_PASSWORD  passphrase you chose when exporting the .p12
+#
+#   APPLE_SIGNING_IDENTITY    full identity string, e.g.:
+#                             "Developer ID Application: Eugenio Zamengo (TEAMID)"
+#                             get it with: security find-identity -v -p codesigning
+#
+#   APPLE_TEAM_ID             10-character team ID from developer.apple.com/account
+#
+#   APPLE_ID                  your Apple ID email
+#
+#   APPLE_APP_PASSWORD        app-specific password from appleid.apple.com
+#                             (Security → App-Specific Passwords → Generate)
+#
+#   SPARKLE_PRIVATE_KEY       EdDSA private key from Sparkle's generate_keys tool
+#                             (already in use — keep as-is)
+#
+# Without the APPLE_* secrets the workflow builds an ad-hoc signed DMG.
+# Users of that build must right-click → Open on first launch.
+# ─────────────────────────────────────────────────────────────────────────────
+
 jobs:
   build-and-release:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Select Xcode
+      # ── Toolchain ──────────────────────────────────────────────────────────
+      - name: Select Xcode 16
         run: sudo xcode-select -s /Applications/Xcode_16.app
 
-      - name: Build release binary (arm64)
+      # ── Build ──────────────────────────────────────────────────────────────
+      - name: Swift build — arm64
         run: swift build -c release --arch arm64
 
-      - name: Build .app bundle
-        run: |
-          # Build unsigned app for GitHub release (users right-click → Open)
-          ./build-app.sh release
+      - name: Swift build — x86_64 (best-effort)
+        run: swift build -c release --arch x86_64 2>/dev/null || echo "[i] x86_64 unavailable"
+
+      # ── Certificate import ─────────────────────────────────────────────────
+      - name: Import Developer ID certificate
+        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
         env:
-          SIGNING_IDENTITY: ""
-
-      - name: Create ZIP for Sparkle
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
-          ditto -c -k --keepParent Parrot.app "Parrot_${{ github.ref_name }}.zip"
+          KEYCHAIN_PASS=$(openssl rand -base64 30)
+          echo "$APPLE_CERTIFICATE" | base64 --decode > /tmp/cert.p12
 
+          security create-keychain -p "$KEYCHAIN_PASS" build.keychain
+          security list-keychains -s build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASS" build.keychain
+          security import /tmp/cert.p12 \
+            -k build.keychain \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASS" build.keychain
+
+          echo "[✓] Certificate imported:"
+          security find-identity -v -p codesigning build.keychain
+          rm /tmp/cert.p12
+
+          # Stash password for cleanup step
+          echo "$KEYCHAIN_PASS" > /tmp/kp && chmod 600 /tmp/kp
+
+      # ── Resolve signing identity ───────────────────────────────────────────
+      - name: Resolve signing identity
+        id: identity
+        run: |
+          if [ -n "${{ secrets.APPLE_SIGNING_IDENTITY }}" ]; then
+            echo "value=${{ secrets.APPLE_SIGNING_IDENTITY }}" >> $GITHUB_OUTPUT
+          elif security find-identity -v -p codesigning build.keychain 2>/dev/null \
+               | grep -q "Developer ID Application"; then
+            ID=$(security find-identity -v -p codesigning build.keychain \
+              | grep "Developer ID Application" | head -1 \
+              | sed -n 's/.*"\(.*\)".*/\1/p')
+            echo "value=${ID}" >> $GITHUB_OUTPUT
+            echo "[✓] Signing identity: ${ID}"
+          else
+            echo "value=-" >> $GITHUB_OUTPUT
+            echo "[!] No Developer ID — building ad-hoc. Users must right-click → Open."
+          fi
+
+      # ── Build .app + DMG (sign + optionally notarize) ─────────────────────
+      - name: Build .app + DMG
+        env:
+          SIGNING_IDENTITY: ${{ steps.identity.outputs.value }}
+          NOTARIZE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NOTARIZE_APPLE_ID: ${{ secrets.APPLE_ID }}
+          NOTARIZE_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: ./build-app.sh release
+
+      # ── ZIP for Sparkle autoupdate ─────────────────────────────────────────
+      - name: Create Sparkle ZIP
+        run: |
+          VERSION="${{ github.ref_name }}"
+          ditto -c -k --keepParent Parrot.app "Parrot_${VERSION}.zip"
+
+      # ── Sparkle EdDSA signature ────────────────────────────────────────────
       - name: Generate Sparkle signature
         id: sparkle
-        run: |
-          if [ -n "${SPARKLE_PRIVATE_KEY:-}" ]; then
-            SIG=$(sparkle_sign "Parrot_${{ github.ref_name }}.zip" <<< "$SPARKLE_PRIVATE_KEY")
-            echo "edSignature=$SIG" >> $GITHUB_OUTPUT
-          else
-            echo "No SPARKLE_PRIVATE_KEY — skipping signature"
-          fi
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          VERSION="${{ github.ref_name }}"
+          ZIP="Parrot_${VERSION}.zip"
 
+          SIGN_UPDATE=""
+          for candidate in \
+            ".build/artifacts/sparkle/Sparkle/bin/sign_update" \
+            "$(command -v sign_update 2>/dev/null || true)"; do
+            [ -f "$candidate" ] && { SIGN_UPDATE="$candidate"; break; }
+          done
+
+          if [ -z "$SIGN_UPDATE" ]; then
+            echo "[!] sign_update not found — no Sparkle signature"
+            exit 0
+          fi
+
+          if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
+            printf '%s' "$SPARKLE_PRIVATE_KEY" > /tmp/sparkle.key
+            SIG_OUT=$("$SIGN_UPDATE" "$ZIP" -f /tmp/sparkle.key)
+            rm -f /tmp/sparkle.key
+          else
+            SIG_OUT=$("$SIGN_UPDATE" "$ZIP")
+          fi
+
+          SIG=$(echo "$SIG_OUT" | grep -oE 'edSignature="[^"]+"' | sed 's/edSignature="//;s/"$//')
+          if [ -n "$SIG" ]; then
+            echo "edSignature=${SIG}" >> $GITHUB_OUTPUT
+            echo "[✓] edSignature: ${SIG:0:24}..."
+          else
+            echo "[!] Could not extract signature from sign_update output"
+          fi
+
+      # ── appcast.xml ────────────────────────────────────────────────────────
       - name: Update appcast.xml
         if: steps.sparkle.outputs.edSignature != ''
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION_NUM="${VERSION#v}"
-          BUILD_NUM=$(date +%s)
-          FILE_SIZE=$(stat -f%z "Parrot_${VERSION}.zip")
-          PUB_DATE=$(LC_ALL=en_US date -u "+%a, %d %b %Y %H:%M:%S +0000")
+          BUILD_NUM=$(git rev-list --count HEAD)
+          ./scripts/generate_appcast.sh "$VERSION_NUM" "Parrot_${VERSION}.zip" "$BUILD_NUM"
 
-          # Generate new appcast entry
-          cat > appcast.xml << EOF
-          <?xml version="1.0" encoding="utf-8"?>
-          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
-              <channel>
-                  <title>Parrot</title>
-                  <link>https://github.com/thousandflowers/Parrot</link>
-                  <description>Parrot release notes</description>
-                  <language>en</language>
-                  <item>
-                      <title>Version ${VERSION_NUM}</title>
-                      <pubDate>${PUB_DATE}</pubDate>
-                      <sparkle:version>${BUILD_NUM}</sparkle:version>
-                      <sparkle:shortVersionString>${VERSION_NUM}</sparkle:shortVersionString>
-                      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-                      <enclosure
-                          url="https://github.com/thousandflowers/Parrot/releases/download/${VERSION}/Parrot_${VERSION}.zip"
-                          length="${FILE_SIZE}"
-                          type="application/octet-stream"
-                          sparkle:edSignature="${{ steps.sparkle.outputs.edSignature }}"
-                      />
-                      <sparkle:releaseNotesLink>https://github.com/thousandflowers/Parrot/releases/tag/${VERSION}</sparkle:releaseNotesLink>
-                  </item>
-              </channel>
-          </rss>
-          EOF
+      # ── Homebrew cask SHA ──────────────────────────────────────────────────
+      - name: Compute DMG SHA-256
+        id: dmg_sha
+        run: |
+          SHA=$(shasum -a 256 Parrot.dmg | awk '{print $1}')
+          echo "sha=${SHA}" >> $GITHUB_OUTPUT
+          echo "DMG SHA-256: ${SHA}"
 
+      - name: Update Homebrew cask
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION_NUM="${VERSION#v}"
+          SHA="${{ steps.dmg_sha.outputs.sha }}"
+          sed -i '' \
+            -e "s/version \"[^\"]*\"/version \"${VERSION_NUM}\"/" \
+            -e "s/sha256 [^$]*/sha256 \"${SHA}\"/" \
+            Casks/parrot.rb
+          echo "[✓] Casks/parrot.rb updated to ${VERSION_NUM} / ${SHA:0:16}..."
+
+      # ── Commit generated artefacts back to main ────────────────────────────
+      - name: Commit appcast + cask to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add appcast.xml Casks/parrot.rb 2>/dev/null || true
+          git diff --staged --quiet && echo "[i] Nothing to commit" && exit 0
+          git commit -m "chore: release ${{ github.ref_name }} — appcast + cask"
+          git push origin HEAD:main
+
+      # ── GitHub Release ─────────────────────────────────────────────────────
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          name: "Parrot ${{ github.ref_name }}"
+          generate_release_notes: true
+          draft: false
           files: |
             Parrot.dmg
             Parrot_${{ github.ref_name }}.zip
             appcast.xml
-          generate_release_notes: true
-          draft: false
+
+      # ── Cleanup ────────────────────────────────────────────────────────────
+      - name: Delete temporary keychain
+        if: always()
+        run: |
+          if [ -f /tmp/kp ]; then
+            KEYCHAIN_PASS=$(cat /tmp/kp)
+            security delete-keychain build.keychain 2>/dev/null || true
+            rm -f /tmp/kp
+          fi

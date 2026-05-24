@@ -306,21 +306,29 @@ struct TextCheckCoordinator: Sendable {
         pendingStateLock.withLock { state in
             state.task?.cancel()
             state.task = Task {
+                await MainActor.run { MenuBarBirdAnimator.shared.setState(.analyzing) }
                 do {
                     try Task.checkCancellation()
                     try await body()
                 } catch is CancellationError {
                     await MainActor.run {
+                        MenuBarBirdAnimator.shared.setState(.idle)
                         if SuggestionPanelController.shared.isLoading {
                             SuggestionPanelController.shared.close()
                         }
                     }
                 } catch let error as CorrectionError {
                     guard !Task.isCancelled else { return }
-                    await MainActor.run { SuggestionPanelController.shared.showError(error) }
+                    await MainActor.run {
+                        MenuBarBirdAnimator.shared.setState(.idle)
+                        SuggestionPanelController.shared.showError(error)
+                    }
                 } catch {
                     guard !Task.isCancelled else { return }
-                    await MainActor.run { SuggestionPanelController.shared.showError(.outputParsingFailed(raw: error.localizedDescription)) }
+                    await MainActor.run {
+                        MenuBarBirdAnimator.shared.setState(.idle)
+                        SuggestionPanelController.shared.showError(.outputParsingFailed(raw: error.localizedDescription))
+                    }
                 }
             }
         }

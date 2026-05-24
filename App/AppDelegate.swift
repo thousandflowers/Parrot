@@ -65,12 +65,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Custom Menu Bar Popover
 
+    @MainActor
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         guard let button = statusItem?.button else { return }
-        button.title = "🦜"
         button.action = #selector(togglePopover)
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        MenuBarBirdAnimator.shared.attach(to: button)
     }
 
     private func setupPopover() {

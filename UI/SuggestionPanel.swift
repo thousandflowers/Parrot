@@ -144,11 +144,13 @@ final class SuggestionPanelController {
 
     func show(result: CorrectionResult) {
         let state: SuggestionState = result.hasChanges ? .suggestion(result) : .noErrors
+        MenuBarBirdAnimator.shared.setState(result.hasChanges ? .found : .ok)
         showOrUpdate(result: result, state: state)
     }
 
     func showFluency(result: CorrectionResult) {
         let state: SuggestionState = result.hasChanges ? .fluencySuggestion(result) : .noErrors
+        MenuBarBirdAnimator.shared.setState(result.hasChanges ? .found : .ok)
         showOrUpdate(result: result, state: state)
     }
 
@@ -478,6 +480,7 @@ final class SuggestionPanelController {
 
     private func applyAndClose(result: CorrectionResult) {
         closeSpanPanel()
+        MenuBarBirdAnimator.shared.setState(.ok)
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
@@ -525,6 +528,7 @@ final class SuggestionPanelController {
             clickMonitor = nil
         }
         closeSpanPanel()
+        MenuBarBirdAnimator.shared.setState(.idle)
         guard let panel = panel else { return }
         self.panel = nil
         self.hostingView = nil
