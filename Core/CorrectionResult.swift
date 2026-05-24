@@ -18,6 +18,7 @@ struct CorrectionResult: Identifiable, Sendable, Codable {
     // state tied to the current correction session and should not be persisted.
     var replacementRange: CFRange? = nil
     var anchorRect: CGRect? = nil
+    var correctionSpans: [CorrectionSpan]? = nil
 
     enum CorrectionSource: String, Codable, Sendable {
         case ruleBased = "rule_based"

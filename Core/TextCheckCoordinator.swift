@@ -144,7 +144,7 @@ struct TextCheckCoordinator: Sendable {
                 ? llmResult.correctedText
                 : SpanApplicator.apply(spans: allSpans, to: text)
 
-            return CorrectionResult(
+            var spanResult = CorrectionResult(
                 original: text,
                 corrected: correctedText,
                 modelID: llmResult.modelID,
@@ -153,6 +153,8 @@ struct TextCheckCoordinator: Sendable {
                 detectedTone: detectedTone?.rawValue,
                 source: allSpans.isEmpty ? .llm : .hybrid
             )
+            spanResult.correctionSpans = allSpans.isEmpty ? nil : allSpans
+            return spanResult
         } onSuccess: { result in
             if type.isFluency && !result.hasChanges {
                 let noChangeResult = CorrectionResult(
@@ -166,6 +168,8 @@ struct TextCheckCoordinator: Sendable {
                     source: result.source
                 )
                 SuggestionPanelController.shared.showFluency(result: noChangeResult)
+            } else if let spans = result.correctionSpans, !spans.isEmpty {
+                SuggestionPanelController.shared.showSpans(result: result, spans: spans)
             } else {
                 show(result)
             }

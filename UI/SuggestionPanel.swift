@@ -52,6 +52,8 @@ final class SuggestionPanelController {
 
     private var panel: NSPanel?
     private var hostingView: FixedSizeHostingView<SuggestionView>?
+    private var spanPanel: NSPanel?
+    private var spanHostingView: NSHostingView<SpanSuggestionView>?
     private var currentResult: CorrectionResult?
     private var currentState: SuggestionState?
     private var explanationTask: Task<Void, Never>?
@@ -427,6 +429,73 @@ final class SuggestionPanelController {
         }
     }
 
+    func showSpans(result: CorrectionResult, spans: [CorrectionSpan]) {
+        close()
+        let view = SpanSuggestionView(
+            original: result.originalText,
+            spans: spans
+        ) { [weak self] acceptedSpans in
+            guard let self else { return }
+            let corrected = SpanApplicator.apply(spans: acceptedSpans, to: result.originalText)
+            var finalResult = CorrectionResult(
+                original: result.originalText,
+                corrected: corrected,
+                modelID: result.modelID,
+                confidence: result.confidence,
+                promptType: result.promptType
+            )
+            finalResult.replacementRange = result.replacementRange
+            finalResult.anchorRect = result.anchorRect
+            self.applyAndClose(result: finalResult)
+        } onDismiss: { [weak self] in
+            self?.closeSpanPanel()
+        }
+
+        let newPanel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 460),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        newPanel.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
+        newPanel.backgroundColor = .clear
+        newPanel.isOpaque = false
+        newPanel.hasShadow = true
+        newPanel.isMovableByWindowBackground = true
+        newPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+        let hv = NSHostingView(rootView: view)
+        hv.sizingOptions = []
+        spanHostingView = hv
+        newPanel.contentView = hv
+        spanPanel = newPanel
+
+        let origin = panelOrigin(panelSize: newPanel.frame.size)
+        newPanel.setFrameOrigin(origin)
+        newPanel.orderFrontRegardless()
+        animateIn(newPanel)
+    }
+
+    private func applyAndClose(result: CorrectionResult) {
+        closeSpanPanel()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText)
+                Task { await HistoryStore.shared.add(result: result) }
+            } catch {
+                showError(error as? CorrectionError ?? .textExtractionFailed(appName: "unknown"))
+            }
+        }
+    }
+
+    private func closeSpanPanel() {
+        guard let panel = spanPanel else { return }
+        spanPanel = nil
+        spanHostingView = nil
+        animateOut(panel) { panel.orderOut(nil) }
+    }
+
     func close() {
         undoTask?.cancel()
         undoTask = nil
@@ -438,6 +507,7 @@ final class SuggestionPanelController {
             NSEvent.removeMonitor(monitor)
             clickMonitor = nil
         }
+        closeSpanPanel()
         guard let panel = panel else { return }
         self.panel = nil
         self.hostingView = nil
