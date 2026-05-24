@@ -112,8 +112,22 @@ extension TextCheckCoordinator {
     }
 
     func checkTranslation() {
-        Task { @MainActor in
-            translateSelectedText(to: PreferencesStore.shared.translationLanguage)
+        runTask {
+            let prepared = try await prepareCheck()
+            let selRange = prepared.replacementRange ?? CFRange(location: 0, length: 0)
+            let targetLanguage = await TranslationTargetDetector.detect(
+                sourceLanguage: prepared.resolvedLanguage,
+                pid: prepared.capturedPID,
+                selectionRange: selRange
+            )
+            var result = try await RequestQueue.shared.enqueue(
+                text: prepared.text,
+                type: .translation(targetLanguage: targetLanguage),
+                priority: .manual
+            )
+            result.replacementRange = selRange
+            let finalResult = result
+            await MainActor.run { SuggestionPanelController.shared.show(result: finalResult) }
         }
     }
 
