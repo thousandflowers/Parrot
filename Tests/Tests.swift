@@ -996,3 +996,34 @@ final class CorrectionSpanTests: XCTestCase {
         XCTAssertEqual(result, "Ho sono andato a casa qual è.")
     }
 }
+
+final class LanguageToolInstallerTests: XCTestCase {
+    func testLanguageToolInstaller_installPathIsInsideAppSupport() {
+        let path = LanguageToolInstaller.binaryPath
+        XCTAssertTrue(path.path.contains("Application Support/Parrot"))
+    }
+
+    func testLanguageToolInstaller_isAvailable_doesNotCrash() {
+        let available = LanguageToolInstaller.isAvailable
+        XCTAssertTrue(available == true || available == false)
+    }
+}
+
+final class LanguageToolEngineTests: XCTestCase {
+    func testLanguageToolEngine_isAvailable_doesNotCrash() async {
+        let engine = LanguageToolEngine()
+        let available = await engine.isAvailable
+        XCTAssertTrue(available == true || available == false)
+    }
+
+    func testLanguageToolEngine_languageCodeMapping() {
+        XCTAssertEqual(LanguageToolEngine.ltLanguageCode(for: "it"), "it-IT")
+        XCTAssertEqual(LanguageToolEngine.ltLanguageCode(for: "en"), "en-US")
+        XCTAssertEqual(LanguageToolEngine.ltLanguageCode(for: "fr"), "fr-FR")
+        XCTAssertEqual(LanguageToolEngine.ltLanguageCode(for: "de"), "de-DE")
+        XCTAssertEqual(LanguageToolEngine.ltLanguageCode(for: "es"), "es-ES")
+        XCTAssertEqual(LanguageToolEngine.ltLanguageCode(for: "ru"), "ru-RU")
+        XCTAssertEqual(LanguageToolEngine.ltLanguageCode(for: "zh"), "zh-CN")
+        XCTAssertEqual(LanguageToolEngine.ltLanguageCode(for: "ja"), "ja-JP")
+    }
+}

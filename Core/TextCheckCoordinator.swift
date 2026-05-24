@@ -101,7 +101,13 @@ struct TextCheckCoordinator: Sendable {
                 }
             }
 
-            let ruleMerged = SpanMerger.merge(nativeSpans + ruleSpans + harperSpans)
+            // Layer 2: LanguageTool (when installed locally — 500+ rules, 25+ languages)
+            var ltSpans: [CorrectionSpan] = []
+            if await LanguageToolEngine.shared.isAvailable {
+                ltSpans = (try? await LanguageToolEngine.shared.check(text, language: language)) ?? []
+            }
+
+            let ruleMerged = SpanMerger.merge(nativeSpans + ruleSpans + harperSpans + ltSpans)
 
             let serviceType: ServiceType?
             if overrideService {
