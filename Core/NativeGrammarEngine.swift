@@ -35,6 +35,23 @@ enum NativeGrammarEngine {
                     let corrections = detail["NSGrammarCorrections"] as? [String] ?? []
                     let description = detail["NSGrammarUserDescription"] as? String ?? "Grammar error"
                     guard let replacement = corrections.first, replacement != original else { continue }
+
+                    // Reject the correction if the original is not actually a misspelling.
+                    // NSSpellChecker's Italian grammar rules mishandle enclitic pronouns
+                    // (e.g. "dammi" is valid Italian but checkGrammar suggests "dami").
+                    // Requiring the original to fail spell check filters these false positives
+                    // while keeping corrections where a real spelling error was flagged.
+                    let origSpellRange = checker.checkSpelling(
+                        of: original, startingAt: 0, language: locale,
+                        wrap: false, inSpellDocumentWithTag: tag, wordCount: nil)
+                    guard origSpellRange.location != NSNotFound else { continue }
+
+                    // Also require that the replacement is itself a valid word.
+                    let replSpellRange = checker.checkSpelling(
+                        of: replacement, startingAt: 0, language: locale,
+                        wrap: false, inSpellDocumentWithTag: tag, wordCount: nil)
+                    guard replSpellRange.location == NSNotFound else { continue }
+
                     spans.append(CorrectionSpan(
                         range: grammarRange, original: original, replacement: replacement,
                         reason: description, confidence: 0.80, source: .nativeGrammar))
