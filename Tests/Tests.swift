@@ -981,4 +981,18 @@ final class CorrectionSpanTests: XCTestCase {
         XCTAssertTrue(prompt.contains("original"))
         XCTAssertTrue(prompt.contains("Io andato."))
     }
+
+    func testSpanApplicator_reconstructsCorrectTextFromSpans() {
+        let original = "Ho andato a casa qual'è."
+        let spans: [CorrectionSpan] = [
+            CorrectionSpan(range: NSRange(location: 3, length: 6),
+                           original: "andato", replacement: "sono andato",
+                           reason: "ausiliare", confidence: 0.9, source: .llm),
+            CorrectionSpan(range: NSRange(location: 17, length: 6),
+                           original: "qual'è", replacement: "qual è",
+                           reason: "troncamento", confidence: 1.0, source: .ruleBased),
+        ]
+        let result = SpanApplicator.apply(spans: spans, to: original)
+        XCTAssertEqual(result, "Ho sono andato a casa qual è.")
+    }
 }

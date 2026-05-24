@@ -64,39 +64,44 @@ struct TextCheckCoordinator: Sendable {
                 effectiveType = type
             }
 
-            if !effectiveType.isFluency && effectiveType != .aiPrompt && effectiveType != .deSlop && effectiveType != .coach {
-                if (hasCustomFixes || hasRuleFixes) && language != "en" {
-                    return CorrectionResult(
-                        original: text,
-                        corrected: ruleResult.text,
-                        modelID: hasCustomFixes ? "custom+rules" : "rule_based",
-                        confidence: 1.0,
-                        promptType: effectiveType.label,
-                        detectedTone: detectedTone?.rawValue,
-                        source: .ruleBased
-                    )
-                }
+            // --- Span-based pipeline ---
+            // Layer 0: NSSpellChecker (main actor, fast, zero deps)
+            let nativeSpans: [CorrectionSpan] = await MainActor.run {
+                NativeGrammarEngine.check(text, language: language)
+            }
 
-                let harperAvailable = await HarperEngine.shared.isAvailable
-                if harperAvailable && language.hasPrefix("en") {
-                    do {
-                        let harperResult = try await HarperEngine.shared.check(ruleResult.text)
-                        if harperResult.hasFixes {
-                            return CorrectionResult(
-                                original: text,
-                                corrected: harperResult.text,
-                                modelID: "harper",
-                                confidence: 1.0,
-                                promptType: effectiveType.label,
-                                detectedTone: detectedTone?.rawValue,
-                                source: .ruleBased
-                            )
-                        }
-                    } catch {
-                        // Fall through to LLM
+            // Layer 1: Rule engine already ran above. Convert to spans.
+            let ruleSpans: [CorrectionSpan] = ruleResult.fixes.compactMap { fix in
+                guard let range = text.range(of: fix.original) else { return nil }
+                return CorrectionSpan(
+                    range: NSRange(range, in: text),
+                    original: fix.original,
+                    replacement: fix.corrected,
+                    reason: fix.reason,
+                    confidence: 1.0,
+                    source: .ruleBased
+                )
+            }
+
+            // Layer 1b: Harper (EN only)
+            var harperSpans: [CorrectionSpan] = []
+            let harperAvailable = await HarperEngine.shared.isAvailable
+            if harperAvailable && language.hasPrefix("en") {
+                if let harperResult = try? await HarperEngine.shared.check(ruleResult.text) {
+                    harperSpans = harperResult.fixes.map { fix in
+                        CorrectionSpan(
+                            range: fix.byteRange,
+                            original: fix.original,
+                            replacement: fix.corrected,
+                            reason: fix.message,
+                            confidence: 0.95,
+                            source: .ruleBased
+                        )
                     }
                 }
             }
+
+            let ruleMerged = SpanMerger.merge(nativeSpans + ruleSpans + harperSpans)
 
             let serviceType: ServiceType?
             if overrideService {
@@ -119,10 +124,28 @@ struct TextCheckCoordinator: Sendable {
                 finalCustomPrompt = resolved.prompt
             }
 
-            return try await RequestQueue.shared.enqueue(
+            // Layer 3: LLM always runs (short-circuit removed in Task 1)
+            let llmResult = try await RequestQueue.shared.enqueue(
                 text: ruleResult.text, type: finalPromptType, priority: .manual,
                 overrideServiceType: serviceType, overrideCustomPrompt: finalCustomPrompt,
                 language: language
+            )
+
+            // Merge: rule spans + LLM diff spans
+            let llmSpans = spansFromCorrectionResult(llmResult, original: ruleResult.text)
+            let allSpans = SpanMerger.merge(ruleMerged + llmSpans)
+            let correctedText = allSpans.isEmpty
+                ? llmResult.correctedText
+                : SpanApplicator.apply(spans: allSpans, to: text)
+
+            return CorrectionResult(
+                original: text,
+                corrected: correctedText,
+                modelID: llmResult.modelID,
+                confidence: llmResult.confidence,
+                promptType: effectiveType.label,
+                detectedTone: detectedTone?.rawValue,
+                source: allSpans.isEmpty ? .llm : .hybrid
             )
         } onSuccess: { result in
             if type.isFluency && !result.hasChanges {
@@ -280,6 +303,36 @@ struct TextCheckCoordinator: Sendable {
 
     func replaceOffset(for replacementRange: CFRange) -> Int {
         replacementRange.length > 0 ? replacementRange.location : 0
+    }
+
+    private func spansFromCorrectionResult(_ result: CorrectionResult, original: String) -> [CorrectionSpan] {
+        guard result.hasChanges, let ops = result.diffOperations else { return [] }
+        return ops.compactMap { op in
+            switch op.type {
+            case .insert:
+                guard let replacement = op.replacement, !replacement.isEmpty else { return nil }
+                return CorrectionSpan(
+                    range: NSRange(location: op.offset, length: 0),
+                    original: "",
+                    replacement: replacement,
+                    reason: "AI correction",
+                    confidence: result.confidence ?? 0.85,
+                    source: .llm
+                )
+            case .delete:
+                let nsRange = NSRange(location: op.offset, length: op.length)
+                guard let swiftRange = Range(nsRange, in: original) else { return nil }
+                let orig = String(original[swiftRange])
+                return CorrectionSpan(
+                    range: nsRange,
+                    original: orig,
+                    replacement: op.replacement ?? "",
+                    reason: "AI correction",
+                    confidence: result.confidence ?? 0.85,
+                    source: .llm
+                )
+            }
+        }
     }
 
     private func fetchSelectedTextAndRange(frontAppPID: pid_t?, attempt: Int) async throws -> (String, CFRange) {
