@@ -131,6 +131,7 @@ actor ModelManager: Sendable {
         if UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID)?.isEmpty != false {
             UserDefaults.standard.set(modelID, forKey: Constants.UserDefaultsKey.selectedModelID)
         }
+        invalidateCache()
     }
 
     func discoverExternalModels() -> [DiscoveredModel] {
