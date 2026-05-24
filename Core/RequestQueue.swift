@@ -137,11 +137,26 @@ actor RequestQueue {
                         }
                     }
                 }
+                // Last resort: Apple Intelligence fallback when local server is unavailable.
+                if let corrError = error as? CorrectionError, corrError.isRetryable,
+                   serviceType == .local || serviceType == .ollama {
+                    if #available(macOS 26.0, *), AppleIntelligenceService.shared.isAvailable {
+                        do {
+                            let aiFallback = try await AppleIntelligenceService.shared.correct(
+                                text: request.text, promptType: promptType, language: request.language)
+                            request.continuation.yield(.success(aiFallback))
+                            request.continuation.finish()
+                            continue
+                        } catch {
+                            // AI fallback also failed — propagate original error.
+                        }
+                    }
+                }
                 request.continuation.yield(.failure(error))
                 request.continuation.finish()
             }
         }
-        
+
         isProcessing = false
     }
 
