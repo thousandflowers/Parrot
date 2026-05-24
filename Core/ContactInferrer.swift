@@ -1,6 +1,7 @@
 import Foundation
-import NaturalLanguage
 
+/// Extracts contact info from an expanded message via a single LLM call.
+/// No keyword lists — the model handles all language-specific understanding.
 enum ContactInferrer {
     struct InferredContact {
         var name: String?
@@ -10,100 +11,59 @@ enum ContactInferrer {
         var closing: String?
     }
 
-    static func infer(from expandedText: String, draftHint: String) -> InferredContact {
-        let lower = expandedText.lowercased()
-        let formality = detectFormality(lower)
-        let name = extractName(from: expandedText)
-        let role = extractRole(from: draftHint + " " + expandedText)
-        let salutation = extractSalutation(from: expandedText)
-        let closing = extractClosing(from: expandedText)
+    private static let extractionTemplate = """
+    Extract contact information from the message below. \
+    Respond ONLY with a single valid JSON object — no explanation, no markdown.
+    Schema: {"name":string|null,"role":string|null,"formality":"formal"|"semiformal"|"informal","salutation":string|null,"closing":string|null}
+    Rules:
+    - name: recipient's name if stated, else null
+    - role: their role/title in plain language (e.g. "professor", "colleague", "manager"), else null
+    - formality: infer from vocabulary and register of the message
+    - salutation: the opening greeting line verbatim, else null
+    - closing: the farewell/sign-off line verbatim, else null
+    <MESSAGE>{{TEXT}}</MESSAGE>
+    """
+
+    static func extract(from expandedText: String) async -> InferredContact? {
+        guard let result = try? await RequestQueue.shared.enqueue(
+            text: expandedText,
+            type: .custom(name: "ContactExtract", template: extractionTemplate),
+            priority: .autoCheck,
+            language: ""
+        ) else { return nil }
+
+        return parse(result.correctedText)
+    }
+
+    private static func parse(_ raw: String) -> InferredContact? {
+        // Strip optional markdown fences the model might add
+        var json = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if json.hasPrefix("```") {
+            json = json.components(separatedBy: "\n").dropFirst().dropLast().joined(separator: "\n")
+        }
+        guard let data = json.data(using: .utf8),
+              let obj = try? JSONDecoder().decode(ContactJSON.self, from: data) else { return nil }
+
+        let formality: ContactProfile.Formality
+        switch obj.formality?.lowercased() {
+        case "formal":     formality = .formal
+        case "informal":   formality = .informal
+        default:           formality = .semiformal
+        }
         return InferredContact(
-            name: name,
-            role: role,
+            name: obj.name.flatMap { $0.isEmpty ? nil : $0 },
+            role: obj.role.flatMap { $0.isEmpty ? nil : $0 },
             formality: formality,
-            salutation: salutation,
-            closing: closing
+            salutation: obj.salutation.flatMap { $0.isEmpty ? nil : $0 },
+            closing: obj.closing.flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 
-    private static func detectFormality(_ lower: String) -> ContactProfile.Formality {
-        let formalMarkers = ["gentile", "egregio", "spettabile", "cordiali saluti",
-                             "distinti saluti", "le porgo", "la contatto", "la ringrazio"]
-        let informalMarkers = ["ciao", "salve!", "a presto", "un abbraccio", "grazie mille!",
-                               "ci sentiamo", "ti scrivo"]
-        let formalScore = formalMarkers.filter { lower.contains($0) }.count
-        let informalScore = informalMarkers.filter { lower.contains($0) }.count
-        if formalScore > informalScore { return .formal }
-        if informalScore > formalScore { return .informal }
-        return .semiformal
-    }
-
-    private static func extractName(from text: String) -> String? {
-        // Look for "Gentile Prof. Rossi" or "Caro Marco" patterns
-        let patterns = [
-            #"Gentile\s+(?:Prof(?:essore?)?\.?\s+|Dott(?:\.)?\.?\s+|Ing\.?\s+)?([A-Z][a-zA-Zàèìòù]+(?:\s+[A-Z][a-zA-Zàèìòù]+)?)"#,
-            #"Caro/a\s+([A-Z][a-zA-Zàèìòù]+)"#,
-            #"Caro\s+([A-Z][a-zA-Zàèìòù]+)"#,
-            #"Cara\s+([A-Z][a-zA-Zàèìòù]+)"#,
-        ]
-        for pattern in patterns {
-            if let regex = try? NSRegularExpression(pattern: pattern),
-               let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-               match.numberOfRanges > 1,
-               let range = Range(match.range(at: 1), in: text) {
-                return String(text[range])
-            }
-        }
-        return nil
-    }
-
-    private static func extractRole(from text: String) -> String? {
-        let lower = text.lowercased()
-        let roleMap: [(keyword: String, role: String)] = [
-            ("professor", "professore"),
-            ("prof ", "professore"),
-            ("dott.", "dottore"),
-            ("ingegner", "ingegnere"),
-            ("direttore", "direttore"),
-            ("responsabile", "responsabile"),
-            ("capo", "manager"),
-            ("collega", "collega"),
-            ("recruiter", "recruiter"),
-            ("hr", "HR"),
-            ("cliente", "cliente"),
-            ("fornitore", "fornitore"),
-        ]
-        for (keyword, role) in roleMap {
-            if lower.contains(keyword) { return role }
-        }
-        return nil
-    }
-
-    private static func extractSalutation(from text: String) -> String? {
-        // First non-empty line that looks like a salutation
-        let lines = text.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
-        for line in lines {
-            let low = line.lowercased()
-            if low.hasPrefix("gentile") || low.hasPrefix("caro") || low.hasPrefix("cara")
-                || low.hasPrefix("egregio") || low.hasPrefix("spettabile") {
-                return line.trimmingCharacters(in: CharacterSet(charactersIn: ","))
-            }
-        }
-        return nil
-    }
-
-    private static func extractClosing(from text: String) -> String? {
-        // Last meaningful line before empty lines at end
-        let lines = text.components(separatedBy: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        for line in lines.reversed() {
-            let low = line.lowercased()
-            if low.contains("saluti") || low.contains("cordialmente") || low.contains("a presto")
-                || low.contains("distinti") || low.contains("grazie") || low.contains("un saluto") {
-                return line
-            }
-        }
-        return nil
+    private struct ContactJSON: Decodable {
+        let name: String?
+        let role: String?
+        let formality: String?
+        let salutation: String?
+        let closing: String?
     }
 }

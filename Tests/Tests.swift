@@ -1046,39 +1046,49 @@ final class DraftDetectorTests: XCTestCase {
         XCTAssertFalse(score.isDraft, "Polished email should not be detected as draft")
     }
 
-    func testRoleKeywordExtraction() {
-        let score = DraftDetector.score("email al prof per informazioni esame")
-        XCTAssertEqual(score.likelyRecipient, "professor")
-    }
-
-    func testEmailMessageType() {
-        let score = DraftDetector.score("richiesta email informazioni professore")
-        XCTAssertEqual(score.messageType, .email)
+    func testDraftScore_isStatistical_notKeywordBased() {
+        // Same draft-like structure in different languages should all score as draft
+        let italian  = "richiesta informazioni esame colloquio"
+        let english  = "request info exam appointment"
+        let german   = "anfrage informationen prüfung termin"
+        let chinese  = "考试信息请求 预约"
+        for text in [italian, english, german, chinese] {
+            XCTAssertTrue(DraftDetector.score(text).isDraft, "'\(text)' should be draft")
+        }
     }
 }
 
-final class ContactInferrerTests: XCTestCase {
-    func testExtractFormalSalutation() {
-        let text = "Gentile Professore Rossi,\nLa contatto per...\nCordiali saluti"
-        let result = ContactInferrer.infer(from: text, draftHint: "prof rossi esame")
-        XCTAssertEqual(result.salutation, "Gentile Professore Rossi")
+final class ContactStoreTests: XCTestCase {
+    func testFindInText_matchesName() async {
+        let store = ContactStore()
+        let profile = ContactProfile(name: "Rossi", role: "professore")
+        await store.upsert(profile)
+        let found = await store.findInText("Scrivo al prof Rossi per l'esame")
+        XCTAssertEqual(found?.name, "Rossi")
     }
 
-    func testDetectFormalClosing() {
-        let text = "Gentile Professore,\nLa contatto per richiedere.\nCordiali saluti"
-        let result = ContactInferrer.infer(from: text, draftHint: "prof")
-        XCTAssertEqual(result.closing, "Cordiali saluti")
+    func testFindInText_matchesRole() async {
+        let store = ContactStore()
+        let profile = ContactProfile(name: "Bianchi", role: "direttore")
+        await store.upsert(profile)
+        let found = await store.findInText("Gentile direttore, la contatto per")
+        XCTAssertEqual(found?.name, "Bianchi")
     }
 
-    func testFormalityDetection_formal() {
-        let text = "Gentile Professore, Le porgo distinti saluti."
-        let result = ContactInferrer.infer(from: text, draftHint: "prof")
-        XCTAssertEqual(result.formality, .formal)
+    func testFindInText_noMatch_returnsNil() async {
+        let store = ContactStore()
+        let found = await store.findInText("testo senza corrispondenze")
+        XCTAssertNil(found)
     }
 
-    func testFormalityDetection_informal() {
-        let text = "Ciao Marco, ti scrivo per dirti grazie mille! A presto."
-        let result = ContactInferrer.infer(from: text, draftHint: "collega")
-        XCTAssertEqual(result.formality, .informal)
+    func testUpsertAndDelete() async {
+        let store = ContactStore()
+        let profile = ContactProfile(name: "Test User")
+        await store.upsert(profile)
+        let found = await store.findInText("Test User")
+        XCTAssertNotNil(found)
+        await store.delete(id: profile.id)
+        let gone = await store.findInText("Test User")
+        XCTAssertNil(gone)
     }
 }

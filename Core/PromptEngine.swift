@@ -518,7 +518,7 @@ struct PromptEngine {
         case .aiPrompt:
             return buildAIPromptPrompt(for: text)
         case .expand:
-            return buildExpandPrompt(for: text, messageType: nil, recipient: nil, contactProfile: nil)
+            return buildExpandPrompt(for: text, contactProfile: nil)
         }
     }
 
@@ -556,51 +556,32 @@ struct PromptEngine {
         """
     }
 
-    func buildExpandPrompt(
-        for text: String,
-        messageType: DraftDetector.MessageType?,
-        recipient: String?,
-        contactProfile: ContactProfile?
-    ) -> String {
+    func buildExpandPrompt(for text: String, contactProfile: ContactProfile?) -> String {
         let safeText = escapeForPrompt(text)
         let langName = englishLanguageName(for: language)
 
         var contextLines: [String] = []
-
-        if let profile = contactProfile {
-            contextLines.append("Recipient: \(profile.name)")
-            if !profile.role.isEmpty { contextLines.append("Role: \(profile.role)") }
-            contextLines.append("Formality: \(profile.formality.rawValue)")
-            contextLines.append("Preferred salutation: \(profile.salutation)")
-            contextLines.append("Preferred closing: \(profile.closing)")
-            if !profile.notes.isEmpty { contextLines.append("Notes: \(profile.notes)") }
-        } else if let recipient {
-            contextLines.append("Likely recipient role: \(recipient)")
+        if let p = contactProfile {
+            contextLines.append("Recipient: \(p.name)")
+            if !p.role.isEmpty  { contextLines.append("Role: \(p.role)") }
+            contextLines.append("Formality: \(p.formality.rawValue)")
+            if !p.salutation.isEmpty { contextLines.append("Preferred salutation: \(p.salutation)") }
+            if !p.closing.isEmpty    { contextLines.append("Preferred closing: \(p.closing)") }
+            if !p.notes.isEmpty      { contextLines.append("Notes: \(p.notes)") }
         }
-
-        let msgTypeNote: String
-        switch messageType ?? .generic {
-        case .email:
-            msgTypeNote = "Format as a complete, polite email (salutation, body paragraphs, closing)."
-        case .chat:
-            msgTypeNote = "Format as a concise, appropriately-toned chat message."
-        case .generic:
-            msgTypeNote = "Format as a complete, well-structured message appropriate to the context."
-        }
-
         let contextBlock = contextLines.isEmpty ? "" :
             "\n\n<CONTEXT>\n\(contextLines.joined(separator: "\n"))\n</CONTEXT>"
 
         return """
-        The user has written rough draft notes in \(langName). Expand them into a complete, polished message.
-        \(msgTypeNote)
+        The user wrote rough draft notes in \(langName). \
+        Expand them into a complete, polished message. \
+        Choose the most appropriate format (email, chat, note, etc.) from context.
 
         Rules:
         - Write in \(langName)
-        - Match the formality to the recipient context
-        - Preserve ALL the user's intended meaning and facts
-        - Do NOT add information that was not implied in the notes
-        - Output ONLY the final message, no explanations\(contextBlock)
+        - Infer and match the appropriate register and formality from context
+        - Preserve ALL the user's intended meaning — do not add facts not implied in the notes
+        - Output ONLY the final message, no explanations or preamble\(contextBlock)
 
         <DRAFT>\(safeText)</DRAFT>
         """

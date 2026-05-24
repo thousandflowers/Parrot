@@ -32,32 +32,46 @@ struct ContactProfile: Identifiable, Codable, Sendable, Hashable {
 }
 
 actor ContactStore {
-    static let shared = ContactStore()
+    static let shared = ContactStore(persistent: true)
     private let logger = Logger(subsystem: Constants.bundleID, category: "ContactStore")
     private var contacts: [ContactProfile] = []
+    private let fileURL: URL?
 
-    private static var fileURL: URL {
+    private static func makeFileURL() -> URL {
         let dir = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory).appendingPathComponent("Parrot")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("contacts.json")
     }
 
-    private init() {
-        if let data = try? Data(contentsOf: Self.fileURL),
-           let decoded = try? JSONDecoder().decode([ContactProfile].self, from: data) {
-            contacts = decoded
+    /// Pass `persistent: true` for the app singleton; omit for in-memory test instances.
+    init(persistent: Bool = false) {
+        if persistent {
+            let url = Self.makeFileURL()
+            fileURL = url
+            if let data = try? Data(contentsOf: url),
+               let decoded = try? JSONDecoder().decode([ContactProfile].self, from: data) {
+                contacts = decoded
+            }
+        } else {
+            fileURL = nil
         }
     }
 
     var all: [ContactProfile] { contacts }
 
-    func find(recipient: String?) -> ContactProfile? {
-        guard let r = recipient?.lowercased(), !r.isEmpty else { return nil }
-        return contacts.first { c in
-            c.name.lowercased().contains(r) || r.contains(c.name.lowercased()) ||
-            c.role.lowercased().contains(r) || r.contains(c.role.lowercased())
-        }
+    /// Finds a known contact whose name or role appears anywhere in `text`.
+    func findInText(_ text: String) -> ContactProfile? {
+        let lower = text.lowercased()
+        return contacts
+            .filter { c in
+                let name = c.name.lowercased()
+                let role = c.role.lowercased()
+                return (!name.isEmpty && lower.contains(name)) ||
+                       (!role.isEmpty && lower.contains(role))
+            }
+            .sorted { $0.lastSeen > $1.lastSeen }
+            .first
     }
 
     func upsert(_ profile: ContactProfile) {
@@ -75,7 +89,7 @@ actor ContactStore {
     }
 
     private func persist() {
-        guard let data = try? JSONEncoder().encode(contacts) else { return }
-        try? data.write(to: Self.fileURL, options: .atomic)
+        guard let url = fileURL, let data = try? JSONEncoder().encode(contacts) else { return }
+        try? data.write(to: url, options: .atomic)
     }
 }

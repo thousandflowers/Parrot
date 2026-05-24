@@ -493,15 +493,15 @@ final class SuggestionPanelController {
     }
 
     private func learnContactFromExpand(result: CorrectionResult) async {
-        let inferred = ContactInferrer.infer(from: result.correctedText, draftHint: result.originalText)
-        guard let name = inferred.name else { return }
-        var profile = await ContactStore.shared.find(recipient: name)
+        guard let inferred = await ContactInferrer.extract(from: result.correctedText),
+              let name = inferred.name else { return }
+        var profile = await ContactStore.shared.findInText(name)
             ?? ContactProfile(name: name)
         profile.name = name
-        if let role = inferred.role { profile.role = role }
+        if let role = inferred.role        { profile.role = role }
         profile.formality = inferred.formality
-        if let salutation = inferred.salutation { profile.salutation = salutation }
-        if let closing = inferred.closing { profile.closing = closing }
+        if let s = inferred.salutation     { profile.salutation = s }
+        if let c = inferred.closing        { profile.closing = c }
         profile.lastSeen = Date()
         await ContactStore.shared.upsert(profile)
     }

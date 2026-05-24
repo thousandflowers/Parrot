@@ -169,7 +169,7 @@ extension LLMService {
             temperature = Constants.grammarTemperature + temperatureOffset
             systemPrompt = "You are a prompt engineer. Rewrite the given text into an effective AI assistant prompt. Output only the optimized prompt."
         case .expand:
-            prompt = engine.buildExpandPrompt(for: text, messageType: nil, recipient: nil, contactProfile: nil)
+            prompt = engine.buildExpandPrompt(for: text, contactProfile: nil)
             temperature = Constants.fluencyTemperature + temperatureOffset
             systemPrompt = "You are an expert writing assistant. Expand rough draft notes into a complete, polished message. Output only the final message — no preamble, no explanation."
         default:
