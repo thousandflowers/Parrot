@@ -147,7 +147,7 @@ extension LLMService {
         case .grammar:
             prompt = engine.buildGrammarPrompt(for: text, customInstruction: nil)
             temperature = Constants.grammarTemperature + temperatureOffset
-            systemPrompt = "You are a proofreader. Fix all grammatical errors in the input: misspellings, wrong verb forms, wrong agreement, missing required verb forms in subordinate clauses (e.g. congiuntivo after pensare/credere/volere + che). You may add or replace words only to fix a clear grammatical error. Do NOT rephrase correct sentences, reorder words, or substitute synonyms. Output only the corrected text. No explanations, no translations, no prefixes, no quotes."
+            systemPrompt = "You are a proofreader. Fix only clear grammatical errors: misspellings, wrong verb forms, wrong agreement, missing required grammatical forms. Do NOT rephrase, reorder, or substitute synonyms. Do NOT translate under any circumstances — output must be in the SAME language as the input. If the text contains no errors, output it VERBATIM without any change. Output only the corrected text — no labels, no explanations, no quotes, no preamble."
         case .fluency:
             prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
             temperature = Constants.fluencyTemperature + temperatureOffset
@@ -155,7 +155,7 @@ extension LLMService {
         case .grammarAndFluency:
             prompt = engine.buildCombinedPrompt(for: text)
             temperature = (Constants.grammarTemperature + Constants.fluencyTemperature) / 2.0 + temperatureOffset
-            systemPrompt = "You are a proofreader and writing assistant. Fix all grammatical errors AND improve the fluency and flow of the text. Preserve the original meaning exactly — do not add information or translate. Output only the corrected text in the same language as the input."
+            systemPrompt = "You are a proofreader and writing assistant. Fix all grammatical errors AND improve fluency and flow. Preserve the original meaning exactly — do not add information. Output must be in the SAME language as the input. Do NOT translate. Output only the corrected text."
         case .coach:
             prompt = engine.buildCoachPrompt(for: text)
             temperature = Constants.grammarTemperature + temperatureOffset
@@ -218,66 +218,65 @@ extension LLMService {
 
     func validateCorrection(original: String, corrected: String, isFluency: Bool = false) -> String {
         var text = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return original }
 
-        // Strip known completion primers that the model might echo
-        let stripPrefixes = ["output:", "corrected:", "testo corretto:", "texte corrigé:", "corrección:",
-                             "rewritten:", "testo riscritto:", "texte réécrit:"]
-        let lower = text.lowercased()
-        for prefix in stripPrefixes {
-            if lower.hasPrefix(prefix) {
-                text = String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
-                break
+        // 1. Strip label prefixes — language-agnostic structural detection.
+        //    Models sometimes output "Corrected text: ...", "Testo corretto: ...", "修正後: ..." etc.
+        //    Pattern: up to 3 tokens before the first ":" with no newline → strip the label.
+        let firstLine = String(text.prefix(while: { $0 != "\n" }))
+        if let colonIdx = firstLine.firstIndex(of: ":") {
+            let labelPart = String(firstLine[..<colonIdx]).trimmingCharacters(in: .whitespaces)
+            let labelWords = labelPart.split(whereSeparator: \.isWhitespace).count
+            if labelWords <= 3 && !labelPart.isEmpty {
+                let origLower = original.lowercased()
+                let labelLower = labelPart.lowercased()
+                // Only strip if the label word is not part of the original text
+                if !origLower.contains(labelLower) {
+                    let after = String(text[text.index(after: colonIdx)...])
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !after.isEmpty && after.count >= original.count / 4 { text = after }
+                }
             }
         }
 
-        // Strip wrapping quotes added by some models
+        // 2. Strip wrapping quotes
         if let q = text.first, (q == "\"" || q == "'"), text.last == q, text.count > 2 {
             text = String(text.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        // If the model appended an explanation after a blank line, strip it.
-        // Only truncate if the text after the blank line looks like meta-commentary —
-        // NOT if it looks like a legitimate second paragraph of a multi-paragraph correction.
-        if let blankLine = text.range(of: "\n\n") {
-            let afterBreak = String(text[blankLine.upperBound...])
+        // 3. Strip appended commentary after a blank line — language-agnostic structural check.
+        //    If the first block is ≥50% the length of the original (a substantial correction)
+        //    AND the second block is less than half the length of the first block,
+        //    the second block is almost certainly meta-commentary, not a second paragraph.
+        if let blankRange = text.range(of: "\n\n") {
+            let firstBlock = String(text[..<blankRange.lowerBound])
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-            let commentaryMarkers = [
-                "note:", "notes:", "correction:", "corrections:", "change:", "changes:",
-                "explanation:", "i've ", "i have ", "here's ", "here is ", "the following",
-                "i corrected", "i fixed", "i changed",
-                "nota:", "note che", "ho corretto", "correzioni:", "spiegazione:",
-                "j'ai ", "voici ", "j'ai corrigé",
-                "ich habe ", "hier ist", "korrektur:",
-                "he corregido", "aquí está",
-            ]
-            let looksLikeCommentary = commentaryMarkers.contains(where: { afterBreak.hasPrefix($0) })
-            if looksLikeCommentary {
-                let firstBlock = String(text[..<blankLine.lowerBound])
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                if !firstBlock.isEmpty { text = firstBlock }
+            let secondBlock = String(text[blankRange.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let firstCoversOriginal = Double(firstBlock.count) / Double(max(original.count, 1)) >= 0.5
+            let secondMuchShorter = secondBlock.count < firstBlock.count / 2
+            if firstCoversOriginal && secondMuchShorter && !firstBlock.isEmpty {
+                text = firstBlock
             }
         }
 
-        // Sanity: if output is empty, return original
-        if text.isEmpty { return original }
-        // Fluency rewrites can be up to 6x longer (combining short sentences); grammar up to 4x
+        guard !text.isEmpty else { return original }
+
+        // 4. Language drift: if detected language changed, the model accidentally translated — reject.
+        //    Only check when both strings are long enough for reliable detection.
+        if text.count >= 25 && original.count >= 25 {
+            let origLang = LanguageDetector.detect(text: original, fallbackLanguage: "")
+            let corrLang = LanguageDetector.detect(text: text, fallbackLanguage: "")
+            if !origLang.isEmpty && !corrLang.isEmpty && origLang != corrLang {
+                return original
+            }
+        }
+
+        // 5. Length sanity: grammar up to 4x, fluency up to 6x
         let maxRatio = isFluency ? 6 : 4
         if text.count > original.count * maxRatio { return original }
 
-        // Sanity: if output looks like it's still just instructions, return original
-        let chattyPhrases = [
-            "here's the corrected", "here is the corrected", "corrected text:",
-            "corrected version:", "edited text:", "sure, here", "i have corrected",
-            "here's the rewritten", "here is the rewritten", "rewritten text:",
-            "ecco il testo", "voici le texte", "hier ist der korrigierte",
-            "aquí está el texto", "texto corregido:",
-        ]
-        let lowerText = text.lowercased()
-        if chattyPhrases.contains(where: { lowerText.hasPrefix($0) }) { return original }
-
-        // For grammar mode: if more than 65% of tokens differ, the model likely over-corrected.
-        // Threshold raised from 50% — error-heavy sentences legitimately change many tokens.
+        // 6. For grammar: reject if >65% of words differ (over-correction)
         if !isFluency && wordChangeFraction(original: original, corrected: text) > 0.65 {
             return original
         }

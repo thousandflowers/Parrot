@@ -138,15 +138,9 @@ struct TextCheckCoordinator: Sendable {
             let finalCustomPrompt: CustomPrompt?
 
             if effectiveType == .expand {
-                let draftScore = DraftDetector.score(text)
-                let contactProfile = await ContactStore.shared.find(recipient: draftScore.likelyRecipient)
+                let contactProfile = await ContactStore.shared.findInText(text)
                 let engine = PromptEngine(language: language)
-                let expandTemplate = engine.buildExpandPrompt(
-                    for: "{{TEXT}}",
-                    messageType: draftScore.messageType,
-                    recipient: draftScore.likelyRecipient,
-                    contactProfile: contactProfile
-                )
+                let expandTemplate = engine.buildExpandPrompt(for: "{{TEXT}}", contactProfile: contactProfile)
                 finalPromptType = .custom(name: "Smart Expand", template: expandTemplate)
                 finalCustomPrompt = nil
             } else if let kbContext, let cp = resolved.prompt {
