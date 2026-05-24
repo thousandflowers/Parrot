@@ -106,7 +106,7 @@ struct PromptEngine {
 
     private var latinFamilyInstruction: String {
         switch primaryLanguageCode {
-        case "it": return "Fix verb conjugation errors (wrong auxiliary essere/avere, wrong person or number), subject-verb agreement, and article agreement (un/uno, il/lo, i/gli) when clearly wrong. Do NOT replace one tense with another when both are grammatically valid in context (e.g., do not swap imperfetto for passato prossimo). Do NOT change verb mood (congiuntivo/condizionale/imperativo) unless the syntax makes it impossible."
+        case "it": return "Fix verb conjugation errors (wrong auxiliary essere/avere, wrong person or number), subject-verb agreement, and article agreement (un/uno, il/lo, i/gli) when clearly wrong. In subordinate clauses after 'che' following verbs of opinion, belief, or wish (pensare, credere, sperare, volere, preferire, temere, etc.), congiuntivo is required — replace ANY wrong word, including pronouns and non-verbs, with the correct congiuntivo form (e.g. 'penso che me alto' → 'penso che sia alto'; 'penso che lui è' → 'penso che lui sia'; 'È inutile che tu viene' → 'È inutile che tu venga'). Do NOT replace one tense with another when both are grammatically valid in context (e.g., do not swap imperfetto for passato prossimo)."
         case "de": return "Fix verb conjugation errors, case declension, and article errors (der/die/das/dem/den/des) when clearly wrong. Do NOT replace one tense with another when both are valid (Präteritum/Perfekt/Plusquamperfekt). Do NOT change Konjunktiv II unless syntax demands it."
         case "es": return "Fix verb conjugation, ser/estar usage, and agreement errors when clearly wrong. Do NOT replace one tense with another when both are valid (e.g., indefinido vs imperfecto). Do NOT change subjuntivo mood unless syntax demands a different mood."
         case "fr": return "Fix verb conjugation, agreement, and article contraction errors when clearly wrong. Do NOT replace one tense with another when both are valid (e.g., imparfait vs passé composé). Do NOT change subjonctif mood unless syntax demands it."
@@ -178,15 +178,32 @@ struct PromptEngine {
         let extra = grammarFamilyInstruction
         let styleLine = styleInstruction
         let safeText = escapeForPrompt(text)
+        let examples = fewShotExamples()
 
         var parts: [String] = []
-        parts.append("Proofread the text inside <TEXT>. Copy it exactly — only fix words that are clearly wrong (misspelling, wrong conjugation, wrong grammatical agreement). Every correct word stays unchanged. Do not rephrase, reorder, or substitute synonyms. Return only the corrected text.")
+        parts.append("Fix all grammatical errors in the text inside <TEXT>: misspellings, wrong verb forms, wrong agreement, and broken phrases where the words as written are syntactically impossible. You may add or replace words ONLY to fix a clear grammatical error — for example, add a missing verb form or replace a wrong form. Do not rephrase correct sentences, do not reorder, do not substitute synonyms. Return only the corrected text.")
         if !extra.isEmpty { parts.append(extra) }
         if !styleLine.isEmpty { parts.append(styleLine) }
         if let custom = customInstruction { parts.append(custom) }
+        if !examples.isEmpty { parts.append("\nExamples:\n\(examples)") }
         parts.append("\n<TEXT>\(safeText)</TEXT>")
 
         return parts.joined(separator: "\n")
+    }
+
+    func buildGrammarJSONPrompt(for text: String) -> String {
+        let extra = grammarFamilyInstruction
+        let safeText = escapeForPrompt(text)
+        var lines: [String] = []
+        lines.append("""
+        Find grammar errors in the text inside <TEXT>. Return ONLY valid JSON — no prose, no markdown. \
+        If no corrections needed, return {"corrections":[]}. \
+        Schema: {"corrections":[{"original":"<exact substring>","replacement":"<corrected>","reason":"<brief reason in input language>"}]} \
+        Rules: "original" must be exact substring of input. Fix only clear errors. Do not rephrase, reorder, or translate.
+        """)
+        if !extra.isEmpty { lines.append(extra) }
+        lines.append("\n<TEXT>\(safeText)</TEXT>")
+        return lines.joined(separator: "\n")
     }
 
     private var nativeLanguageInstruction: String? {

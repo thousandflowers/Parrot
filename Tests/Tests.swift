@@ -928,3 +928,57 @@ final class LexiconTests: XCTestCase {
         XCTAssertEqual(scores.informalScore, 0.0)
     }
 }
+
+final class CorrectionSpanTests: XCTestCase {
+    func testSpanApplicator_appliesBackToFront() {
+        let text = "Io andato al mercato qual'è."
+        let spans: [CorrectionSpan] = [
+            CorrectionSpan(range: NSRange(location: 3, length: 6),
+                           original: "andato", replacement: "sono andato",
+                           reason: "ausiliare", confidence: 0.9, source: .llm),
+            CorrectionSpan(range: NSRange(location: 21, length: 6),
+                           original: "qual'è", replacement: "qual è",
+                           reason: "troncamento", confidence: 1.0, source: .ruleBased),
+        ]
+        let result = SpanApplicator.apply(spans: spans, to: text)
+        XCTAssertEqual(result, "Io sono andato al mercato qual è.")
+    }
+
+    func testSpanMerger_higherSourceWinsOnOverlap() {
+        let s1 = CorrectionSpan(range: NSRange(location: 0, length: 5), original: "hello",
+                                replacement: "Hi", reason: "", confidence: 0.8, source: .nativeGrammar)
+        let s2 = CorrectionSpan(range: NSRange(location: 0, length: 5), original: "hello",
+                                replacement: "Hello", reason: "", confidence: 0.9, source: .languageTool)
+        let merged = SpanMerger.merge([s1, s2])
+        XCTAssertEqual(merged.count, 1)
+        XCTAssertEqual(merged[0].source, .languageTool)
+    }
+
+    func testLLMJSONParser_parsesCorrections() {
+        let json = """
+        {"corrections":[{"original":"andato","replacement":"sono andato","reason":"ausiliare mancante"}]}
+        """
+        let spans = LLMJSONParser.parse(json: json, in: "Io andato a casa.")
+        XCTAssertEqual(spans.count, 1)
+        XCTAssertEqual(spans[0].replacement, "sono andato")
+        XCTAssertEqual(spans[0].source, .llm)
+    }
+
+    func testLLMJSONParser_emptyCorrections() {
+        let spans = LLMJSONParser.parse(json: #"{"corrections":[]}"#, in: "testo ok")
+        XCTAssertEqual(spans.count, 0)
+    }
+
+    func testLLMJSONParser_malformedJSON_doesNotCrash() {
+        let spans = LLMJSONParser.parse(json: "not json", in: "text")
+        XCTAssertEqual(spans.count, 0)
+    }
+
+    func testBuildGrammarJSONPrompt_containsSchemaAndText() {
+        let engine = PromptEngine(language: "it", style: "equilibrato")
+        let prompt = engine.buildGrammarJSONPrompt(for: "Io andato.")
+        XCTAssertTrue(prompt.contains("corrections"))
+        XCTAssertTrue(prompt.contains("original"))
+        XCTAssertTrue(prompt.contains("Io andato."))
+    }
+}

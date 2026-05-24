@@ -363,3 +363,47 @@ extension LLMService {
         }
     }
 }
+
+// MARK: - Structured JSON output
+
+enum LLMJSONParser {
+    private struct GrammarJSON: Codable {
+        struct Correction: Codable {
+            let original: String
+            let replacement: String
+            let reason: String
+        }
+        let corrections: [Correction]
+    }
+
+    static func parse(json: String, in text: String) -> [CorrectionSpan] {
+        guard let data = json.data(using: .utf8),
+              let parsed = try? JSONDecoder().decode(GrammarJSON.self, from: data)
+        else { return [] }
+        var spans: [CorrectionSpan] = []
+        for correction in parsed.corrections {
+            guard correction.original != correction.replacement,
+                  !correction.original.isEmpty,
+                  let range = text.range(of: correction.original)
+            else { continue }
+            spans.append(CorrectionSpan(
+                range: NSRange(range, in: text),
+                original: correction.original,
+                replacement: correction.replacement,
+                reason: correction.reason,
+                confidence: 0.85,
+                source: .llm))
+        }
+        return spans.sorted { $0.range.location < $1.range.location }
+    }
+
+    static func cleanAndParse(json: String, in text: String) -> [CorrectionSpan] {
+        var cleaned = json.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.hasPrefix("```") {
+            let lines = cleaned.components(separatedBy: "\n")
+            cleaned = lines.dropFirst().joined(separator: "\n")
+            if cleaned.hasSuffix("```") { cleaned = String(cleaned.dropLast(3)) }
+        }
+        return parse(json: cleaned.trimmingCharacters(in: .whitespacesAndNewlines), in: text)
+    }
+}
