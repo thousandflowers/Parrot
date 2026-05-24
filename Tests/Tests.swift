@@ -1027,3 +1027,58 @@ final class LanguageToolEngineTests: XCTestCase {
         XCTAssertEqual(LanguageToolEngine.ltLanguageCode(for: "ja"), "ja-JP")
     }
 }
+
+final class DraftDetectorTests: XCTestCase {
+    func testShortBulletNotes_scoredAsDraft() {
+        let score = DraftDetector.score("richiesta informazioni esame colloquio prof")
+        XCTAssertTrue(score.isDraft, "Short keyword notes should be detected as draft")
+    }
+
+    func testLongPolishedEmail_notDraft() {
+        let text = """
+        Gentile Professore Rossi,
+        La contatto per richiedere informazioni riguardo al prossimo appello d'esame. Sarei anche interessato a sapere se è possibile organizzare un colloquio per discutere il mio progetto.
+        In attesa di una Sua risposta, La ringrazio per la disponibilità.
+        Cordiali saluti,
+        Marco
+        """
+        let score = DraftDetector.score(text)
+        XCTAssertFalse(score.isDraft, "Polished email should not be detected as draft")
+    }
+
+    func testRoleKeywordExtraction() {
+        let score = DraftDetector.score("email al prof per informazioni esame")
+        XCTAssertEqual(score.likelyRecipient, "professor")
+    }
+
+    func testEmailMessageType() {
+        let score = DraftDetector.score("richiesta email informazioni professore")
+        XCTAssertEqual(score.messageType, .email)
+    }
+}
+
+final class ContactInferrerTests: XCTestCase {
+    func testExtractFormalSalutation() {
+        let text = "Gentile Professore Rossi,\nLa contatto per...\nCordiali saluti"
+        let result = ContactInferrer.infer(from: text, draftHint: "prof rossi esame")
+        XCTAssertEqual(result.salutation, "Gentile Professore Rossi")
+    }
+
+    func testDetectFormalClosing() {
+        let text = "Gentile Professore,\nLa contatto per richiedere.\nCordiali saluti"
+        let result = ContactInferrer.infer(from: text, draftHint: "prof")
+        XCTAssertEqual(result.closing, "Cordiali saluti")
+    }
+
+    func testFormalityDetection_formal() {
+        let text = "Gentile Professore, Le porgo distinti saluti."
+        let result = ContactInferrer.infer(from: text, draftHint: "prof")
+        XCTAssertEqual(result.formality, .formal)
+    }
+
+    func testFormalityDetection_informal() {
+        let text = "Ciao Marco, ti scrivo per dirti grazie mille! A presto."
+        let result = ContactInferrer.infer(from: text, draftHint: "collega")
+        XCTAssertEqual(result.formality, .informal)
+    }
+}

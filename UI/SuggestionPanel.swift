@@ -483,10 +483,27 @@ final class SuggestionPanelController {
             do {
                 try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText)
                 Task { await HistoryStore.shared.add(result: result) }
+                if result.promptType == PromptType.expand.label {
+                    Task { await self.learnContactFromExpand(result: result) }
+                }
             } catch {
                 showError(error as? CorrectionError ?? .textExtractionFailed(appName: "unknown"))
             }
         }
+    }
+
+    private func learnContactFromExpand(result: CorrectionResult) async {
+        let inferred = ContactInferrer.infer(from: result.correctedText, draftHint: result.originalText)
+        guard let name = inferred.name else { return }
+        var profile = await ContactStore.shared.find(recipient: name)
+            ?? ContactProfile(name: name)
+        profile.name = name
+        if let role = inferred.role { profile.role = role }
+        profile.formality = inferred.formality
+        if let salutation = inferred.salutation { profile.salutation = salutation }
+        if let closing = inferred.closing { profile.closing = closing }
+        profile.lastSeen = Date()
+        await ContactStore.shared.upsert(profile)
     }
 
     private func closeSpanPanel() {

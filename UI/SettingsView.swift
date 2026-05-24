@@ -90,6 +90,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case dictionary, shortcuts, presets, advanced, history
     case exportImport, iCloud, knowledge, plagiarism
     case inlineAnnotations
+    case contacts
 
     var id: String { rawValue }
 
@@ -110,6 +111,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .knowledge:   return "Knowledge"
         case .plagiarism:  return "Plagiarism"
         case .inlineAnnotations: return "Inline"
+        case .contacts:     return "Contacts"
         }
     }
 
@@ -130,11 +132,12 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .knowledge:   return "book.closed"
         case .plagiarism:  return "magnifyingglass"
         case .inlineAnnotations: return "text.badge.checkmark"
+        case .contacts:     return "person.2"
         }
     }
 
     static let behaviorTabs: [SettingsTab] = [.prompt, .appRules, .customRules, .exclusions, .inlineAnnotations, .dictionary, .shortcuts, .presets]
-    static let dataTabs: [SettingsTab] = [.history, .exportImport, .iCloud, .knowledge]
+    static let dataTabs: [SettingsTab] = [.history, .exportImport, .iCloud, .knowledge, .contacts]
     static let systemTabs: [SettingsTab] = [.advanced, .plagiarism]
 
     @ViewBuilder
@@ -155,6 +158,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .iCloud:      iCloudSyncTab()
         case .knowledge:   KnowledgeBaseTab()
         case .plagiarism:  PlagiarismTab()
+        case .contacts:    ContactsSettingsTab()
         }
     }
 }

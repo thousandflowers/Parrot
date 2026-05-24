@@ -27,6 +27,8 @@ final class StubLLMService: LLMService, Sendable {
             fakeCorrection = applyFluencyCorrections(applyGrammarCorrections(text))
         case .aiPrompt:
             fakeCorrection = "[STUB · AI Prompt optimized]: \(applyGrammarCorrections(text))"
+        case .expand:
+            fakeCorrection = "[STUB · Expanded]: Gentile Professore,\n\nLa contatto per richiedere informazioni sull'esame e la possibilità di un colloquio.\n\nCordiali saluti"
         }
 
         return CorrectionResult(
@@ -70,6 +72,7 @@ final class StubLLMService: LLMService, Sendable {
             case .translation(let lang): "[STUB · Translation to \(lang)]: \(text)"
             case .deSlop: "[STUB · De-slopped]: \(applyGrammarCorrections(text))"
             case .aiPrompt: "[STUB · AI Prompt]: \(applyGrammarCorrections(text))"
+            case .expand: "[STUB · Expanded]: Gentile Professore,\n\nLa contatto per richiedere informazioni sull'esame e la possibilità di un colloquio.\n\nCordiali saluti"
             }
             let words = corrected.components(separatedBy: " ")
             let task = Task {

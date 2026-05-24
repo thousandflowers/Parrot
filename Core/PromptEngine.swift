@@ -517,6 +517,8 @@ struct PromptEngine {
             return buildDeSlopPrompt(for: text)
         case .aiPrompt:
             return buildAIPromptPrompt(for: text)
+        case .expand:
+            return buildExpandPrompt(for: text, messageType: nil, recipient: nil, contactProfile: nil)
         }
     }
 
@@ -551,6 +553,56 @@ struct PromptEngine {
         Output ONLY the optimized prompt text.
 
         <TEXT>\(safeText)</TEXT>
+        """
+    }
+
+    func buildExpandPrompt(
+        for text: String,
+        messageType: DraftDetector.MessageType?,
+        recipient: String?,
+        contactProfile: ContactProfile?
+    ) -> String {
+        let safeText = escapeForPrompt(text)
+        let langName = englishLanguageName(for: language)
+
+        var contextLines: [String] = []
+
+        if let profile = contactProfile {
+            contextLines.append("Recipient: \(profile.name)")
+            if !profile.role.isEmpty { contextLines.append("Role: \(profile.role)") }
+            contextLines.append("Formality: \(profile.formality.rawValue)")
+            contextLines.append("Preferred salutation: \(profile.salutation)")
+            contextLines.append("Preferred closing: \(profile.closing)")
+            if !profile.notes.isEmpty { contextLines.append("Notes: \(profile.notes)") }
+        } else if let recipient {
+            contextLines.append("Likely recipient role: \(recipient)")
+        }
+
+        let msgTypeNote: String
+        switch messageType ?? .generic {
+        case .email:
+            msgTypeNote = "Format as a complete, polite email (salutation, body paragraphs, closing)."
+        case .chat:
+            msgTypeNote = "Format as a concise, appropriately-toned chat message."
+        case .generic:
+            msgTypeNote = "Format as a complete, well-structured message appropriate to the context."
+        }
+
+        let contextBlock = contextLines.isEmpty ? "" :
+            "\n\n<CONTEXT>\n\(contextLines.joined(separator: "\n"))\n</CONTEXT>"
+
+        return """
+        The user has written rough draft notes in \(langName). Expand them into a complete, polished message.
+        \(msgTypeNote)
+
+        Rules:
+        - Write in \(langName)
+        - Match the formality to the recipient context
+        - Preserve ALL the user's intended meaning and facts
+        - Do NOT add information that was not implied in the notes
+        - Output ONLY the final message, no explanations\(contextBlock)
+
+        <DRAFT>\(safeText)</DRAFT>
         """
     }
 }

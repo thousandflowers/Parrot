@@ -53,12 +53,17 @@ struct TextCheckCoordinator: Sendable {
 
             let effectiveType: PromptType
             if type == .grammar {
-                let isAIChat = await AppDetector.shared.isAIChatApp(bundleID: bundleID)
-                let autoDetect = await MainActor.run { PreferencesStore.shared.aiPromptAutoDetect }
-                if autoDetect && isAIChat {
-                    effectiveType = .aiPrompt
+                let draftScore = DraftDetector.score(text)
+                if draftScore.isDraft {
+                    effectiveType = .expand
                 } else {
-                    effectiveType = type
+                    let isAIChat = await AppDetector.shared.isAIChatApp(bundleID: bundleID)
+                    let autoDetect = await MainActor.run { PreferencesStore.shared.aiPromptAutoDetect }
+                    if autoDetect && isAIChat {
+                        effectiveType = .aiPrompt
+                    } else {
+                        effectiveType = type
+                    }
                 }
             } else {
                 effectiveType = type
@@ -131,7 +136,20 @@ struct TextCheckCoordinator: Sendable {
 
             let finalPromptType: PromptType
             let finalCustomPrompt: CustomPrompt?
-            if let kbContext, let cp = resolved.prompt {
+
+            if effectiveType == .expand {
+                let draftScore = DraftDetector.score(text)
+                let contactProfile = await ContactStore.shared.find(recipient: draftScore.likelyRecipient)
+                let engine = PromptEngine(language: language)
+                let expandTemplate = engine.buildExpandPrompt(
+                    for: "{{TEXT}}",
+                    messageType: draftScore.messageType,
+                    recipient: draftScore.likelyRecipient,
+                    contactProfile: contactProfile
+                )
+                finalPromptType = .custom(name: "Smart Expand", template: expandTemplate)
+                finalCustomPrompt = nil
+            } else if let kbContext, let cp = resolved.prompt {
                 finalPromptType = .custom(name: cp.name, template: cp.template + "\n\n" + kbContext)
                 finalCustomPrompt = nil
             } else if let kbContext {

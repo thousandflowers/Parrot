@@ -13,6 +13,7 @@ enum PromptType: Sendable, Codable, Equatable, Hashable {
     case grammar
     case fluency
     case grammarAndFluency
+    case expand
     case coach
     case explain
     case custom(name: String, template: String)
@@ -25,6 +26,7 @@ enum PromptType: Sendable, Codable, Equatable, Hashable {
         case .grammar: "grammar"
         case .fluency: "fluency"
         case .grammarAndFluency: "grammarAndFluency"
+        case .expand: "expand"
         case .coach: "coach"
         case .explain: "explain"
         case .custom: "custom"
@@ -40,7 +42,7 @@ enum PromptType: Sendable, Codable, Equatable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case grammar, fluency, grammarAndFluency, coach, explain, custom, translation, deSlop, aiPrompt
+        case grammar, fluency, grammarAndFluency, expand, coach, explain, custom, translation, deSlop, aiPrompt
     }
 
     init(from decoder: Decoder) throws {
@@ -48,6 +50,7 @@ enum PromptType: Sendable, Codable, Equatable, Hashable {
         if let _ = try? container.decodeNil(forKey: .grammar) { self = .grammar; return }
         if let _ = try? container.decodeNil(forKey: .fluency) { self = .fluency; return }
         if let _ = try? container.decodeNil(forKey: .grammarAndFluency) { self = .grammarAndFluency; return }
+        if let _ = try? container.decodeNil(forKey: .expand) { self = .expand; return }
         if let _ = try? container.decodeNil(forKey: .coach) { self = .coach; return }
         if let _ = try? container.decodeNil(forKey: .explain) { self = .explain; return }
         if let custom = try? container.decode(NestedCustom.self, forKey: .custom) {
@@ -67,6 +70,7 @@ enum PromptType: Sendable, Codable, Equatable, Hashable {
         case .grammar: try container.encodeNil(forKey: .grammar)
         case .fluency: try container.encodeNil(forKey: .fluency)
         case .grammarAndFluency: try container.encodeNil(forKey: .grammarAndFluency)
+        case .expand: try container.encodeNil(forKey: .expand)
         case .coach: try container.encodeNil(forKey: .coach)
         case .explain: try container.encodeNil(forKey: .explain)
         case .custom(let name, let template):
