@@ -16,21 +16,38 @@ final class MenuBarBirdAnimator {
     enum BirdState: Equatable { case idle, analyzing, found, ok, error }
 
     private weak var button: NSStatusBarButton?
+    private weak var statusItem: NSStatusItem?
     private var timer: Timer?
     private var resetTimer: Timer?
     private(set) var state: BirdState = .idle
     private var frame = 0
 
+    // Walking state (idle only)
+    private var walkX: CGFloat = 4
+    private var walkDir: CGFloat = 1   // +1 = right, -1 = left
+    private var walkTrackW: CGFloat = 80  // set once on idle entry, never per-frame
+
     // MARK: - Public API
 
-    func attach(to button: NSStatusBarButton) {
+    func attach(to button: NSStatusBarButton, statusItem: NSStatusItem) {
         self.button = button
+        self.statusItem = statusItem
         startTimer()
         renderFrame()
+        measureAvailableWidth()
     }
 
     func setState(_ newState: BirdState) {
         guard state != newState else { return }
+        if newState == .idle {
+            walkX = 4
+            walkDir = 1
+            walkTrackW = freeMenuBarWidth()
+            statusItem?.length = walkTrackW + 20
+            measureAvailableWidth()
+        } else if state == .idle {
+            statusItem?.length = NSStatusItem.variableLength
+        }
         state = newState
         frame = 0
         resetTimer?.invalidate()
@@ -91,10 +108,70 @@ final class MenuBarBirdAnimator {
 
     // MARK: - Rendering
 
+    private func freeMenuBarWidth() -> CGFloat {
+        guard let button, let win = button.window else { return 80 }
+        let appMenuEstimate: CGFloat = 220
+        let free = win.frame.origin.x - appMenuEstimate
+        return max(40, min(600, free))
+    }
+
+    // Probe true available space: set length=5000, let macOS cap it, read actual frame width.
+    private func measureAvailableWidth() {
+        guard let si = statusItem, state == .idle else { return }
+        si.length = 5000
+        let t = Timer(timeInterval: 0.05, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.state == .idle else {
+                    self?.statusItem?.length = NSStatusItem.variableLength
+                    return
+                }
+                let actual = self.button?.window?.frame.width ?? 100
+                self.walkTrackW = max(40, actual - 22)
+                self.statusItem?.length = actual
+            }
+        }
+        RunLoop.main.add(t, forMode: .common)
+    }
+
     private func renderFrame() {
         guard let button else { return }
         let s = state, f = frame
-        let img = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
+        let scale: CGFloat = 22.0 / 18.0
+        let birdW: CGFloat = 20  // visual footprint of bird at 22pt canvas
+
+        if s == .idle {
+            let trackW = walkTrackW
+            let totalW = trackW + birdW
+
+            // Advance walk position (no statusItem.length change here)
+            let speed: CGFloat = 1.8
+            walkX += walkDir * speed
+            if walkX + birdW > trackW { walkDir = -1 }
+            if walkX < 0 { walkDir = 1; walkX = 0 }
+
+            let wx = walkX, wd = walkDir
+            let img = NSImage(size: NSSize(width: totalW, height: 22), flipped: false) { _ in
+                guard let ctx = NSGraphicsContext.current?.cgContext else { return true }
+                ctx.translateBy(x: wx, y: 0)
+                if wd < 0 {
+                    // Flip bird horizontally so it faces left
+                    ctx.translateBy(x: 11, y: 0)
+                    ctx.scaleBy(x: -1, y: 1)
+                    ctx.translateBy(x: -11, y: 0)
+                }
+                ctx.scaleBy(x: scale, y: scale)
+                MenuBarBirdAnimator.drawBird(state: s, frame: f)
+                return true
+            }
+            img.isTemplate = true
+            button.image = img
+            button.imageScaling = .scaleNone
+            return
+        }
+
+        // Non-idle: normal 22×22 icon
+        let img = NSImage(size: NSSize(width: 22, height: 22), flipped: false) { _ in
+            NSGraphicsContext.current?.cgContext.scaleBy(x: scale, y: scale)
             MenuBarBirdAnimator.drawBird(state: s, frame: f)
             return true
         }
