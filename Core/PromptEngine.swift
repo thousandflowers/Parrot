@@ -156,9 +156,11 @@ struct PromptEngine {
         let extra = grammarFamilyInstruction
         let styleLine = styleInstruction
         let safeText = escapeForPrompt(text)
+        let langName = languageName(for: language)
 
         var parts: [String] = []
         parts.append("Fix all grammatical errors in the text inside <TEXT>: misspellings, wrong verb forms, wrong agreement, and broken phrases where the words as written are syntactically impossible. You may add or replace words ONLY to fix a clear grammatical error — for example, add a missing verb form or replace a wrong form. Do not rephrase correct sentences, do not reorder, do not substitute synonyms. Return only the corrected text.")
+        parts.append("CRITICAL: Output MUST be in \(langName). Do NOT translate to any other language.")
         if !extra.isEmpty { parts.append(extra) }
         if !styleLine.isEmpty { parts.append(styleLine) }
         if let custom = customInstruction { parts.append(custom) }
@@ -186,8 +188,9 @@ struct PromptEngine {
     func buildFluencyPrompt(for text: String, customInstruction: String? = nil) -> String {
         let styleLine = styleInstruction
         let safeText = escapeForPrompt(text)
+        let langName = languageName(for: language)
         var lines: [String] = []
-        lines.append("Rewrite the text to improve readability, flow, and naturalness. Combine short choppy sentences. Use varied sentence structure. Preserve the original meaning exactly — do NOT add, invent, or assume any information not present in the original. Only words and facts already in the text may appear in the output. Output ONLY the rewritten text IN THE SAME LANGUAGE as the input. Do NOT translate.")
+        lines.append("Rewrite the text to improve readability, flow, and naturalness. Combine short choppy sentences. Use varied sentence structure. Preserve the original meaning exactly — do NOT add, invent, or assume any information not present in the original. Only words and facts already in the text may appear in the output. Output ONLY the rewritten text in \(langName). Do NOT translate.")
         if !styleLine.isEmpty { lines.append(styleLine) }
         if let custom = customInstruction { lines.append(custom) }
         lines.append("\n<TEXT>\(safeText)</TEXT>")

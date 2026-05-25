@@ -274,8 +274,8 @@ extension LLMService {
         guard !text.isEmpty else { return original }
 
         // 4. Language drift: if detected language changed, the model accidentally translated — reject.
-        //    Only check when both strings are long enough for reliable detection.
-        if text.count >= 25 && original.count >= 25 {
+        //    Lower bound is 15 chars so short sentences like "ciao bello" are also covered.
+        if text.count >= 15 && original.count >= 15 {
             let origLang = LanguageDetector.detect(text: original, fallbackLanguage: "")
             let corrLang = LanguageDetector.detect(text: text, fallbackLanguage: "")
             if !origLang.isEmpty && !corrLang.isEmpty && origLang != corrLang {
@@ -292,7 +292,46 @@ extension LLMService {
             return original
         }
 
+        // 7. For grammar: per-word edit distance guard (same word count).
+        //    Catches hallucinations like "alcujne"→"Alleggeri" (LD=6) that slip through
+        //    the fraction check because fewer than 50% of words changed.
+        //    Only checks words ≥5 chars: short words legitimately undergo large edits
+        //    in conjugation corrections (e.g., "fa"→"fanno", "è"→"sono").
+        if !isFluency {
+            let origWords = original.split(whereSeparator: \.isWhitespace).map(String.init)
+            let corrWords = text.split(whereSeparator: \.isWhitespace).map(String.init)
+            if origWords.count == corrWords.count {
+                for (orig, corr) in zip(origWords, corrWords) {
+                    guard orig.lowercased() != corr.lowercased() else { continue }
+                    guard orig.count >= 5 else { continue }
+                    let maxDist = max(2, orig.count / 2)
+                    if levenshteinDistance(orig.lowercased(), corr.lowercased()) > maxDist {
+                        return original
+                    }
+                }
+            }
+        }
+
         return isFluency ? text : preservePunctuation(original: original, corrected: text)
+    }
+
+    private func levenshteinDistance(_ a: String, _ b: String) -> Int {
+        let aChars = Array(a), bChars = Array(b)
+        let m = aChars.count, n = bChars.count
+        if m == 0 { return n }
+        if n == 0 { return m }
+        var prev = Array(0...n)
+        var curr = [Int](repeating: 0, count: n + 1)
+        for i in 1...m {
+            curr[0] = i
+            for j in 1...n {
+                curr[j] = aChars[i-1] == bChars[j-1]
+                    ? prev[j-1]
+                    : 1 + min(prev[j-1], prev[j], curr[j-1])
+            }
+            prev = curr
+        }
+        return prev[n]
     }
 
     private func wordChangeFraction(original: String, corrected: String) -> Double {

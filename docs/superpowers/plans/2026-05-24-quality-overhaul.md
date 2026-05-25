@@ -4,7 +4,7 @@
 
 **Goal:** Massima qualità correzione grammaticale offline per tutte le lingue — 4 fasi: fix pipeline → span data model + NSSpellChecker + JSON LLM → LanguageTool → span UI.
 
-**Architecture:** Rule layers (NSSpellChecker + RuleBasedEngine + LanguageTool) produce `[CorrectionSpan]`, merged via `SpanMerger`. LLM (Apple Intelligence → Ollama → local) outputs JSON corrections converted to spans. UI shows per-fix accept/reject.
+**Architecture:** Rule layers (NSSpellChecker + RuleBasedEngine + LanguageTool) produce `[CorrectionSpan]`, merged via `SpanMerger`. LLM (llama.cpp primary → Apple Intelligence fallback → Ollama → remote) outputs JSON corrections converted to spans. StyleProfiler learns user style from feedback. UI shows per-fix accept/reject. Browser URL detection for tone. Combined grammar+fluency mode.
 
 **Tech Stack:** Swift 5.10, SwiftUI, macOS 14+, `NSSpellChecker` (AppKit), LanguageTool CLI (GraalVM native binary), llama.cpp JSON grammar mode, `FoundationModels` (macOS 26).
 

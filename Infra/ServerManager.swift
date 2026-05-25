@@ -92,14 +92,16 @@ actor ServerManager: Sendable {
             throw CorrectionError.serverNotRunning
         }
 
+        let logHandle = Self.openServerLogHandle()
+
         for attempt in 0..<3 {
             let (port, probeSock) = try allocatePort()
             currentPort = port
 
             let process = Process()
             process.executableURL = serverURL
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
+            process.standardOutput = logHandle ?? FileHandle.nullDevice
+            process.standardError = logHandle ?? FileHandle.nullDevice
             process.arguments = [
                 "-m", modelPath,
                 "--host", "127.0.0.1",
@@ -124,6 +126,7 @@ actor ServerManager: Sendable {
             do {
                 for healthAttempt in 0..<Constants.serverHealthAttempts {
                     if await checkServerHealth(port: currentPort) { return }
+                    guard process.isRunning else { break }
                     let delayMs = min(2000, 250 * Int(pow(2.0, Double(healthAttempt))))
                     try await Task.sleep(for: .milliseconds(delayMs))
                 }
@@ -294,5 +297,16 @@ actor ServerManager: Sendable {
 
     private func _isProcessRunning(_ pid: Int32) -> Bool {
         kill(pid, 0) == 0
+    }
+
+    private static func openServerLogHandle() -> FileHandle? {
+        guard let logsDir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("Logs/Parrot") else { return nil }
+        try? FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
+        let logURL = logsDir.appendingPathComponent("llama-server.log")
+        if !FileManager.default.fileExists(atPath: logURL.path) {
+            FileManager.default.createFile(atPath: logURL.path, contents: nil)
+        }
+        return FileHandle(forWritingAtPath: logURL.path)
     }
 }

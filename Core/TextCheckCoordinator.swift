@@ -318,13 +318,13 @@ struct TextCheckCoordinator: Sendable {
                 } catch let error as CorrectionError {
                     guard !Task.isCancelled else { return }
                     await MainActor.run {
-                        MenuBarBirdAnimator.shared.setState(.idle)
+                        MenuBarBirdAnimator.shared.setState(.error)
                         SuggestionPanelController.shared.showError(error)
                     }
                 } catch {
                     guard !Task.isCancelled else { return }
                     await MainActor.run {
-                        MenuBarBirdAnimator.shared.setState(.idle)
+                        MenuBarBirdAnimator.shared.setState(.error)
                         SuggestionPanelController.shared.showError(.outputParsingFailed(raw: error.localizedDescription))
                     }
                 }

@@ -111,6 +111,7 @@ if [ "${LLAMA_BUNDLED}" = "1" ] && [ -n "$LLAMA_BIN" ]; then
     DYLIBS=(
         "${LLAMA_CPP_LIB}/libllama.0.dylib"
         "${LLAMA_CPP_LIB}/libllama-common.0.dylib"
+        "${LLAMA_CPP_LIB}/libllama-server-impl.dylib"
         "${LLAMA_CPP_LIB}/libmtmd.0.dylib"
         "${GGML_LIB}/libggml.0.dylib"
         "${GGML_LIB}/libggml-base.0.dylib"
@@ -126,7 +127,7 @@ if [ "${LLAMA_BUNDLED}" = "1" ] && [ -n "$LLAMA_BIN" ]; then
     fix_binary() {
         local b="$1"
         # llama.cpp libs
-        for name in libllama.0.dylib libllama-common.0.dylib libmtmd.0.dylib; do
+        for name in libllama.0.dylib libllama-common.0.dylib libllama-server-impl.dylib libmtmd.0.dylib; do
             for prefix in \
                 "${LLAMA_CPP_LIB}" \
                 "/opt/homebrew/opt/llama.cpp/lib" \
