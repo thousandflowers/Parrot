@@ -115,19 +115,16 @@ final class MenuBarBirdAnimator {
         return max(40, min(600, free))
     }
 
-    // Probe true available space: set length=5000, let macOS cap it, read actual frame width.
+    // Let macOS place item at variableLength, then read win.frame.origin.x for exact free space.
     private func measureAvailableWidth() {
         guard let si = statusItem, state == .idle else { return }
-        si.length = 5000
-        let t = Timer(timeInterval: 0.05, repeats: false) { [weak self] _ in
+        si.length = NSStatusItem.variableLength
+        let t = Timer(timeInterval: 0.1, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, self.state == .idle else {
-                    self?.statusItem?.length = NSStatusItem.variableLength
-                    return
-                }
-                let actual = self.button?.window?.frame.width ?? 100
-                self.walkTrackW = max(40, actual - 22)
-                self.statusItem?.length = actual
+                guard let self, self.state == .idle else { return }
+                let free = self.freeMenuBarWidth()
+                self.walkTrackW = max(40, free)
+                self.statusItem?.length = free + 22
             }
         }
         RunLoop.main.add(t, forMode: .common)
