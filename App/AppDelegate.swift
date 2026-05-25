@@ -51,7 +51,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let serviceType = LLMServiceFactory.resolveDefaultServiceType()
         CrashLogger.log("launch: serviceType=\(serviceType.rawValue)")
         if serviceType == .local {
-            Task { await LocalLLMService.shared.warmup() }
+            Task {
+                await MainActor.run { MenuBarParrot.shared.setState(.sleeping) }
+                await LocalLLMService.shared.warmup()
+                await MainActor.run { MenuBarParrot.shared.setState(.idle) }
+            }
         } else if serviceType == .appleIntelligence {
             if #available(macOS 26.0, *) {
                 CrashLogger.log("launch: checking AppleIntelligence availability")
@@ -71,7 +75,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem?.button else { return }
         button.action = #selector(togglePopover)
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        MenuBarBirdAnimator.shared.attach(to: button)
+        MenuBarParrot.shared.attach(to: button, statusItem: statusItem!)
     }
 
     private func setupPopover() {
