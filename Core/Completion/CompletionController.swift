@@ -42,6 +42,7 @@ final class CompletionController {
 
         let context = CompletionContext(preContext: ax.preContext, postContext: ax.postContext,
                                         language: PreferencesStore.shared.language)
+        Logger.infra.debug("completion: preContext tail=…\(String(ax.preContext.suffix(40)), privacy: .public)| post=\(String(ax.postContext.prefix(20)), privacy: .public)")
         guard context.isUsable else { return }
         let maxWords = PreferencesStore.shared.maxCompletionLength
         guard let suggestion = await CompletionEngine.shared.suggest(context: context, maxWords: maxWords) else {
