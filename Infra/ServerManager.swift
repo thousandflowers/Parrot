@@ -11,11 +11,15 @@ actor ServerManager: Sendable {
     static let shared = ServerManager()
     /// Dedicated server for inline completion when the user picks a different completion model.
     /// Never reuses an external server (that would serve the wrong model) and uses its own port range.
-    static let completion = ServerManager(allowExternalReuse: false)
+    static let completion = ServerManager(allowExternalReuse: false, contextSize: 1024)
 
     private let allowExternalReuse: Bool
+    private let contextSize: Int            // KV context window; smaller = much less RAM
     private var currentModelPath: String?   // model our own process was launched with
-    init(allowExternalReuse: Bool = true) { self.allowExternalReuse = allowExternalReuse }
+    init(allowExternalReuse: Bool = true, contextSize: Int = 4096) {
+        self.allowExternalReuse = allowExternalReuse
+        self.contextSize = contextSize
+    }
 
     private var process: Process?
     private var startupTask: Task<Void, Error>?
@@ -121,7 +125,7 @@ actor ServerManager: Sendable {
                 "-m", modelPath,
                 "--host", "127.0.0.1",
                 "--port", "\(currentPort)",
-                "-c", "4096",
+                "-c", "\(contextSize)",
                 "--threads", "\(max(2, ProcessInfo.processInfo.processorCount / 2))",
                 "--n-gpu-layers", gpuLayers(),
                 "--flash-attn", "auto"
