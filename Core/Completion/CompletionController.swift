@@ -35,19 +35,31 @@ final class CompletionController {
         guard pid != 0 else { return }
         if let id = await AppDetector.shared.frontAppBundleID(forPID: pid),
            PreferencesStore.shared.isExcluded(bundleID: id) { return }
-        guard let ax = await AccessibilityBridge.shared.completionContext(pid: pid), !ax.isSecure else { return }
+        guard let ax = await AccessibilityBridge.shared.completionContext(pid: pid), !ax.isSecure else {
+            Logger.infra.debug("completion: no usable focused field (or secure)")
+            return
+        }
 
         let context = CompletionContext(preContext: ax.preContext, postContext: ax.postContext,
                                         language: PreferencesStore.shared.language)
         guard context.isUsable else { return }
         let maxWords = PreferencesStore.shared.maxCompletionLength
-        guard let suggestion = await CompletionEngine.shared.suggest(context: context, maxWords: maxWords) else { return }
+        guard let suggestion = await CompletionEngine.shared.suggest(context: context, maxWords: maxWords) else {
+            Logger.infra.debug("completion: engine returned no suggestion")
+            return
+        }
         guard !Task.isCancelled else { return }
+
+        if ax.caretRect == .zero {
+            Logger.infra.debug("completion: have suggestion but caret bounds .zero — app exposes no caret rect, cannot show ghost")
+            return
+        }
 
         current = suggestion
         currentPID = pid
         TabInterceptor.setSuggestionVisible(true)
         overlay.show(text: suggestion.text, atCaretRect: ax.caretRect)
+        Logger.infra.debug("completion: showing \(suggestion.text, privacy: .public) at \(NSStringFromRect(ax.caretRect), privacy: .public)")
     }
 
     /// Tab — insert the whole suggestion.

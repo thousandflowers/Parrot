@@ -1198,26 +1198,22 @@ final class CompletionPostprocessorTests: XCTestCase {
     }
 }
 
-final class LlamaCompletionRequestTests: XCTestCase {
-    func testRequest_shape() {
-        let req = LlamaCompletionRequest(prompt: "Caro Marco", maxWords: 8)
-        XCTAssertTrue(req.cache_prompt)
-        XCTAssertFalse(req.stream)
-        XCTAssertEqual(req.stop, ["\n"])
-        XCTAssertGreaterThanOrEqual(req.n_predict, 8)
+final class LlamaCompletionClientTests: XCTestCase {
+    func testSystemPrompt_continuationInstruction() {
+        let s = LlamaCompletionClient.systemPrompt(userPrompt: "")
+        XCTAssertTrue(s.contains("Continue the user's text"))
+        XCTAssertTrue(s.contains("SAME language"))
+        XCTAssertFalse(s.contains("Writing style to match"))
     }
 
-    func testRequest_nPredictScalesWithWords() {
-        let small = LlamaCompletionRequest(prompt: "x", maxWords: 4)
-        let big = LlamaCompletionRequest(prompt: "x", maxWords: 16)
-        XCTAssertLessThan(small.n_predict, big.n_predict)
+    func testSystemPrompt_includesUserStyleWhenSet() {
+        let s = LlamaCompletionClient.systemPrompt(userPrompt: "friendly, concise")
+        XCTAssertTrue(s.contains("Writing style to match: friendly, concise"))
     }
 
-    func testBuildPrompt_capsPrefixLength() {
-        let long = String(repeating: "a", count: Constants.completionMaxPrefixChars + 500)
-        let ctx = CompletionContext(preContext: long, postContext: "", language: "it")
-        let prompt = LlamaCompletionClient.buildPrompt(context: ctx, userPrompt: "")
-        XCTAssertEqual(prompt.count, Constants.completionMaxPrefixChars)
+    func testSystemPrompt_ignoresWhitespaceOnlyUserPrompt() {
+        let s = LlamaCompletionClient.systemPrompt(userPrompt: "   ")
+        XCTAssertFalse(s.contains("Writing style to match"))
     }
 }
 

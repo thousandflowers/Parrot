@@ -23,13 +23,21 @@ final class TabInterceptor {
     private init() {}
 
     func start() {
-        guard tap == nil, AXIsProcessTrusted() else { return }
+        guard tap == nil else { return }
+        guard AXIsProcessTrusted() else {
+            Logger.infra.error("TabInterceptor: not starting — Accessibility not trusted")
+            return
+        }
         let mask: CGEventMask = (1 << CGEventType.keyDown.rawValue)
             | (1 << CGEventType.tapDisabledByTimeout.rawValue)
             | (1 << CGEventType.tapDisabledByUserInput.rawValue)
         guard let t = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap,
                                         options: .defaultTap, eventsOfInterest: mask,
-                                        callback: tabTapCallback, userInfo: nil) else { return }
+                                        callback: tabTapCallback, userInfo: nil) else {
+            Logger.infra.error("TabInterceptor: CGEvent.tapCreate returned nil")
+            return
+        }
+        Logger.infra.info("TabInterceptor: keyboard tap installed")
         tap = t
         Self.activeTap.withLock { $0 = t }
         let src = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, t, 0)
@@ -67,6 +75,7 @@ private func tabTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: CG
     // Ignore Tab combined with modifiers (e.g. ⌘Tab app switch) — only plain Tab accepts.
     let hasModifier = flags.contains(.maskCommand) || flags.contains(.maskControl) || flags.contains(.maskAlternate)
     if keycode == kVKTab && !hasModifier {
+        Logger.infra.debug("TabInterceptor: Tab accepted suggestion")
         Task { @MainActor in CompletionController.shared.acceptFull() }
         return nil   // swallow the Tab
     }

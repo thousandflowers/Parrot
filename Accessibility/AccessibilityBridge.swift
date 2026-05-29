@@ -385,19 +385,23 @@ actor AccessibilityBridge: AXBridgeProtocol {
         return CompletionAXContext(preContext: pre, postContext: post, caretRect: rect, isSecure: isSecure)
     }
 
-    /// Inserts completion text at the caret (collapsed selection → insertion). Returns success.
+    /// Inserts completion text at the caret by synthesizing typing (a Unicode keyboard event).
+    /// This is the most universal method — it works in AppKit, Electron, web fields, terminals —
+    /// where AX value-setting silently fails. Returns false only if event creation fails.
     func insertCompletion(_ text: String, pid: pid_t) async -> Bool {
-        guard AXIsProcessTrusted(), !text.isEmpty else { return false }
-        let bid = await AppDetector.shared.frontAppBundleID(forPID: pid)
-        if let b = bid, await ElectronFallbackHandler.shared.isElectronApp(bundleID: b) {
-            try? await injectViaClipboard(correctedText: text, targetPID: pid)
-            return true
+        guard !text.isEmpty else { return false }
+        let source = CGEventSource(stateID: .combinedSessionState)
+        var utf16 = Array(text.utf16)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+            return false
         }
-        let appAX = AXUIElementCreateApplication(pid)
-        var focusedRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(appAX, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
-              let focused = focusedRef, let element = Self.asElement(focused) else { return false }
-        return AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFTypeRef) == .success
+        keyDown.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
+        keyUp.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+        Logger.ax.debug("insertCompletion: typed \(text.count, privacy: .public) chars")
+        return true
     }
 
     func boundsForRange(_ range: CFRange, pid: pid_t) async -> CGRect? {
