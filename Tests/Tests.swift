@@ -1206,6 +1206,15 @@ final class CompletionPostprocessorTests: XCTestCase {
         XCTAssertEqual(r, "Hello world")
     }
 
+    func testClean_dropsHtmlMarkupSuggestion() {
+        // Base web-trained models drift into HTML — a plain-text field must never get "<strong>".
+        XCTAssertNil(CompletionPostprocessor.clean(raw: "<strong>a</strong> casa", preContext: "Non posso venire ", maxWords: 4))
+    }
+
+    func testClean_dropsCodeLikeSuggestion() {
+        XCTAssertNil(CompletionPostprocessor.clean(raw: "{ return a; }", preContext: "Ciao ", maxWords: 4))
+    }
+
     func testClean_dropsLoopRepeatingRecentContext() {
         // Model echoes text already written → repetition loop → must be dropped.
         let r = CompletionPostprocessor.clean(raw: "Non posso amare.",

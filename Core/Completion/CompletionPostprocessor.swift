@@ -9,6 +9,16 @@ enum CompletionPostprocessor {
     static func clean(raw: String, preContext: String, maxWords: Int) -> String? {
         var text = raw
 
+        // 0. Base (web-pretrained) models sometimes drift into HTML/markdown/code. Strip inline
+        //    markup; if the result still looks like code/markup, reject it entirely — a plain-text
+        //    field should never get "<strong>" or "{ }" suggestions.
+        text = text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        text = text.replacingOccurrences(of: "`", with: "")
+        if text.range(of: "[<>{}]|/>|</|=>|;\\s*$|\\bfunction\\b|\\bconst\\b|\\bdef\\b|\\bimport\\b",
+                      options: .regularExpression) != nil {
+            return nil
+        }
+
         // 1. Some models echo the prompt/prefix back. Strip it if the output starts with it.
         if !preContext.isEmpty, text.hasPrefix(preContext) {
             text = String(text.dropFirst(preContext.count))
