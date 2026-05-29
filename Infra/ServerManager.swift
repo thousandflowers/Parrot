@@ -14,6 +14,7 @@ actor ServerManager: Sendable {
     static let completion = ServerManager(allowExternalReuse: false)
 
     private let allowExternalReuse: Bool
+    private var currentModelPath: String?   // model our own process was launched with
     init(allowExternalReuse: Bool = true) { self.allowExternalReuse = allowExternalReuse }
 
     private var process: Process?
@@ -34,7 +35,13 @@ actor ServerManager: Sendable {
             try await existingTask.value
             return currentPort
         }
-        
+
+        // 0. If our own server is already running a DIFFERENT model, restart it so a model change
+        //    (user picked a new correction/completion model) actually takes effect.
+        if !isExternalServer, currentPort > 0, let cur = currentModelPath, cur != modelPath {
+            await stop()
+        }
+
         // 1. Check if current is still healthy
         if currentPort > 0 {
             if await checkServerHealth(port: currentPort) {
@@ -133,7 +140,10 @@ actor ServerManager: Sendable {
 
             do {
                 for healthAttempt in 0..<Constants.serverHealthAttempts {
-                    if await checkServerHealth(port: currentPort) { return }
+                    if await checkServerHealth(port: currentPort) {
+                        self.currentModelPath = modelPath
+                        return
+                    }
                     guard process.isRunning else { break }
                     let delayMs = min(2000, 250 * Int(pow(2.0, Double(healthAttempt))))
                     try await Task.sleep(for: .milliseconds(delayMs))
@@ -156,6 +166,7 @@ actor ServerManager: Sendable {
     func stop() async {
         startupTask?.cancel()
         startupTask = nil
+        currentModelPath = nil
 
         if isExternalServer {
             self.currentPort = 0
