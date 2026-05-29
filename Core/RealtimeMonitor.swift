@@ -28,6 +28,8 @@ actor RealtimeMonitor {
         lastTextHash = nil
         Task { await RealtimeIndicatorController.shared.hide() }
         Task { await attachToFocusedApp() }
+        // Clear any inline-completion ghost left over from the previous app.
+        Task { @MainActor in CompletionController.shared.dismiss() }
     }
 
     private func attachToFocusedApp() async {

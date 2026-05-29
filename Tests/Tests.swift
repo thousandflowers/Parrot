@@ -1188,6 +1188,24 @@ final class CompletionPostprocessorTests: XCTestCase {
         XCTAssertNil(CompletionPostprocessor.clean(raw: "   ", preContext: "x", maxWords: 8))
     }
 
+    func testClean_addsSpaceWhenPrefixEndsWithWordChar() {
+        // The "perchiedere" bug: prefix ends with a letter, model omits the boundary space.
+        let r = CompletionPostprocessor.clean(raw: "chiedere un favore", preContext: "ti scrivo per", maxWords: 8)
+        XCTAssertEqual(r, " chiedere un favore")
+        XCTAssertEqual("ti scrivo per" + (r ?? ""), "ti scrivo per chiedere un favore")
+    }
+
+    func testClean_noDoubleSpaceWhenPrefixEndsWithSpace() {
+        let r = CompletionPostprocessor.clean(raw: " comprare il pesce", preContext: "sono andato al mercato ", maxWords: 8)
+        XCTAssertEqual(r, "comprare il pesce")
+        XCTAssertEqual("sono andato al mercato " + (r ?? ""), "sono andato al mercato comprare il pesce")
+    }
+
+    func testClean_emptyPrefix_noLeadingSpace() {
+        let r = CompletionPostprocessor.clean(raw: "Hello world", preContext: "", maxWords: 8)
+        XCTAssertEqual(r, "Hello world")
+    }
+
     func testClean_onlyNewline_returnsNil() {
         XCTAssertNil(CompletionPostprocessor.clean(raw: "\n\n", preContext: "x", maxWords: 8))
     }

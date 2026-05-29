@@ -19,15 +19,21 @@ enum CompletionPostprocessor {
             text = String(text[..<nl])
         }
 
-        // 3. Collapse to the word budget. Preserve a single leading space if the model continued
-        //    mid-word boundary (e.g. prefix "ti scrivo per" + " informarti").
-        let leadingSpace = text.first.map { $0 == " " } ?? false
+        // 3. Collapse to the word budget.
         let words = text.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
         guard !words.isEmpty else { return nil }
-        let capped = words.prefix(max(1, maxWords)).joined(separator: " ")
-        text = (leadingSpace ? " " : "") + capped
+        var capped = words.prefix(max(1, maxWords)).joined(separator: " ")
 
-        // 4. Trailing whitespace is meaningless for a ghost hint; a pure-whitespace result is useless.
+        // 4. Deterministic join spacing — NEVER join two words. The model is unreliable at adding
+        //    the boundary space, so we decide it here: if the user's text ends with a non-space
+        //    character, the suggestion must start with exactly one space; if it already ends with
+        //    whitespace, the suggestion must start with none.
+        if let last = preContext.last, !last.isWhitespace {
+            capped = " " + capped
+        }
+        text = capped
+
+        // 5. A pure-whitespace result is useless.
         if text.trimmingCharacters(in: .whitespaces).isEmpty { return nil }
 
         return text
