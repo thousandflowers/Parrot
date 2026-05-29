@@ -111,5 +111,6 @@ enum Constants {
         static let completionModelID = "completionModelID"   // "" = same as main correction model
         static let completionUseAppContext = "completionUseAppContext"
         static let completionUseScreenContext = "completionUseScreenContext"
+        static let completionUseClipboardContext = "completionUseClipboardContext"
     }
 }

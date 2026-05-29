@@ -65,10 +65,11 @@ struct CompletionTab: View {
                         if newValue { ScreenContextProvider.requestPermission() }
                     }
                 ))
+                Toggle("Use clipboard context", isOn: $prefs.completionUseClipboardContext)
             } header: {
                 Label("Context", systemImage: "rectangle.dashed.and.paperclip")
             } footer: {
-                Text("Reads on-screen text (the conversation or email you're replying to — not just the text field) so suggestions fit the context. On-device OCR, throttled. Requires Screen Recording permission.")
+                Text("Screen context reads on-screen text (the conversation/email you're replying to) via on-device OCR (throttled, needs Screen Recording). Clipboard context adds your copied text. Both ground suggestions so they fit.")
                     .foregroundStyle(.secondary)
             }
 

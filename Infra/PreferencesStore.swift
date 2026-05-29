@@ -299,6 +299,10 @@ final class PreferencesStore {
         get { bool(Constants.UserDefaultsKey.completionUseScreenContext, default: false) }
         set { set(newValue, for: Constants.UserDefaultsKey.completionUseScreenContext) }
     }
+    var completionUseClipboardContext: Bool {
+        get { bool(Constants.UserDefaultsKey.completionUseClipboardContext, default: false) }
+        set { set(newValue, for: Constants.UserDefaultsKey.completionUseClipboardContext) }
+    }
 
     private func string(_ key: String, fallback: String = "") -> String {
         observe()

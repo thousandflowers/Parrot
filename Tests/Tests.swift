@@ -1322,27 +1322,39 @@ final class TypoFixTests: XCTestCase {
     }
 }
 
+final class EmojiCompletionTests: XCTestCase {
+    func testMatch_shortcode() {
+        let m = EmojiCompletion.match(preContext: "great work :fire")
+        XCTAssertEqual(m?.emoji, "🔥")
+        XCTAssertEqual(m?.shortcode, ":fire")
+    }
+    func testMatch_noColon_returnsNil() {
+        XCTAssertNil(EmojiCompletion.match(preContext: "fire"))
+    }
+    func testMatch_unknownShortcode_returnsNil() {
+        XCTAssertNil(EmojiCompletion.match(preContext: ":zzzznotanemoji"))
+    }
+}
+
 final class CompletionLearningTests: XCTestCase {
-    func testKey_lastWords() {
-        XCTAssertEqual(CompletionLearningStore.key(forContext: "ti scrivo per"), "ti scrivo per")
-        XCTAssertEqual(CompletionLearningStore.key(forContext: "Caro Marco ti scrivo per"), "ti scrivo per")
+    func testKeys_multiOrder() {
+        XCTAssertEqual(CompletionLearningStore.keys(forContext: "caro luca ti scrivo per"),
+                       ["ti scrivo per", "scrivo per", "per"])
     }
 
-    func testKey_tooFewWords_nil() {
-        XCTAssertNil(CompletionLearningStore.key(forContext: "ciao"))
+    func testKeys_singleWord() {
+        XCTAssertEqual(CompletionLearningStore.keys(forContext: "ciao"), ["ciao"])
     }
 
     func testRecord_thenSuggestAfterTwoAccepts() async {
         let store = CompletionLearningStore.shared
-        let key = "wrentest unique key \(UUID().uuidString)"
-        // one accept = not yet confident
-        await store.record(contextKey: key, accepted: " hello there")
-        let after1 = await store.learnedSuggestion(contextKey: key)
-        XCTAssertNil(after1)
-        // second accept = confident
-        await store.record(contextKey: key, accepted: " hello there")
-        let after2 = await store.learnedSuggestion(contextKey: key)
-        XCTAssertEqual(after2, " hello there")
+        let keys = ["zzz-\(UUID().uuidString.lowercased())"]
+        await store.record(keys: keys, accepted: " hello")
+        let a1 = await store.learnedSuggestion(keys: keys)
+        XCTAssertNil(a1)   // one accept = not yet confident
+        await store.record(keys: keys, accepted: " hello")
+        let a2 = await store.learnedSuggestion(keys: keys)
+        XCTAssertEqual(a2?.text, " hello")
     }
 }
 

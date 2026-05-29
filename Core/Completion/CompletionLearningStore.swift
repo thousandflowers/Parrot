@@ -1,18 +1,23 @@
 import Foundation
 import OSLog
 
-/// Lightweight on-device learning for completion — inspired by Cotypist's core (which persists
-/// what you accept and adapts). When you accept a completion, the (context → completion) pair is
-/// stored with a frequency count. On the next matching context, Wren can suggest it INSTANTLY —
-/// no model call — so your recurring phrases are fast and personal. Persisted as small JSON in the
-/// shared Application Support dir; trivially cheap in RAM.
+/// On-device learning for completion — inspired by (and going beyond) Cotypist's core. Records what
+/// you accept and serves it INSTANTLY on a matching context (no model call). Improvements over a
+/// plain exact-key store:
+///  - **Variable-order n-gram keys** (last 1/2/3 words): a completion learned after "ti scrivo per"
+///    still fires after "caro luca, ti scrivo per" via the shorter key — far more instant hits.
+///  - **Acceptance-rate suppression**: a learned suggestion shown often but rarely accepted is
+///    dropped, so the model isn't nagged with stale guesses.
+/// Persisted as small JSON in the shared Application Support dir; cheap in RAM.
 actor CompletionLearningStore {
     static let shared = CompletionLearningStore()
 
-    private struct Entry: Codable { var text: String; var count: Int; var lastUsed: Double }
-    private var map: [String: Entry] = [:]   // contextKey -> best accepted completion
+    private struct Entry: Codable { var text: String; var accepts: Int; var shows: Int; var lastUsed: Double }
+    private var map: [String: Entry] = [:]
     private var loaded = false
-    private let maxEntries = 2000
+    private let maxEntries = 4000
+    private let minAccepts = 2          // confidence threshold to suggest
+    private let suppressShows = 6       // after this many shows, require ≥20% acceptance to keep suggesting
 
     private static var fileURL: URL {
         let dir = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -20,15 +25,18 @@ actor CompletionLearningStore {
         return dir.appendingPathComponent("completion_learned.json")
     }
 
-    /// Normalized key from the tail of the user's text: the last up-to-3 words, lowercased.
-    nonisolated static func key(forContext preContext: String) -> String? {
+    /// Variable-order keys for a context: last 3, 2, and 1 words (lowercased), longest first.
+    nonisolated static func keys(forContext preContext: String) -> [String] {
         let words = preContext
             .replacingOccurrences(of: "\n", with: " ")
             .split(separator: " ", omittingEmptySubsequences: true)
-            .suffix(3)
             .map { $0.lowercased() }
-        guard words.count >= 2 else { return nil }   // need a little context to be meaningful
-        return words.joined(separator: " ")
+        guard !words.isEmpty else { return [] }
+        var result: [String] = []
+        for n in [3, 2, 1] where words.count >= n {
+            result.append(words.suffix(n).joined(separator: " "))
+        }
+        return result   // longest → shortest
     }
 
     private func loadIfNeeded() {
@@ -39,26 +47,44 @@ actor CompletionLearningStore {
         map = decoded
     }
 
-    /// Records an accepted completion for a context.
-    func record(contextKey: String, accepted: String) {
-        let text = accepted.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !contextKey.isEmpty else { return }
+    /// Records an accepted completion under every order key so varied future contexts match.
+    func record(keys: [String], accepted: String) {
+        let text = accepted
+        guard !text.trimmingCharacters(in: .whitespaces).isEmpty, !keys.isEmpty else { return }
         loadIfNeeded()
-        if var e = map[contextKey], e.text == accepted {
-            e.count += 1; e.lastUsed = Date().timeIntervalSince1970; map[contextKey] = e
-        } else {
-            // New or changed completion for this context — keep the most recent acceptance.
-            map[contextKey] = Entry(text: accepted, count: 1, lastUsed: Date().timeIntervalSince1970)
+        let now = Date().timeIntervalSince1970
+        for k in keys {
+            if var e = map[k], e.text == text {
+                e.accepts += 1; e.lastUsed = now; map[k] = e
+            } else {
+                map[k] = Entry(text: text, accepts: 1, shows: map[k]?.shows ?? 0, lastUsed: now)
+            }
         }
         if map.count > maxEntries { evictOldest() }
         save()
     }
 
-    /// Returns a learned completion for the context, if one was accepted ≥2 times (confident).
-    func learnedSuggestion(contextKey: String) -> String? {
+    /// Note that a learned suggestion was shown (for acceptance-rate suppression).
+    func noteShown(key: String) {
+        guard !key.isEmpty else { return }
         loadIfNeeded()
-        guard let e = map[contextKey], e.count >= 2 else { return nil }
-        return e.text
+        guard var e = map[key] else { return }
+        e.shows += 1
+        map[key] = e
+        save()
+    }
+
+    /// Best learned completion for the context (tries longest key first), or nil.
+    /// Returns the matched key too, so the caller can attribute the "shown" event.
+    func learnedSuggestion(keys: [String]) -> (text: String, key: String)? {
+        loadIfNeeded()
+        for k in keys {
+            guard let e = map[k], e.accepts >= minAccepts else { continue }
+            // Acceptance-rate suppression: shown a lot but rarely accepted (<20%) → skip.
+            if e.shows >= suppressShows && e.accepts * 5 < e.shows { continue }
+            return (e.text, k)
+        }
+        return nil
     }
 
     private func evictOldest() {

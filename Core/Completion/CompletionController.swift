@@ -10,7 +10,7 @@ final class CompletionController {
     private let overlay = CompletionOverlayWindow()
     private var current: CompletionSuggestion?
     private var currentPID: pid_t = 0
-    private var currentContextKey: String?   // learning key for the shown completion
+    private var currentContextKeys: [String] = []   // learning keys for the shown completion
     private var debounce: Task<Void, Never>?
 
     private init() {}
@@ -48,6 +48,16 @@ final class CompletionController {
             return
         }
 
+        // Emoji: typing ":shortcode" → Tab replaces it with the emoji.
+        if ax.caretRect != .zero, let em = EmojiCompletion.match(preContext: ax.preContext) {
+            current = CompletionSuggestion(text: em.emoji, kind: .replaceLastWord(wrong: em.shortcode))
+            currentPID = pid
+            TabInterceptor.setSuggestionVisible(true)
+            overlay.show(text: em.emoji, atCaretRect: ax.caretRect)
+            Logger.infra.debug("completion: emoji \(em.shortcode, privacy: .public) -> \(em.emoji, privacy: .public)")
+            return
+        }
+
         // Typo fix: if the just-typed word is misspelled, Tab corrects it (instead of completing).
         // Skipped in code editors (identifiers aren't typos). Cheap on-device spell check, no LLM.
         if !allowCode, ax.caretRect != .zero,
@@ -60,30 +70,37 @@ final class CompletionController {
             return
         }
 
-        // Learned (Cotypist-style): if this context was completed before, suggest it INSTANTLY —
-        // no model call → faster + personalized for your recurring phrases.
-        let contextKey = CompletionLearningStore.key(forContext: ax.preContext)
-        if let key = contextKey, let learned = await CompletionLearningStore.shared.learnedSuggestion(contextKey: key),
-           let cleaned = CompletionPostprocessor.clean(raw: learned, preContext: ax.preContext, maxWords: PreferencesStore.shared.maxCompletionLength * 3, allowCode: allowCode) {
+        // Learned (Cotypist-style, n-gram): if this context was completed before, suggest it INSTANTLY
+        // — no model call → faster + personalized for your recurring phrases.
+        let contextKeys = CompletionLearningStore.keys(forContext: ax.preContext)
+        if !contextKeys.isEmpty,
+           let learned = await CompletionLearningStore.shared.learnedSuggestion(keys: contextKeys),
+           let cleaned = CompletionPostprocessor.clean(raw: learned.text, preContext: ax.preContext, maxWords: PreferencesStore.shared.maxCompletionLength * 3, allowCode: allowCode) {
             current = CompletionSuggestion(text: cleaned, kind: .insert)
             currentPID = pid
-            currentContextKey = key
+            currentContextKeys = contextKeys
+            await CompletionLearningStore.shared.noteShown(key: learned.key)
             TabInterceptor.setSuggestionVisible(true)
             overlay.show(text: cleaned, atCaretRect: ax.caretRect)
-            Logger.infra.debug("completion: learned suggestion for '\(key, privacy: .public)'")
+            Logger.infra.debug("completion: learned suggestion for '\(learned.key, privacy: .public)'")
             return
         }
 
         // Enrich the prefix with on-screen context (the conversation/email above the field, which is
         // NOT in the text field) so suggestions are grounded, not "pulled from a hat". The user's own
         // text stays LAST so the model continues IT. Screen OCR is cached/throttled (anti-stutter).
-        var preContext = ax.preContext
+        var contextParts: [String] = []
+        if PreferencesStore.shared.completionUseClipboardContext,
+           let clip = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !clip.isEmpty, clip.count <= 400 {
+            contextParts.append(String(clip.prefix(400)))
+        }
         if PreferencesStore.shared.completionUseScreenContext {
             let screen = await ScreenContextProvider.shared.currentContext(pid: pid)
-            if !screen.isEmpty {
-                preContext = screen + "\n\n" + ax.preContext
-            }
+            if !screen.isEmpty { contextParts.append(screen) }
         }
+        // User's own text stays LAST so the model continues IT.
+        let preContext = contextParts.isEmpty ? ax.preContext : (contextParts + [ax.preContext]).joined(separator: "\n\n")
 
         let context = CompletionContext(preContext: preContext, postContext: ax.postContext,
                                         language: PreferencesStore.shared.language)
@@ -103,7 +120,7 @@ final class CompletionController {
 
         current = suggestion
         currentPID = pid
-        currentContextKey = contextKey
+        currentContextKeys = contextKeys
         TabInterceptor.setSuggestionVisible(true)
         overlay.show(text: suggestion.text, atCaretRect: ax.caretRect)
         Logger.infra.debug("completion: showing \(suggestion.text, privacy: .public) at \(NSStringFromRect(ax.caretRect), privacy: .public)")
@@ -115,13 +132,13 @@ final class CompletionController {
         let pid = currentPID
         let text = s.text
         let kind = s.kind
-        let key = currentContextKey
+        let keys = currentContextKeys
         clearSuggestion()
         Task {
             switch kind {
             case .insert:
                 _ = await AccessibilityBridge.shared.insertCompletion(text, pid: pid)
-                if let key { await CompletionLearningStore.shared.record(contextKey: key, accepted: text) }
+                if !keys.isEmpty { await CompletionLearningStore.shared.record(keys: keys, accepted: text) }
             case .replaceLastWord(let wrong):
                 _ = await AccessibilityBridge.shared.replaceLastWord(wrong: wrong, with: text, pid: pid)
             }
@@ -129,8 +146,10 @@ final class CompletionController {
     }
 
     /// Partial accept — insert the first word only, then re-suggest from the new position.
+    /// Only meaningful for completions; a typo fix has no "partial", so it accepts fully.
     func acceptPartial() {
         guard let s = current, currentPID != 0 else { return }
+        guard case .insert = s.kind else { acceptFull(); return }
         let pid = currentPID
         let word = s.firstWord
         clearSuggestion()
@@ -150,7 +169,7 @@ final class CompletionController {
     private func clearSuggestion() {
         current = nil
         currentPID = 0
-        currentContextKey = nil
+        currentContextKeys = []
         TabInterceptor.setSuggestionVisible(false)
         overlay.hide()
     }
