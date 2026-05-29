@@ -398,5 +398,5 @@ WREN_PLIST="${WREN_APP}/Contents/Info.plist"
   || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Wren" "${WREN_PLIST}"
 # Editing Info.plist invalidates the signature → re-seal the outer bundle.
 # shellcheck disable=SC2086
-codesign --force --deep --sign "${SIGNING_IDENTITY}" --entitlements "${ENTITLEMENTS}" ${SIGN_OPTS} "${WREN_APP}"
+codesign --force --sign "${SIGNING_IDENTITY}" --entitlements "${ENTITLEMENTS}" ${SIGN_OPTS} "${WREN_APP}"
 echo "[✓] Wren.app ready (com.thousandflowers.wren)."
