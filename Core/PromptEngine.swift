@@ -152,47 +152,6 @@ struct PromptEngine {
         return escaped
     }
 
-    /// Few-shot examples steer small models toward MINIMAL edits (fix the error, keep the rest)
-    /// instead of rephrasing or changing tense. Examples deliberately avoid tense/person changes
-    /// so they never contradict the family instruction. Only languages we can vouch for return
-    /// examples; others fall back to instructions only (still correct, just less guided).
-    private func grammarFewShot() -> String? {
-        let pairs: [(String, String)]
-        switch primaryLanguageCode {
-        case "it":
-            pairs = [
-                ("Lui hanno mangiato la torta.", "Lui ha mangiato la torta."),
-                ("Ho comprato tre libri rosso.", "Ho comprato tre libri rossi."),
-                ("La macchina sono veloce.", "La macchina è veloce.")
-            ]
-        case "en":
-            pairs = [
-                ("She have three cat.", "She has three cats."),
-                ("He don't like it.", "He doesn't like it."),
-                ("The childs is playing.", "The children are playing.")
-            ]
-        case "es":
-            pairs = [
-                ("Ella tienen dos perro.", "Ella tiene dos perros."),
-                ("La casa son bonita.", "La casa es bonita.")
-            ]
-        case "fr":
-            pairs = [
-                ("Il ont mangé la pomme.", "Il a mangé la pomme."),
-                ("Les chat est noir.", "Les chats sont noirs.")
-            ]
-        case "de":
-            pairs = [
-                ("Er haben das Buch gelesen.", "Er hat das Buch gelesen."),
-                ("Die Katze sind klein.", "Die Katze ist klein.")
-            ]
-        default:
-            return nil
-        }
-        let lines = pairs.map { "Input: \($0.0)\nOutput: \($0.1)" }.joined(separator: "\n")
-        return "Examples — fix ONLY the error, change as few words as possible, keep everything else identical:\n\(lines)"
-    }
-
     func buildGrammarPrompt(for text: String, customInstruction: String? = nil) -> String {
         let extra = grammarFamilyInstruction
         let styleLine = styleInstruction
@@ -200,13 +159,15 @@ struct PromptEngine {
         let langName = languageName(for: language)
 
         var parts: [String] = []
-        parts.append("Fix all grammatical errors in the text inside <TEXT>: misspellings, wrong verb agreement, and broken phrases where the words as written are syntactically impossible. You may add or replace words ONLY to fix a clear grammatical error. NEVER change: verb tense (present/past/future/etc.), grammatical person (1st/2nd/3rd), narrative point of view, or perspective — these are authorial choices, not errors. Do not rephrase correct sentences, do not reorder, do not substitute synonyms. Return only the corrected text.")
+        // A single language-agnostic minimal-edit instruction replaces per-language few-shot
+        // example lists: it covers every language, not just a hardcoded handful, and keeps the
+        // prompt short. The "smallest change" rule is what steered small models in the examples.
+        parts.append("Fix all grammatical errors in the text inside <TEXT>: misspellings, wrong verb agreement, and broken phrases where the words as written are syntactically impossible. Make the SMALLEST possible change — fix only the incorrect words and leave every correct word exactly as written. You may add or replace words ONLY to fix a clear grammatical error. NEVER change: verb tense (present/past/future/etc.), grammatical person (1st/2nd/3rd), narrative point of view, or perspective — these are authorial choices, not errors. Do not rephrase correct sentences, do not reorder, do not substitute synonyms. Return only the corrected text.")
         parts.append("CRITICAL: Output MUST be in \(langName). Do NOT translate to any other language.")
         if !extra.isEmpty { parts.append(extra) }
         if !styleLine.isEmpty { parts.append(styleLine) }
         if let custom = customInstruction { parts.append(custom) }
         if let styleHint = StyleProfiler.buildHint(language: language) { parts.append(styleHint) }
-        if let fewShot = grammarFewShot() { parts.append(fewShot) }
         parts.append("\n<TEXT>\(safeText)</TEXT>")
 
         return parts.joined(separator: "\n")
