@@ -157,4 +157,29 @@ actor AppDetector {
         "com.openai.",
         "com.google.Chrome.app.",
     ]
+
+    /// Code editors / IDEs / terminals — where a completion containing code/markup is desired, so
+    /// the plain-text guard in CompletionPostprocessor must NOT reject `{ } < >`.
+    func isCodeEditor(bundleID: String?) -> Bool {
+        guard let bundleID else { return false }
+        return codeEditorBundleIDs.contains(bundleID)
+            || codeEditorPrefixes.contains { bundleID.hasPrefix($0) }
+    }
+
+    private let codeEditorBundleIDs: Set<String> = [
+        "com.microsoft.VSCode",
+        "com.microsoft.VSCodeInsiders",
+        "com.apple.dt.Xcode",
+        "com.sublimetext.4", "com.sublimetext.3",
+        "com.jetbrains.intellij", "com.jetbrains.pycharm", "com.jetbrains.WebStorm",
+        "com.jetbrains.CLion", "com.jetbrains.goland", "com.jetbrains.rubymine",
+        "dev.zed.Zed", "com.todesktop.230313mzl4w4u92", // Cursor
+        "com.googlecode.iterm2", "com.apple.Terminal", "net.kovidgoyal.kitty",
+        "io.alacritty", "com.github.wez.wezterm", "dev.warp.Warp-Stable",
+    ]
+
+    private let codeEditorPrefixes: [String] = [
+        "com.jetbrains.",
+        "com.microsoft.VSCode",
+    ]
 }

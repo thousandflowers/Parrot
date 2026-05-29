@@ -17,19 +17,41 @@ actor ScreenContextProvider {
     private var capturing = false
 
     /// Returns recent on-screen text (cached). Empty if unavailable / no permission.
-    func currentContext() async -> String {
+    /// Captures the focused app's frontmost window when `pid` is given (cleaner, more relevant, and
+    /// faster than the whole display); falls back to the main display.
+    func currentContext(pid: pid_t = 0) async -> String {
         if Date().timeIntervalSince(lastCapture) < Constants.completionScreenContextTTL { return cached }
         if capturing { return cached }
         capturing = true
         defer { capturing = false }
 
-        guard let image = Self.captureMainDisplay() else { return cached }
+        let image = (pid != 0 ? Self.captureFrontWindow(pid: pid) : nil) ?? Self.captureMainDisplay()
+        guard let image else { return cached }
         let text = await Self.recognizeText(in: image)
         if !text.isEmpty {
             cached = String(text.suffix(Constants.completionScreenContextMaxChars))
             lastCapture = Date()
         }
         return cached
+    }
+
+    /// Captures just the frontmost on-screen window owned by `pid` (the app being typed in).
+    private static func captureFrontWindow(pid: pid_t) -> CGImage? {
+        guard CGPreflightScreenCaptureAccess() else { return nil }
+        guard let infoList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return nil }
+        // Pick the largest normal-layer window belonging to this PID.
+        var bestID: CGWindowID?
+        var bestArea: CGFloat = 0
+        for w in infoList {
+            guard (w[kCGWindowOwnerPID as String] as? pid_t) == pid,
+                  (w[kCGWindowLayer as String] as? Int) == 0,
+                  let b = w[kCGWindowBounds as String] as? [String: CGFloat],
+                  let id = w[kCGWindowNumber as String] as? CGWindowID else { continue }
+            let area = (b["Width"] ?? 0) * (b["Height"] ?? 0)
+            if area > bestArea { bestArea = area; bestID = id }
+        }
+        guard let windowID = bestID else { return nil }
+        return CGWindowListCreateImage(.null, .optionIncludingWindow, windowID, [.boundsIgnoreFraming, .nominalResolution])
     }
 
     /// Asks for Screen Recording permission (no-op if already granted).

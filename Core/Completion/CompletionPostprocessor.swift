@@ -6,17 +6,19 @@ enum CompletionPostprocessor {
     /// Cleans `raw` into an inline suggestion, or returns nil if there is nothing useful to show.
     /// - `preContext`: the text before the caret, used to strip an echoed prefix.
     /// - `maxWords`: hard cap on suggestion length (a "short" completion budget).
-    static func clean(raw: String, preContext: String, maxWords: Int) -> String? {
+    static func clean(raw: String, preContext: String, maxWords: Int, allowCode: Bool = false) -> String? {
         var text = raw
 
-        // 0. Base (web-pretrained) models sometimes drift into HTML/markdown/code. Strip inline
-        //    markup; if the result still looks like code/markup, reject it entirely — a plain-text
-        //    field should never get "<strong>" or "{ }" suggestions.
-        text = text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-        text = text.replacingOccurrences(of: "`", with: "")
-        if text.range(of: "[<>{}]|/>|</|=>|;\\s*$|\\bfunction\\b|\\bconst\\b|\\bdef\\b|\\bimport\\b",
-                      options: .regularExpression) != nil {
-            return nil
+        // 0. In plain-text fields, base (web-pretrained) models sometimes drift into HTML/markdown/
+        //    code. Strip inline markup and reject code-looking output. SKIPPED in code editors, where
+        //    code/markup is exactly what the user wants.
+        if !allowCode {
+            text = text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            text = text.replacingOccurrences(of: "`", with: "")
+            if text.range(of: "[<>{}]|/>|</|=>|;\\s*$|\\bfunction\\b|\\bconst\\b|\\bdef\\b|\\bimport\\b",
+                          options: .regularExpression) != nil {
+                return nil
+            }
         }
 
         // 1. Some models echo the prompt/prefix back. Strip it if the output starts with it.

@@ -39,8 +39,9 @@ final class CompletionController {
 
         let pid = await AccessibilityBridge.shared.lastKnownFrontAppPID()
         guard pid != 0 else { return }
-        if let id = await AppDetector.shared.frontAppBundleID(forPID: pid),
-           PreferencesStore.shared.isExcluded(bundleID: id) { return }
+        let bundleID = await AppDetector.shared.frontAppBundleID(forPID: pid)
+        if let id = bundleID, PreferencesStore.shared.isExcluded(bundleID: id) { return }
+        let allowCode = await AppDetector.shared.isCodeEditor(bundleID: bundleID)
         guard let ax = await AccessibilityBridge.shared.completionContext(pid: pid), !ax.isSecure else {
             Logger.infra.debug("completion: no usable focused field (or secure)")
             return
@@ -51,7 +52,7 @@ final class CompletionController {
         // text stays LAST so the model continues IT. Screen OCR is cached/throttled (anti-stutter).
         var preContext = ax.preContext
         if PreferencesStore.shared.completionUseScreenContext {
-            let screen = await ScreenContextProvider.shared.currentContext()
+            let screen = await ScreenContextProvider.shared.currentContext(pid: pid)
             if !screen.isEmpty {
                 preContext = screen + "\n\n" + ax.preContext
             }
@@ -62,7 +63,7 @@ final class CompletionController {
         Logger.infra.debug("completion: preContext tail=…\(String(ax.preContext.suffix(40)), privacy: .public)| screenCtx=\(PreferencesStore.shared.completionUseScreenContext)")
         guard CompletionContext(preContext: ax.preContext, postContext: ax.postContext, language: "").isUsable else { return }
         let maxWords = PreferencesStore.shared.maxCompletionLength
-        guard let suggestion = await CompletionEngine.shared.suggest(context: context, maxWords: maxWords) else {
+        guard let suggestion = await CompletionEngine.shared.suggest(context: context, maxWords: maxWords, allowCode: allowCode) else {
             Logger.infra.debug("completion: engine returned no suggestion")
             return
         }

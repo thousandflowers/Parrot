@@ -18,7 +18,7 @@ actor CompletionEngine {
 
     /// Returns a cleaned suggestion for the context, or nil if there is nothing to show
     /// (unusable context, empty/echo result, an error, or the request was superseded).
-    func suggest(context: CompletionContext, maxWords: Int) async -> CompletionSuggestion? {
+    func suggest(context: CompletionContext, maxWords: Int, allowCode: Bool = false) async -> CompletionSuggestion? {
         guard context.isUsable else { return nil }
         generation &+= 1
         let mine = generation
@@ -36,7 +36,7 @@ actor CompletionEngine {
         // Superseded by a newer request while we were waiting → drop.
         guard mine == generation else { return nil }
 
-        guard let cleaned = CompletionPostprocessor.clean(raw: raw, preContext: context.preContext, maxWords: maxWords),
+        guard let cleaned = CompletionPostprocessor.clean(raw: raw, preContext: context.preContext, maxWords: maxWords, allowCode: allowCode),
               !cleaned.isEmpty else {
             return nil
         }

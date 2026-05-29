@@ -1206,13 +1206,22 @@ final class CompletionPostprocessorTests: XCTestCase {
         XCTAssertEqual(r, "Hello world")
     }
 
-    func testClean_dropsHtmlMarkupSuggestion() {
-        // Base web-trained models drift into HTML — a plain-text field must never get "<strong>".
-        XCTAssertNil(CompletionPostprocessor.clean(raw: "<strong>a</strong> casa", preContext: "Non posso venire ", maxWords: 4))
+    func testClean_stripsHtmlMarkup() {
+        // Base web-trained models drift into HTML; tags are stripped, the clean text is kept.
+        let r = CompletionPostprocessor.clean(raw: "<strong>a</strong> casa", preContext: "Non posso venire ", maxWords: 4)
+        XCTAssertEqual(r, "a casa")
+        XCTAssertFalse(r?.contains("<") ?? true)
     }
 
     func testClean_dropsCodeLikeSuggestion() {
         XCTAssertNil(CompletionPostprocessor.clean(raw: "{ return a; }", preContext: "Ciao ", maxWords: 4))
+    }
+
+    func testClean_allowsCodeInCodeEditor() {
+        // In a code editor allowCode=true: code must NOT be rejected.
+        let r = CompletionPostprocessor.clean(raw: "return a + b;", preContext: "int sum() { ", maxWords: 6, allowCode: true)
+        XCTAssertNotNil(r)
+        XCTAssertTrue(r?.contains("return") ?? false)
     }
 
     func testClean_dropsLoopRepeatingRecentContext() {
