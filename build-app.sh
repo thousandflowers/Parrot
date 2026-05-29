@@ -383,20 +383,20 @@ if [ "${SIGNING_IDENTITY}" = "-" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Canary — the inline-completion app. Same binary, different identity → AppMode.canary.
-# (Parrot = correction; Canary = completion. See App/AppMode.swift.)
+# Wren — the inline-completion app. Same binary, different identity → AppMode.wren.
+# (Parrot = correction; Wren = completion. See App/AppMode.swift.)
 # ---------------------------------------------------------------------------
-echo "[*] Generating Canary.app (completion mode)..."
-CANARY_APP="Canary.app"
-rm -rf "${CANARY_APP}"
-cp -R "${APP_DIR}" "${CANARY_APP}"
-CANARY_PLIST="${CANARY_APP}/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.thousandflowers.canary" "${CANARY_PLIST}"
-/usr/libexec/PlistBuddy -c "Set :CFBundleName Canary" "${CANARY_PLIST}" 2>/dev/null \
-  || /usr/libexec/PlistBuddy -c "Add :CFBundleName string Canary" "${CANARY_PLIST}"
-/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Canary" "${CANARY_PLIST}" 2>/dev/null \
-  || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Canary" "${CANARY_PLIST}"
+echo "[*] Generating Wren.app (completion mode)..."
+WREN_APP="Wren.app"
+rm -rf "${WREN_APP}"
+cp -R "${APP_DIR}" "${WREN_APP}"
+WREN_PLIST="${WREN_APP}/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.thousandflowers.wren" "${WREN_PLIST}"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName Wren" "${WREN_PLIST}" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Add :CFBundleName string Wren" "${WREN_PLIST}"
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Wren" "${WREN_PLIST}" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Wren" "${WREN_PLIST}"
 # Editing Info.plist invalidates the signature → re-seal the outer bundle.
 # shellcheck disable=SC2086
-codesign --force --deep --sign "${SIGNING_IDENTITY}" --entitlements "${ENTITLEMENTS}" ${SIGN_OPTS} "${CANARY_APP}"
-echo "[✓] Canary.app ready (com.thousandflowers.canary)."
+codesign --force --deep --sign "${SIGNING_IDENTITY}" --entitlements "${ENTITLEMENTS}" ${SIGN_OPTS} "${WREN_APP}"
+echo "[✓] Wren.app ready (com.thousandflowers.wren)."

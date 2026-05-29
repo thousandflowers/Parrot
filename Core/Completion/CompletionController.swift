@@ -10,6 +10,7 @@ final class CompletionController {
     private let overlay = CompletionOverlayWindow()
     private var current: CompletionSuggestion?
     private var currentPID: pid_t = 0
+    private var currentContextKey: String?   // learning key for the shown completion
     private var debounce: Task<Void, Never>?
 
     private init() {}
@@ -59,6 +60,20 @@ final class CompletionController {
             return
         }
 
+        // Learned (Cotypist-style): if this context was completed before, suggest it INSTANTLY —
+        // no model call → faster + personalized for your recurring phrases.
+        let contextKey = CompletionLearningStore.key(forContext: ax.preContext)
+        if let key = contextKey, let learned = await CompletionLearningStore.shared.learnedSuggestion(contextKey: key),
+           let cleaned = CompletionPostprocessor.clean(raw: learned, preContext: ax.preContext, maxWords: PreferencesStore.shared.maxCompletionLength * 3, allowCode: allowCode) {
+            current = CompletionSuggestion(text: cleaned, kind: .insert)
+            currentPID = pid
+            currentContextKey = key
+            TabInterceptor.setSuggestionVisible(true)
+            overlay.show(text: cleaned, atCaretRect: ax.caretRect)
+            Logger.infra.debug("completion: learned suggestion for '\(key, privacy: .public)'")
+            return
+        }
+
         // Enrich the prefix with on-screen context (the conversation/email above the field, which is
         // NOT in the text field) so suggestions are grounded, not "pulled from a hat". The user's own
         // text stays LAST so the model continues IT. Screen OCR is cached/throttled (anti-stutter).
@@ -88,6 +103,7 @@ final class CompletionController {
 
         current = suggestion
         currentPID = pid
+        currentContextKey = contextKey
         TabInterceptor.setSuggestionVisible(true)
         overlay.show(text: suggestion.text, atCaretRect: ax.caretRect)
         Logger.infra.debug("completion: showing \(suggestion.text, privacy: .public) at \(NSStringFromRect(ax.caretRect), privacy: .public)")
@@ -99,11 +115,13 @@ final class CompletionController {
         let pid = currentPID
         let text = s.text
         let kind = s.kind
+        let key = currentContextKey
         clearSuggestion()
         Task {
             switch kind {
             case .insert:
                 _ = await AccessibilityBridge.shared.insertCompletion(text, pid: pid)
+                if let key { await CompletionLearningStore.shared.record(contextKey: key, accepted: text) }
             case .replaceLastWord(let wrong):
                 _ = await AccessibilityBridge.shared.replaceLastWord(wrong: wrong, with: text, pid: pid)
             }
@@ -132,6 +150,7 @@ final class CompletionController {
     private func clearSuggestion() {
         current = nil
         currentPID = 0
+        currentContextKey = nil
         TabInterceptor.setSuggestionVisible(false)
         overlay.hide()
     }

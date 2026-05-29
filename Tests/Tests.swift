@@ -1322,6 +1322,30 @@ final class TypoFixTests: XCTestCase {
     }
 }
 
+final class CompletionLearningTests: XCTestCase {
+    func testKey_lastWords() {
+        XCTAssertEqual(CompletionLearningStore.key(forContext: "ti scrivo per"), "ti scrivo per")
+        XCTAssertEqual(CompletionLearningStore.key(forContext: "Caro Marco ti scrivo per"), "ti scrivo per")
+    }
+
+    func testKey_tooFewWords_nil() {
+        XCTAssertNil(CompletionLearningStore.key(forContext: "ciao"))
+    }
+
+    func testRecord_thenSuggestAfterTwoAccepts() async {
+        let store = CompletionLearningStore.shared
+        let key = "wrentest unique key \(UUID().uuidString)"
+        // one accept = not yet confident
+        await store.record(contextKey: key, accepted: " hello there")
+        let after1 = await store.learnedSuggestion(contextKey: key)
+        XCTAssertNil(after1)
+        // second accept = confident
+        await store.record(contextKey: key, accepted: " hello there")
+        let after2 = await store.learnedSuggestion(contextKey: key)
+        XCTAssertEqual(after2, " hello there")
+    }
+}
+
 @MainActor
 final class CompletionPreferencesTests: XCTestCase {
     func testInlineCompletionEnabled_defaultsTrue() {

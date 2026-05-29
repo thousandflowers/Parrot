@@ -60,6 +60,8 @@ let package = Package(
                 "setup-dev.sh",
                 "build-app.sh",
                 "Parrot.app",
+                "Wren.app",
+                "Canary.app",
                 "graphify-out",
                 "docs",
                 "Parrot_0.9.1.zip",

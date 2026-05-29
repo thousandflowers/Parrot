@@ -43,7 +43,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Load correction cache persisted from previous session
         Task { await CorrectionCache.shared.loadFromDisk() }
 
-        // Parrot = correction, Canary = completion. The AX observer feeds whichever this app runs.
+        // Parrot = correction, Wren = completion. The AX observer feeds whichever this app runs.
         let mode = AppMode.current
         let realtimeOn = mode.showsCorrection && UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.realtimeEnabled)
         let completionOn = mode.showsCompletion && PreferencesStore.shared.inlineCompletionEnabled
@@ -55,7 +55,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Proactively warm up the local server so first corrections don't block.
-        // Canary (completion-only) doesn't run the correction model — skip the warmup.
+        // Wren (completion-only) doesn't run the correction model — skip the warmup.
         let serviceType = LLMServiceFactory.resolveDefaultServiceType()
         CrashLogger.log("launch: serviceType=\(serviceType.rawValue)")
         if mode.showsCorrection && serviceType == .local {
