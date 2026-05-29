@@ -57,12 +57,17 @@ enum ModelCatalog {
     }
 
     static func recommended(ramGB: Int, language: String) -> ModelRecommendation {
-        let fallback = all.first ?? ModelRecommendation(
-            id: "qwen2.5-1.5b-instruct-q4_k_m", name: "Qwen 2.5 1.5B",
-            reason: "", sizeLabel: "~1.3 GB", ramRequired: 2,
-            url: URL(string: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf")!,
-            expectedSHA256: nil, isOnboardingCandidate: true
-        )
+        let fallback = all.first ?? {
+            let urlString = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+            guard let url = URL(string: urlString) else {
+                fatalError("Invalid model URL: \(urlString)")
+            }
+            return ModelRecommendation(
+                id: "qwen2.5-1.5b-instruct-q4_k_m", name: "Qwen 2.5 1.5B",
+                reason: "", sizeLabel: "~1.3 GB", ramRequired: 2,
+                url: url, expectedSHA256: nil, isOnboardingCandidate: true
+            )
+        }()
         let chineseLanguages = ["zh", "zh-Hans", "zh-Hant", "zh-HK"]
         if UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.lightweightMode)
             || chineseLanguages.contains(language) {

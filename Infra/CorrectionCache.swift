@@ -150,7 +150,7 @@ actor CorrectionCache: Sendable {
         pendingSave?.cancel()
         pendingSave = Task {
             try await Task.sleep(for: .seconds(30))
-            await self.saveToDisk()
+            self.saveToDisk()
         }
     }
 }

@@ -91,6 +91,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case exportImport, iCloud, knowledge, plagiarism
     case inlineAnnotations
     case contacts
+    case completion
 
     var id: String { rawValue }
 
@@ -112,6 +113,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .plagiarism:  return "Plagiarism"
         case .inlineAnnotations: return "Inline"
         case .contacts:     return "Contacts"
+        case .completion:   return "Completion"
         }
     }
 
@@ -133,10 +135,11 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .plagiarism:  return "magnifyingglass"
         case .inlineAnnotations: return "text.badge.checkmark"
         case .contacts:     return "person.2"
+        case .completion:   return "text.append"
         }
     }
 
-    static let behaviorTabs: [SettingsTab] = [.prompt, .appRules, .customRules, .exclusions, .inlineAnnotations, .dictionary, .shortcuts, .presets]
+    static let behaviorTabs: [SettingsTab] = [.prompt, .appRules, .customRules, .exclusions, .inlineAnnotations, .completion, .dictionary, .shortcuts, .presets]
     static let dataTabs: [SettingsTab] = [.history, .exportImport, .iCloud, .knowledge, .contacts]
     static let systemTabs: [SettingsTab] = [.advanced, .plagiarism]
 
@@ -153,6 +156,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .presets:     PresetsTab(prefs: prefs)
         case .advanced:    AdvancedTab()
         case .inlineAnnotations: InlineAnnotationsTab(prefs: prefs)
+        case .completion:  CompletionTab(prefs: prefs)
         case .history:     HistoryTab()
         case .exportImport: ExportImportTab()
         case .iCloud:      iCloudSyncTab()

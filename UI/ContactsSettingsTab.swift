@@ -38,6 +38,7 @@ struct ContactsSettingsTab: View {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel("Add contact")
                 Button {
                     if let id = selectedID {
                         Task { await ContactStore.shared.delete(id: id); reload() }
@@ -48,6 +49,7 @@ struct ContactsSettingsTab: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(selectedID == nil)
+                .accessibilityLabel("Delete contact")
                 Spacer()
             }
             .padding(.horizontal, 8)
@@ -92,7 +94,9 @@ private struct ContactDetailView: View {
         Form {
             Section("Identità") {
                 TextField("Nome", text: $draft.name)
+                    .accessibilityLabel("Name")
                 TextField("Ruolo (es. professore, collega)", text: $draft.role)
+                    .accessibilityLabel("Role")
                 Picker("Formalità", selection: $draft.formality) {
                     ForEach(ContactProfile.Formality.allCases, id: \.self) { f in
                         Text(f.rawValue).tag(f)
@@ -103,7 +107,9 @@ private struct ContactDetailView: View {
 
             Section("Messaggio") {
                 TextField("Saluto (es. Gentile Professore Rossi)", text: $draft.salutation)
+                    .accessibilityLabel("Salutation")
                 TextField("Chiusura (es. Cordiali saluti)", text: $draft.closing)
+                    .accessibilityLabel("Closing")
             }
 
             Section("Note") {
@@ -130,23 +136,29 @@ private struct ContactEditSheet: View {
             Divider()
             Form {
                 TextField("Nome *", text: $contact.name)
+                    .accessibilityLabel("Name")
                 TextField("Ruolo", text: $contact.role)
+                    .accessibilityLabel("Role")
                 Picker("Formalità", selection: $contact.formality) {
                     ForEach(ContactProfile.Formality.allCases, id: \.self) { f in
                         Text(f.rawValue).tag(f)
                     }
                 }
                 TextField("Saluto", text: $contact.salutation)
+                    .accessibilityLabel("Salutation")
                 TextField("Chiusura", text: $contact.closing)
+                    .accessibilityLabel("Closing")
             }
             .formStyle(.grouped)
             Divider()
             HStack {
                 Button("Annulla") { onCancel() }
+                    .accessibilityLabel("Cancel")
                 Spacer()
                 Button("Salva") { onSave(contact) }
                     .disabled(contact.name.isEmpty)
                     .keyboardShortcut(.return)
+                    .accessibilityLabel("Save")
             }
             .padding()
         }

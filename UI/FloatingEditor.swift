@@ -112,6 +112,7 @@ struct FloatingEditorView: View {
             .pickerStyle(.segmented)
             .frame(width: 180)
             .labelsHidden()
+            .accessibilityLabel("Check mode")
 
             Spacer()
 
@@ -119,7 +120,7 @@ struct FloatingEditorView: View {
                 ProgressView().scaleEffect(0.7).frame(width: 16, height: 16)
                 Text("Processing…")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textSecondary)
             }
 
             if dictation.authorizationStatus == .authorized {
@@ -147,7 +148,7 @@ struct FloatingEditorView: View {
             } label: {
                 Image(systemName: "doc.badge.plus")
                     .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textSecondary)
                     .frame(minWidth: 44, minHeight: 44)
             }
             .buttonStyle(.plain)
@@ -160,7 +161,7 @@ struct FloatingEditorView: View {
                 } label: {
                     Image(systemName: "book")
                         .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.textSecondary)
                         .frame(minWidth: 44, minHeight: 44)
                 }
                 .buttonStyle(.plain)
@@ -173,7 +174,7 @@ struct FloatingEditorView: View {
                 } label: {
                     Image(systemName: "mic.circle")
                         .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.textSecondary)
                         .frame(minWidth: 44, minHeight: 44)
                 }
                 .buttonStyle(.plain)
@@ -187,13 +188,7 @@ struct FloatingEditorView: View {
         .animation(.easeOut(duration: 0.2), value: inputText.isEmpty)
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(
-            LinearGradient(
-                colors: [Color.accentColor.opacity(0.04), .clear],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .background(Color.surfaceBackground)
     }
 
     @ViewBuilder
@@ -225,7 +220,7 @@ struct FloatingEditorView: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Original")
                 .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
                 .padding(.bottom, 4)
@@ -250,17 +245,17 @@ struct FloatingEditorView: View {
                         .onDisappear { recordingPulse = false }
                     Text(dictation.transcribedText)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.textSecondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Color(nsColor: .controlBackgroundColor))
+                .background(Color.surfaceElevated)
             }
         }
         .frame(minWidth: 240)
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(Color.surfaceBackground)
     }
 
     private var outputPane: some View {
@@ -268,7 +263,7 @@ struct FloatingEditorView: View {
             HStack(spacing: 8) {
                 Text("Corrected")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textSecondary)
 
                 Spacer()
 
@@ -277,11 +272,12 @@ struct FloatingEditorView: View {
                     HStack(spacing: 4) {
                         Image(systemName: showDiff ? "highlighter" : "doc.text")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.textSecondary)
                         Toggle(showDiff ? "Changes" : "Result", isOn: $showDiff)
                             .toggleStyle(.switch)
                             .controlSize(.mini)
                             .labelsHidden()
+                            .accessibilityLabel("Show changes")
                     }
                     .help(showDiff ? "Showing changes — toggle to see clean result" : "Showing result — toggle to see changes")
 
@@ -294,7 +290,7 @@ struct FloatingEditorView: View {
                             .frame(minWidth: 44, minHeight: 44)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textSecondary)
                     .help("Copy corrected text")
                     .accessibilityLabel("Copy corrected text")
                 }
@@ -335,7 +331,7 @@ struct FloatingEditorView: View {
             .frame(minWidth: 240)
             .padding(.bottom, 8)
         }
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(Color.surfaceElevated)
     }
 
     // MARK: - Bottom Bar
@@ -348,11 +344,12 @@ struct FloatingEditorView: View {
                     .font(.caption)
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
                 Button("Retry") { checkText() }
                     .buttonStyle(.borderless)
                     .controlSize(.small)
+                    .accessibilityLabel("Retry")
             }
 
             Spacer()
@@ -362,6 +359,7 @@ struct FloatingEditorView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                    .accessibilityLabel("Cancel")
             } else {
                 Button("Check") { checkText() }
                     .buttonStyle(.borderedProminent)
@@ -369,6 +367,7 @@ struct FloatingEditorView: View {
                     .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .keyboardShortcut(.return, modifiers: .command)
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                    .accessibilityLabel("Check")
             }
         }
         .animation(.easeOut(duration: 0.18), value: isLoading)

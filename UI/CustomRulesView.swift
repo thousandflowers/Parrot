@@ -141,12 +141,15 @@ struct EditRuleView: View {
             Section("Identity") {
                 TextField("Rule name", text: $rule.name)
                     .focused($focusedField)
+                    .accessibilityLabel("Rule name")
             }
             Section("Pattern") {
                 TextField("Search for", text: $rule.pattern)
                     .font(.system(.body, design: .monospaced))
+                    .accessibilityLabel("Search for")
                 TextField("Replace with", text: $rule.replacement)
                     .font(.system(.body, design: .monospaced))
+                    .accessibilityLabel("Replace with")
             }
             Section("Options") {
                 Toggle("Use regex", isOn: $rule.isRegex)
@@ -172,9 +175,11 @@ struct EditRuleView: View {
                     onSave(rule)
                 }
                 .disabled(rule.pattern.isEmpty)
+                .accessibilityLabel("Save")
             }
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }
+                    .accessibilityLabel("Cancel")
             }
         }
     }

@@ -29,6 +29,7 @@ struct AppRulesTab: View {
                                 }
                             ))
                             .labelsHidden()
+                            .accessibilityLabel("Enable rule for \(rule.displayName)")
                         }
 
                         HStack(spacing: 8) {
@@ -81,8 +82,10 @@ struct AppRulesTab: View {
                 HStack(spacing: 8) {
                     TextField("Bundle ID (e.g. com.apple.Safari)", text: $newBundleID)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Bundle ID")
                     TextField("Name (e.g. Safari)", text: $newDisplayName)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Application name")
                     Button("Add") {
                         guard !newBundleID.isEmpty, !newDisplayName.isEmpty else { return }
                         prefs.addAppRule(AppRule(bundleID: newBundleID, displayName: newDisplayName))
@@ -92,6 +95,7 @@ struct AppRulesTab: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(newBundleID.isEmpty || newDisplayName.isEmpty)
+                    .accessibilityLabel("Add")
                 }
 
                 Button("Add frontmost app") {

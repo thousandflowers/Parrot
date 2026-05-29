@@ -11,6 +11,28 @@ enum Constants {
     static let huggingFaceMirrorHost = "hf-mirror.com"
     static let grammarTemperature: Double = 0.1
     static let fluencyTemperature: Double = 0.3
+
+    // MARK: - Local small-model sampling
+    // Tighter sampling keeps tiny models (≤3B) from wandering into low-probability
+    // hallucinations and repetition loops. repeat_penalty curbs the runaway repetition
+    // small GGUF models fall into; top_k/top_p/min_p prune the unreliable tail.
+    static let localGrammarSampling = SamplingParams(
+        topP: 0.9, topK: 40, minP: 0.05, repeatPenalty: 1.1, seed: nil)
+    static let localFluencySampling = SamplingParams(
+        topP: 0.95, topK: 60, minP: 0.03, repeatPenalty: 1.1, seed: nil)
+
+    // MARK: - Inline completion (SP1)
+    static let completionTemperature: Double = 0.2
+    static let completionDefaultMaxWords = 8        // "short" completion budget (Cotypist: 4)
+    static let completionDefaultDebounceMs = 400    // shorter than the 800ms correction debounce
+    static let completionMinPrefixChars = 3         // don't suggest on near-empty fields
+    static let completionMaxPrefixChars = 2000      // cap context sent to the model
+
+    /// Self-consistency passes for local grammar checks. Small models are noisy: running
+    /// the deterministic grammar task a few times and taking the agreed / most conservative
+    /// result removes most one-off wrong or over-aggressive corrections. 1 = disabled.
+    /// Only applied to the local service (offline) and only for grammar-type checks.
+    static let localSelfConsistencyPasses = 3
     static let defaultConfidence: Double = 0.9
     static let explainMaxTokens = 512
     static let defaultMaxTokens = 1024
@@ -77,5 +99,10 @@ enum Constants {
         static let fallbackOpenAIModel = "fallbackOpenAIModel"
         static let fallbackOllamaModel = "fallbackOllamaModel"
         static let fallbackOpenRouterModel = "fallbackOpenRouterModel"
+        // SP1 — inline completion
+        static let inlineCompletionEnabled = "inlineCompletionEnabled"
+        static let maxCompletionLength = "maxCompletionLength"
+        static let completionDebounceMs = "completionDebounceMs"
+        static let completionUserPrompt = "completionUserPrompt"
     }
 }

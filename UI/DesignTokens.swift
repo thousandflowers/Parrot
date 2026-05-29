@@ -28,6 +28,20 @@ extension NSColor {
         dark: NSColor(displayP3Red: 0.30, green: 0.28, blue: 0.26, alpha: 1)
     )
 
+    // Generic surfaces
+    static let surfaceBackground = appearanceColor(
+        light: NSColor(displayP3Red: 0.96, green: 0.97, blue: 0.98, alpha: 1),
+        dark: NSColor(displayP3Red: 0.11, green: 0.11, blue: 0.12, alpha: 1)
+    )
+    static let surfaceElevated = appearanceColor(
+        light: NSColor(displayP3Red: 0.99, green: 0.99, blue: 1.0, alpha: 1),
+        dark: NSColor(displayP3Red: 0.17, green: 0.17, blue: 0.18, alpha: 1)
+    )
+    static let borderDefault = appearanceColor(
+        light: NSColor(displayP3Red: 0.80, green: 0.80, blue: 0.82, alpha: 1),
+        dark: NSColor(displayP3Red: 0.32, green: 0.32, blue: 0.34, alpha: 1)
+    )
+
     private static func appearanceColor(light: NSColor, dark: NSColor) -> NSColor {
         NSColor(name: nil) { appearance in
             let isDark = appearance.name == .darkAqua || appearance.name == .vibrantDark
@@ -43,6 +57,9 @@ extension Color {
     static let statusInactive = Color(nsColor: .statusInactive)
     static let surfaceWarm = Color(nsColor: .surfaceWarm)
     static let borderWarm = Color(nsColor: .borderWarm)
+    static let surfaceBackground = Color(nsColor: .surfaceBackground)
+    static let surfaceElevated = Color(nsColor: .surfaceElevated)
+    static let borderDefault = Color(nsColor: .borderDefault)
 
     static let accentBrand = Color.accentColor
     static let accentGreen = Color(nsColor: .statusOk)

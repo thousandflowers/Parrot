@@ -97,6 +97,7 @@ private struct ShortcutRow: View {
             .toggleStyle(.switch)
             .controlSize(.mini)
             .labelsHidden()
+            .accessibilityLabel("Enable shortcut for \(label)")
 
             Text(label)
                 .foregroundStyle(shortcut.isEnabled ? .primary : .secondary)
@@ -114,7 +115,7 @@ private struct ShortcutRow: View {
                     .padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(NSColor.controlBackgroundColor))
+                            .fill(Color.surfaceElevated)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6)
                                     .stroke(Color.secondary.opacity(0.2))
@@ -146,7 +147,7 @@ struct ShortcutRecorder: View {
                 .padding(.vertical, 4)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(Color(NSColor.controlBackgroundColor))
+                        .fill(Color.surfaceElevated)
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
                                 .stroke(isRecording ? Color.accentColor : Color.secondary.opacity(0.3))

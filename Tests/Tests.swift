@@ -881,6 +881,81 @@ final class ValidateCorrectionTests: XCTestCase {
     }
 }
 
+final class SelfConsistencyTests: XCTestCase {
+    private let service = StubLLMService.shared
+
+    func testSelectConsensus_strictMajority_winsOverConservative() {
+        let original = "Io andato a casa."
+        // 2 agree on the real fix, 1 outlier that is closer to the original.
+        let candidates = [
+            "Sono andato a casa.",
+            "Sono andato a casa.",
+            "Io andato a casa!"
+        ]
+        let result = service.selectConsensus(candidates: candidates, original: original)
+        XCTAssertEqual(result, "Sono andato a casa.", "A strict majority must win even if an outlier is more conservative")
+    }
+
+    func testSelectConsensus_noMajority_picksMostConservativeChange() {
+        let original = "Lui mangiano la mela."
+        // Three distinct real corrections, no majority. The least-changed (minimal fix) wins.
+        let candidates = [
+            "Lui mangia la mela.",                      // minimal fix — most conservative
+            "Lui mangia la grande mela rossa e dolce.", // invented content
+            "Egli consuma una mela."                    // over-rewrite
+        ]
+        let result = service.selectConsensus(candidates: candidates, original: original)
+        XCTAssertEqual(result, "Lui mangia la mela.", "With no majority, the most conservative real correction must win")
+    }
+
+    func testSelectConsensus_noChangeVoteDoesNotBuryRealFix() {
+        let original = "Lui mangiano la mela."
+        // A genuine no-change vote is present but the only other passes are real fixes.
+        // A lone no-change vote must NOT suppress a correction when no majority exists.
+        let candidates = [original, "Lui mangia la mela.", "Egli mangia una mela."]
+        let result = service.selectConsensus(candidates: candidates, original: original)
+        XCTAssertEqual(result, "Lui mangia la mela.", "A single no-change vote must not bury a real fix")
+    }
+
+    func testSelectConsensus_majorityNoChange_returnsOriginal() {
+        let original = "La frase è già corretta."
+        let candidates = [original, original, "La frase e già corretta."]
+        let result = service.selectConsensus(candidates: candidates, original: original)
+        XCTAssertEqual(result, original, "A majority of no-change votes means the text is already correct")
+    }
+
+    func testSelectConsensus_singleCandidate_returnsIt() {
+        let result = service.selectConsensus(candidates: ["only one"], original: "orig")
+        XCTAssertEqual(result, "only one")
+    }
+
+    func testSelectConsensus_empty_returnsOriginal() {
+        let result = service.selectConsensus(candidates: [], original: "orig")
+        XCTAssertEqual(result, "orig")
+    }
+}
+
+final class SamplingParamsEncodingTests: XCTestCase {
+    func testChatRequest_nilSampling_omitsExtraFields() throws {
+        let req = ChatRequest(model: "m", messages: [ChatMessage(role: "user", content: "hi")],
+                              temperature: 0.1, max_tokens: 64, stream: false)
+        let json = String(data: try JSONEncoder().encode(req), encoding: .utf8) ?? ""
+        XCTAssertFalse(json.contains("top_p"), "Remote-safe: sampling keys must be omitted when nil")
+        XCTAssertFalse(json.contains("repeat_penalty"))
+        XCTAssertFalse(json.contains("seed"))
+    }
+
+    func testChatRequest_withSampling_emitsFields() throws {
+        let sampling = SamplingParams(topP: 0.9, topK: 40, minP: 0.05, repeatPenalty: 1.1, seed: 7)
+        let req = ChatRequest(model: "m", messages: [ChatMessage(role: "user", content: "hi")],
+                              temperature: 0.1, max_tokens: 64, stream: false, sampling: sampling)
+        let json = String(data: try JSONEncoder().encode(req), encoding: .utf8) ?? ""
+        XCTAssertTrue(json.contains("\"top_p\""))
+        XCTAssertTrue(json.contains("\"repeat_penalty\""))
+        XCTAssertTrue(json.contains("\"seed\":7"))
+    }
+}
+
 final class LexiconTests: XCTestCase {
     func testInformalWords_containsGerman() {
         XCTAssertTrue(Lexicon.informalWords.contains("krass"))
@@ -1088,5 +1163,118 @@ final class ContactStoreTests: XCTestCase {
         await store.delete(id: profile.id)
         let gone = await store.findInText("Test User")
         XCTAssertNil(gone)
+    }
+}
+
+// MARK: - SP1 Inline Completion
+
+final class CompletionPostprocessorTests: XCTestCase {
+    func testClean_stripsEchoedPrefix() {
+        let r = CompletionPostprocessor.clean(raw: "Ciao Marco come stai", preContext: "Ciao Marco", maxWords: 8)
+        XCTAssertEqual(r, " come stai")
+    }
+
+    func testClean_stopsAtNewline() {
+        let r = CompletionPostprocessor.clean(raw: " informarti del fatto\nNuova riga", preContext: "ti scrivo per", maxWords: 8)
+        XCTAssertEqual(r, " informarti del fatto")
+    }
+
+    func testClean_capsAtMaxWords() {
+        let r = CompletionPostprocessor.clean(raw: "uno due tre quattro cinque sei", preContext: "", maxWords: 3)
+        XCTAssertEqual(r, "uno due tre")
+    }
+
+    func testClean_emptyRaw_returnsNil() {
+        XCTAssertNil(CompletionPostprocessor.clean(raw: "   ", preContext: "x", maxWords: 8))
+    }
+
+    func testClean_onlyNewline_returnsNil() {
+        XCTAssertNil(CompletionPostprocessor.clean(raw: "\n\n", preContext: "x", maxWords: 8))
+    }
+
+    func testSuggestion_firstWord_includesTrailingSpace() {
+        let s = CompletionSuggestion(text: " informarti del fatto")
+        XCTAssertEqual(s.firstWord, " informarti ")
+    }
+}
+
+final class LlamaCompletionRequestTests: XCTestCase {
+    func testRequest_shape() {
+        let req = LlamaCompletionRequest(prompt: "Caro Marco", maxWords: 8)
+        XCTAssertTrue(req.cache_prompt)
+        XCTAssertFalse(req.stream)
+        XCTAssertEqual(req.stop, ["\n"])
+        XCTAssertGreaterThanOrEqual(req.n_predict, 8)
+    }
+
+    func testRequest_nPredictScalesWithWords() {
+        let small = LlamaCompletionRequest(prompt: "x", maxWords: 4)
+        let big = LlamaCompletionRequest(prompt: "x", maxWords: 16)
+        XCTAssertLessThan(small.n_predict, big.n_predict)
+    }
+
+    func testBuildPrompt_capsPrefixLength() {
+        let long = String(repeating: "a", count: Constants.completionMaxPrefixChars + 500)
+        let ctx = CompletionContext(preContext: long, postContext: "", language: "it")
+        let prompt = LlamaCompletionClient.buildPrompt(context: ctx, userPrompt: "")
+        XCTAssertEqual(prompt.count, Constants.completionMaxPrefixChars)
+    }
+}
+
+private final class StubCompletionProvider: CompletionProviding, @unchecked Sendable {
+    var result: String
+    var error: Error?
+    var beforeReturn: (@Sendable () async -> Void)?
+    init(result: String = "", error: Error? = nil) { self.result = result; self.error = error }
+    func complete(context: CompletionContext, maxWords: Int) async throws -> String {
+        if let beforeReturn { await beforeReturn() }
+        if let error { throw error }
+        return result
+    }
+}
+
+final class CompletionEngineTests: XCTestCase {
+    private func ctx(_ pre: String) -> CompletionContext {
+        CompletionContext(preContext: pre, postContext: "", language: "it")
+    }
+
+    func testSuggest_returnsCleanedSuggestion() async {
+        let engine = CompletionEngine(provider: StubCompletionProvider(result: " come stai oggi"))
+        let s = await engine.suggest(context: ctx("Ciao Marco"), maxWords: 8)
+        XCTAssertEqual(s?.text, " come stai oggi")
+    }
+
+    func testSuggest_unusableShortContext_returnsNil() async {
+        let engine = CompletionEngine(provider: StubCompletionProvider(result: "anything"))
+        let s = await engine.suggest(context: ctx("a"), maxWords: 8)
+        XCTAssertNil(s)
+    }
+
+    func testSuggest_providerError_returnsNil() async {
+        let engine = CompletionEngine(provider: StubCompletionProvider(error: CorrectionError.serverNotRunning))
+        let s = await engine.suggest(context: ctx("Ciao Marco"), maxWords: 8)
+        XCTAssertNil(s)
+    }
+
+    func testSuggest_supersededWhileInFlight_returnsNil() async {
+        let provider = StubCompletionProvider(result: " come stai")
+        let engine = CompletionEngine(provider: provider)
+        // Simulate a newer request arriving mid-flight: bump generation before the result returns.
+        provider.beforeReturn = { await engine.cancelPending() }
+        let s = await engine.suggest(context: ctx("Ciao Marco"), maxWords: 8)
+        XCTAssertNil(s, "A superseded in-flight suggestion must be discarded")
+    }
+}
+
+@MainActor
+final class CompletionPreferencesTests: XCTestCase {
+    func testInlineCompletionEnabled_defaultsTrue() {
+        UserDefaults.standard.removeObject(forKey: Constants.UserDefaultsKey.inlineCompletionEnabled)
+        XCTAssertTrue(PreferencesStore.shared.inlineCompletionEnabled)
+    }
+
+    func testMaxCompletionLength_defaultsToConstant() {
+        UserDefaults.standard.removeObject(forKey: Constants.UserDefaultsKey.maxCompletionLength)
+        XCTAssertEqual(PreferencesStore.shared.maxCompletionLength, Constants.completionDefaultMaxWords)
     }
 }

@@ -365,6 +365,7 @@ struct SuggestionView: View {
                     NSApp.sendAction(Selector(("showSettings:")), to: nil, from: nil)
                 }
                 .controlSize(.small)
+                .accessibilityLabel("Open Settings")
             }
             .frame(minHeight: 60)
             .frame(maxWidth: .infinity)
@@ -387,6 +388,7 @@ struct SuggestionView: View {
                 .buttonStyle(.plain)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .accessibilityLabel("Ignore")
 
                 Spacer()
 
@@ -490,6 +492,7 @@ struct SuggestionView: View {
         Menu("Translate to…") {
             ForEach(filteredLangs, id: \.0) { code, name in
                 Button(name) { onTranslate(code) }
+                    .accessibilityLabel("Translate to \(name)")
             }
         }
     }

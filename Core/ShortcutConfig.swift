@@ -65,15 +65,18 @@ struct ShortcutConfig: Codable, Equatable, Hashable, Sendable {
         return ShortcutConfig(keyCode: UInt32(event.keyCode), modifiers: mods)
     }
 
-    static let grammarDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_E), modifiers: UInt32(cmdKey | shiftKey))
-    static let fluencyDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(cmdKey | shiftKey))
-    static let editorDefault  = ShortcutConfig(keyCode: UInt32(kVK_ANSI_F), modifiers: UInt32(cmdKey | shiftKey))
-    static let replaceDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(cmdKey | shiftKey))
-    static let translateDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_U), modifiers: UInt32(cmdKey | shiftKey))
-    static let applyDirectDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_A), modifiers: UInt32(cmdKey | shiftKey))
-    static let coachDefault    = ShortcutConfig(keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(cmdKey | shiftKey))
-    static let applyAllDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_U), modifiers: UInt32(cmdKey | shiftKey))
-    static let grammarFluencyDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_B), modifiers: UInt32(cmdKey | shiftKey))
-    static let deSlopDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_D), modifiers: UInt32(cmdKey | shiftKey))
-    static let aiPromptDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_P), modifiers: UInt32(cmdKey | shiftKey))
+    // Default modifier: ⌘⌃ (Cmd+Control). Chosen over ⌘⇧ to avoid conflicts with
+    // popular apps (Xcode Expand Selection, VS Code Command Palette, Safari Full Screen).
+    // ⌘⌃ has near-zero system-wide shortcut conflicts on macOS.
+    static let grammarDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(cmdKey | controlKey))
+    static let fluencyDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_L), modifiers: UInt32(cmdKey | controlKey))
+    static let editorDefault  = ShortcutConfig(keyCode: UInt32(kVK_ANSI_E), modifiers: UInt32(cmdKey | controlKey))
+    static let replaceDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(cmdKey | controlKey))
+    static let translateDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(cmdKey | controlKey))
+    static let applyDirectDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_D), modifiers: UInt32(cmdKey | controlKey))
+    static let coachDefault    = ShortcutConfig(keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(cmdKey | controlKey))
+    static let applyAllDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_A), modifiers: UInt32(cmdKey | controlKey))
+    static let grammarFluencyDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_B), modifiers: UInt32(cmdKey | controlKey))
+    static let deSlopDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_S), modifiers: UInt32(cmdKey | controlKey))
+    static let aiPromptDefault = ShortcutConfig(keyCode: UInt32(kVK_ANSI_P), modifiers: UInt32(cmdKey | controlKey))
 }

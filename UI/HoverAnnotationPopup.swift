@@ -96,6 +96,8 @@ final class HoverAnnotationPopup {
         if panel?.isVisible == true { panel?.orderOut(nil) }
         let hv = NSHostingView(rootView: view)
         hv.sizingOptions = []
+        hv.setAccessibilityElement(true)
+        hv.setAccessibilityLabel("Correction popup")
         hostingView = hv
         panel?.contentView = hv
     }
@@ -137,6 +139,7 @@ struct HoverAnnotationView: View {
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.regularMaterial, in: .rect(cornerRadius: 7))
+        .drawingGroup()
         .overlay(
             RoundedRectangle(cornerRadius: 7)
                 .strokeBorder(Color.statusOk.opacity(0.3), lineWidth: 0.5)

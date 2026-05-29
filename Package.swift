@@ -43,11 +43,18 @@ let package = Package(
                 ".build",
                 "setup-dev.sh",
                 "build-app.sh",
-                "RefineClone.app",
                 "Parrot.app",
                 "graphify-out",
                 "docs",
-                "Parrot_0.9.1.zip"
+                "Parrot_0.9.1.zip",
+                "scripts",
+                "Casks",
+                "CONTRIBUTING.md",
+                "PRODUCT.md",
+                "Parrot.dmg",
+                "appcast.xml",
+                "Resources/Localizable.xcstrings",
+                "Resources/Parrot-MAS.entitlements"
             ],
             linkerSettings: [
                 .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])

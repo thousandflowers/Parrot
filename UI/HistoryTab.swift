@@ -28,18 +28,18 @@ struct HistoryTab: View {
                             HStack(spacing: 4) {
                                 Text(entry.original)
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(.textSecondary)
                                     .lineLimit(1)
                                 Image(systemName: "arrow.right")
                                     .font(.caption2)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(.textSecondary)
                                 Text(entry.corrected)
                                     .font(.caption)
                                     .lineLimit(1)
                             }
                             Text(entry.timestamp, style: .relative)
                                 .font(.caption2)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.textSecondary)
                         }
                         .padding(.vertical, 2)
                     }

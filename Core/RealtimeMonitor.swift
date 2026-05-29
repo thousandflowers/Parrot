@@ -1,4 +1,5 @@
 import Cocoa
+@preconcurrency import CoreFoundation
 
 actor RealtimeMonitor {
     static let shared = RealtimeMonitor()
@@ -92,6 +93,8 @@ actor RealtimeMonitor {
 
     nonisolated func handleNotification() {
         Task { await Self.shared.onAccessibilityEvent() }
+        // Inline completion runs independently of realtime correction (different feature/toggle).
+        Task { @MainActor in CompletionController.shared.textChanged() }
     }
 
     private func onAccessibilityEvent() async {
@@ -136,12 +139,14 @@ actor RealtimeMonitor {
         guard !text.isEmpty else { return }
 
         do {
+            let userLanguage = await MainActor.run { PreferencesStore.shared.language }
             let result = try await RequestQueue.shared.enqueue(
                 text: text,
                 type: promptType,
                 priority: .autoCheck,
                 overrideServiceType: overrideServiceType,
-                overrideCustomPrompt: overrideCustomPrompt
+                overrideCustomPrompt: overrideCustomPrompt,
+                language: userLanguage
             )
             if result.originalText != result.correctedText {
                 await RealtimeIndicatorController.shared.show(errors: true)

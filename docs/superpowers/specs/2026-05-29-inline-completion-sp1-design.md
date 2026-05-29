@@ -59,11 +59,20 @@ none exists in the codebase today) and swallowed when a suggestion is visible.
   lightweight path with a single reused slot so a stale completion never blocks a correction.
 
 ### 2. Server endpoint support — `Core/Completion/LlamaCompletionClient.swift`
-- POST to `http://127.0.0.1:<port>/infill` (fallback `/completion` with a prefix-only prompt for
-  apps where postContext is unavailable).
+- **Primary: `/completion`** (prefix continuation). VERIFIED 2026-05-29 against the bundled server:
+  `/completion` produces good continuations; **`/infill` does NOT work** with Parrot's instruct
+  models (Qwen2.5-instruct, Gemma-it) because `/infill` requires a FIM-trained model and these
+  are not. `/infill` is used ONLY when the selected model is known-FIM-capable (none today).
+- Mid-line case (suffix after caret exists): pass the suffix as a soft hint in the prompt
+  (best-effort); true infill is gated on a FIM model. End-of-text completion (the common case)
+  uses prefix-only `/completion` and is unaffected.
+- **Model-quality note:** pretrained/base models (e.g. `gemma-*-pt`) continue text better than
+  instruct models for raw completion. Recommend offering a base model for the completion feature
+  (catalog addition, tracked separately); not a blocker — instruct models still produce usable output.
 - Streaming SSE parse (reuse `SSEStreamingEngine` if compatible, else a thin parser).
 - `cache_prompt: true` so consecutive completions sharing a prefix reuse the slot KV cache.
-- Verify the bundled `llama-server` build exposes `/infill`; if not, rebuild flag in `build-app.sh`.
+- Uses a dedicated slot (server reports `total_slots: 4`) so completions never evict the
+  correction slot's cache.
 
 ### 3. `CompletionController` — `Core/Completion/CompletionController.swift` (`@MainActor`)
 Orchestrates the live loop. Owns suggestion state and the debounce.
@@ -107,7 +116,7 @@ clipboard save/restore already implemented) for apps that reject direct insertio
 ```
 User types  →  RealtimeMonitor text-change event  →  CompletionController debounce (~400ms)
    →  AccessibilityBridge: read preContext, postContext, caret bounds (boundsForRange)
-   →  CompletionEngine.suggest(pre, post, lang)  →  llama-server /infill (cache_prompt, stream, n_predict=8)
+   →  CompletionEngine.suggest(pre, post, lang)  →  llama-server /completion (cache_prompt, stream, n_predict=8)
    →  non-empty?  →  CompletionOverlayWindow.show(ghost, at: caretRect)
 
 User presses Tab (suggestion visible)

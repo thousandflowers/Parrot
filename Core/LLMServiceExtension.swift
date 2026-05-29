@@ -104,7 +104,8 @@ extension LLMService {
     }
 
     nonisolated var resolvedLanguage: String {
-        Locale.current.language.languageCode?.identifier ?? "en"
+        UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.language)
+            ?? Locale.current.language.languageCode?.identifier ?? "en"
     }
 
     func resolveStyle() async -> String {
@@ -137,7 +138,9 @@ extension LLMService {
         promptType: PromptType,
         engine: PromptEngine,
         model: String,
-        temperatureOffset: Double = 0
+        temperatureOffset: Double = 0,
+        sampling: SamplingParams? = nil,
+        seedOverride: Int? = nil
     ) -> ChatRequest {
         let prompt: String
         let temperature: Double
@@ -178,9 +181,34 @@ extension LLMService {
             temperature = Constants.grammarTemperature + temperatureOffset
             systemPrompt = nil
         }
+        var effectiveSampling = sampling
+        if let seedOverride { effectiveSampling?.seed = seedOverride }
         return chatBody(model: model, prompt: prompt, systemPrompt: systemPrompt,
                         temperature: temperature,
-                        maxTokens: maxTokens(for: text, promptType: promptType))
+                        maxTokens: maxTokens(for: text, promptType: promptType),
+                        sampling: effectiveSampling)
+    }
+
+    /// Cleans and validates one raw model output into a final correction string.
+    private func postProcess(raw: String, text: String, promptType: PromptType, lang: String) -> String {
+        switch promptType {
+        case .grammar, .fluency, .grammarAndFluency, .deSlop:
+            let isFluency = promptType != .grammar
+            return validateCorrection(original: text, corrected: raw, isFluency: isFluency, language: lang)
+        default:
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            switch promptType {
+            case .expand, .custom:
+                // Runaway generation guard: if the model generated more than 10× the input,
+                // something went wrong (repetition loop, assistant hallucination, etc.).
+                return (!trimmed.isEmpty && trimmed.count <= text.count * 10) ? trimmed : text
+            case .translation:
+                // Translations are approximately the same length — 4× guards against hallucination.
+                return (!trimmed.isEmpty && trimmed.count <= max(200, text.count * 4)) ? trimmed : text
+            default:
+                return trimmed
+            }
+        }
     }
 
     func performCorrection(
@@ -190,44 +218,139 @@ extension LLMService {
         model: String,
         url: URL,
         apiKey: String?,
-        extraHeaders: [String: String] = [:]
+        extraHeaders: [String: String] = [:],
+        sampling: SamplingParams? = nil,
+        samples: Int = 1
     ) async throws -> CorrectionResult {
-        CrashLogger.log("performCorrection: start model=\(model) type=\(promptType.label)")
+        CrashLogger.log("performCorrection: start model=\(model) type=\(promptType.label) samples=\(samples)")
         let lang = language.isEmpty
             ? LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
             : language
         let engine = PromptEngine(language: lang, style: await resolveStyle())
-        let rawCorrected = try await performOpenAIRequest(
-            body: buildChatBody(text: text, promptType: promptType, engine: engine, model: model),
-            url: url, apiKey: apiKey, extraHeaders: extraHeaders
-        )
-        CrashLogger.log("performCorrection: done")
+
+        // Self-consistency: only worth it for the deterministic grammar tasks. Fluency/expand
+        // are open-ended rewrites where "most conservative" would defeat the purpose.
+        let canMultiPass = samples > 1 && (promptType == .grammar || promptType == .grammarAndFluency)
+
         let corrected: String
-        switch promptType {
-        case .grammar, .fluency, .grammarAndFluency, .deSlop:
-            let isFluency = promptType != .grammar
-            corrected = validateCorrection(original: text, corrected: rawCorrected, isFluency: isFluency)
-        default:
-            let trimmed = rawCorrected.trimmingCharacters(in: .whitespacesAndNewlines)
-            switch promptType {
-            case .expand, .custom:
-                // Runaway generation guard: if the model generated more than 10× the input,
-                // something went wrong (repetition loop, assistant hallucination, etc.).
-                corrected = (!trimmed.isEmpty && trimmed.count <= text.count * 10) ? trimmed : text
-            case .translation(let _):
-                // Translations are approximately the same length — 4× guards against hallucination.
-                corrected = (!trimmed.isEmpty && trimmed.count <= max(200, text.count * 4)) ? trimmed : text
-            default:
-                corrected = trimmed
-            }
+        if canMultiPass {
+            corrected = try await multiPassCorrect(
+                text: text, promptType: promptType, engine: engine, model: model,
+                url: url, apiKey: apiKey, extraHeaders: extraHeaders,
+                sampling: sampling, samples: samples, lang: lang
+            )
+        } else {
+            let rawCorrected = try await performOpenAIRequest(
+                body: buildChatBody(text: text, promptType: promptType, engine: engine,
+                                    model: model, sampling: sampling),
+                url: url, apiKey: apiKey, extraHeaders: extraHeaders
+            )
+            corrected = postProcess(raw: rawCorrected, text: text, promptType: promptType, lang: lang)
         }
+        CrashLogger.log("performCorrection: done")
         return CorrectionResult(
             original: text, corrected: corrected,
             modelID: model, confidence: Constants.defaultConfidence, promptType: promptType.label
         )
     }
 
-    func validateCorrection(original: String, corrected: String, isFluency: Bool = false) -> String {
+    /// Runs the grammar correction several times with varied seeds and picks the
+    /// consensus / most conservative result. Tames small-model noise without a bigger model.
+    /// Sequential by design: the local llama-server processes one request at a time, so
+    /// parallelism would only contend for the same backend.
+    private func multiPassCorrect(
+        text: String,
+        promptType: PromptType,
+        engine: PromptEngine,
+        model: String,
+        url: URL,
+        apiKey: String?,
+        extraHeaders: [String: String],
+        sampling: SamplingParams?,
+        samples: Int,
+        lang: String
+    ) async throws -> String {
+        var votes: [String] = []
+        var sawRequest = false
+        votes.reserveCapacity(samples)
+        for i in 0..<samples {
+            try Task.checkCancellation()
+            // Pass 0 is the most deterministic; later passes add a little diversity so the
+            // vote is meaningful instead of three identical greedy decodes.
+            let offset = i == 0 ? 0.0 : 0.15 * Double(i)
+            let body = buildChatBody(text: text, promptType: promptType, engine: engine,
+                                     model: model, temperatureOffset: offset,
+                                     sampling: sampling, seedOverride: i)
+            do {
+                let raw = try await performOpenAIRequest(body: body, url: url, apiKey: apiKey, extraHeaders: extraHeaders)
+                sawRequest = true
+                let candidate = postProcess(raw: raw, text: text, promptType: promptType, lang: lang)
+                let rawEchoedOriginal = raw.trimmingCharacters(in: .whitespacesAndNewlines) == text
+                if candidate != text {
+                    votes.append(candidate)            // a real, validated correction
+                } else if rawEchoedOriginal {
+                    votes.append(text)                 // model deliberately said "no change"
+                }
+                // else: the model DID try to change the text but validateCorrection reverted it
+                // (over-correction / hallucination). That is a rejected attempt, NOT a vote for
+                // "no change" — dropping it stops a few bad passes from burying one good fix.
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                CrashLogger.log("multiPassCorrect: pass \(i) failed: \(error.localizedDescription)")
+            }
+        }
+        guard sawRequest else {
+            // Every request errored — re-issue one so the caller gets a real error, not a silent no-op.
+            let body = buildChatBody(text: text, promptType: promptType, engine: engine,
+                                     model: model, sampling: sampling)
+            let raw = try await performOpenAIRequest(body: body, url: url, apiKey: apiKey, extraHeaders: extraHeaders)
+            return postProcess(raw: raw, text: text, promptType: promptType, lang: lang)
+        }
+        // No surviving vote → every pass was a rejected over-correction. Safest is the original.
+        guard !votes.isEmpty else { return text }
+        return selectConsensus(candidates: votes, original: text)
+    }
+
+    /// Picks the best candidate.
+    ///
+    /// A pass that `validateCorrection` rejected collapses back to the original, so the
+    /// candidate set mixes real corrections with "no-op" passes. The original has edit
+    /// distance 0, so a naive "most conservative" pick would let a single rejected pass
+    /// silently win and produce NO correction. Logic instead:
+    ///   1. Strict majority across all passes wins (covers both "agreed fix" and the
+    ///      legitimate "text is already correct" case where most passes return the original).
+    ///   2. Otherwise, if any pass produced an actual change, pick the most conservative
+    ///      CHANGED candidate — never let a lone rejected pass suppress a real fix.
+    ///   3. Only fall back to the original when no pass changed anything.
+    func selectConsensus(candidates: [String], original: String) -> String {
+        guard let first = candidates.first else { return original }
+        guard candidates.count > 1 else { return first }
+
+        // 1. Strict majority vote on normalized text.
+        var counts: [String: Int] = [:]
+        for c in candidates { counts[c, default: 0] += 1 }
+        if let (winner, count) = counts.max(by: { $0.value < $1.value }), count * 2 > candidates.count {
+            return winner
+        }
+
+        // 2. No majority: choose among candidates that actually changed the text.
+        let changed = candidates.filter { $0 != original }
+        guard !changed.isEmpty else { return original }  // 3. every pass was a no-op
+
+        // Most conservative real correction (fewest edits), ties broken by higher
+        // agreement count then shorter length.
+        return changed.min { a, b in
+            let da = levenshteinDistance(a, original)
+            let db = levenshteinDistance(b, original)
+            if da != db { return da < db }
+            let ca = counts[a] ?? 0, cb = counts[b] ?? 0
+            if ca != cb { return ca > cb }
+            return a.count < b.count
+        } ?? changed[0]
+    }
+
+    func validateCorrection(original: String, corrected: String, isFluency: Bool = false, language: String? = nil) -> String {
         var text = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return original }
 
@@ -273,12 +396,13 @@ extension LLMService {
 
         guard !text.isEmpty else { return original }
 
-        // 4. Language drift: if detected language changed, the model accidentally translated — reject.
-        //    Lower bound is 15 chars so short sentences like "ciao bello" are also covered.
-        if text.count >= 15 && original.count >= 15 {
-            let origLang = LanguageDetector.detect(text: original, fallbackLanguage: "")
-            let corrLang = LanguageDetector.detect(text: text, fallbackLanguage: "")
-            if !origLang.isEmpty && !corrLang.isEmpty && origLang != corrLang {
+        // 4. Language drift: check output against KNOWN expected language (the one sent to the LLM).
+        //    Unlike the old approach comparing two unreliable detections, this uses the language
+        //    we KNOW is correct. Short texts (<5 chars) are exempt to avoid false rejection on
+        //    very short corrections where detection is inherently unreliable.
+        if let expectedLang = language, !expectedLang.isEmpty, text.count >= 5 {
+            let outputLang = LanguageDetector.detect(text: text, fallbackLanguage: expectedLang)
+            if outputLang != expectedLang {
                 return original
             }
         }
@@ -378,7 +502,8 @@ extension LLMService {
         systemPrompt: String? = "You are a proofreader. Fix only clear grammatical errors: misspellings, wrong verb forms, wrong agreement. Do NOT add information, do NOT change sentence type, do NOT rephrase, do NOT translate. Output only the corrected text.",
         temperature: Double,
         maxTokens: Int = 1024,
-        stream: Bool = false
+        stream: Bool = false,
+        sampling: SamplingParams? = nil
     ) -> ChatRequest {
         var messages: [ChatMessage]
         if let sys = systemPrompt {
@@ -387,7 +512,7 @@ extension LLMService {
             messages = [ChatMessage(role: "user", content: prompt)]
         }
         return ChatRequest(model: model, messages: messages, temperature: temperature,
-                           max_tokens: maxTokens, stream: stream)
+                           max_tokens: maxTokens, stream: stream, sampling: sampling)
     }
 
     // MARK: - Shared streaming (used by all concrete services)
@@ -398,7 +523,8 @@ extension LLMService {
         model: String,
         url: URL,
         apiKey: String?,
-        extraHeaders: [String: String] = [:]
+        extraHeaders: [String: String] = [:],
+        sampling: SamplingParams? = nil
     ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
@@ -406,7 +532,7 @@ extension LLMService {
                     let lang = LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
                     let engine = PromptEngine(language: lang, style: await resolveStyle())
                     let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-                    let body = chatBody(model: model, prompt: prompt, temperature: 0.1, stream: true)
+                    let body = chatBody(model: model, prompt: prompt, temperature: 0.1, stream: true, sampling: sampling)
                     var request = try buildLLMRequest(url: url, apiKey: apiKey, body: body)
                     for (key, value) in extraHeaders {
                         request.setValue(value, forHTTPHeaderField: key)

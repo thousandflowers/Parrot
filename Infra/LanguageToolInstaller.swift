@@ -6,7 +6,15 @@ enum LanguageToolInstaller {
     private static let logger = Logger(subsystem: Constants.bundleID, category: "LanguageToolInstaller")
 
     static let ltVersion = "6.5"
-    static let downloadURL = URL(string: "https://github.com/languagetool-org/languagetool/releases/download/v\(ltVersion)/languagetool-commandline.jar")!
+
+    private static var downloadURL: URL {
+        get throws {
+            guard let url = URL(string: "https://github.com/languagetool-org/languagetool/releases/download/v\(ltVersion)/languagetool-commandline.jar") else {
+                throw URLError(.badURL)
+            }
+            return url
+        }
+    }
 
     static var binaryPath: URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -34,7 +42,7 @@ enum LanguageToolInstaller {
     /// Download the LanguageTool JAR. Only called on explicit user request.
     static func download(progress: @escaping (Double) -> Void) async throws {
         try ensureDirectory()
-        let (tempURL, _) = try await URLSession.shared.download(from: downloadURL)
+        let (tempURL, _) = try await URLSession.shared.download(from: try downloadURL)
         try FileManager.default.moveItem(at: tempURL, to: binaryPath)
         logger.info("LanguageTool downloaded to \(binaryPath.path)")
     }

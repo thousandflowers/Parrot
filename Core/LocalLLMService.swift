@@ -42,14 +42,19 @@ actor LocalLLMService: @preconcurrency LLMService {
 
     func correct(text: String, promptType: PromptType, language: String) async throws -> CorrectionResult {
         let port = try await ensureServerRunning()
+        let isGrammar = promptType == .grammar || promptType == .grammarAndFluency
+        let sampling = isGrammar ? Constants.localGrammarSampling : Constants.localFluencySampling
+        let samples = isGrammar ? Constants.localSelfConsistencyPasses : 1
         return try await performCorrection(text: text, promptType: promptType, language: language,
-            model: modelName, url: try localChatURL(port: port), apiKey: nil)
+            model: modelName, url: try localChatURL(port: port), apiKey: nil,
+            sampling: sampling, samples: samples)
     }
 
     func correctFluency(text: String) async throws -> CorrectionResult {
         let port = try await ensureServerRunning()
         return try await performCorrection(text: text, promptType: .fluency,
-            model: modelName, url: try localChatURL(port: port), apiKey: nil)
+            model: modelName, url: try localChatURL(port: port), apiKey: nil,
+            sampling: Constants.localFluencySampling)
     }
 
     func explain(original: String, corrected: String) async throws -> String {
@@ -71,7 +76,9 @@ actor LocalLLMService: @preconcurrency LLMService {
                 do {
                     let port = try await self.ensureServerRunning()
                     let url = try self.localChatURL(port: port)
-                    for try await accumulated in self.defaultStreamCorrect(text: text, promptType: promptType, model: self.modelName, url: url, apiKey: nil) {
+                    let streamSampling = (promptType == .grammar || promptType == .grammarAndFluency)
+                        ? Constants.localGrammarSampling : Constants.localFluencySampling
+                    for try await accumulated in self.defaultStreamCorrect(text: text, promptType: promptType, model: self.modelName, url: url, apiKey: nil, sampling: streamSampling) {
                         continuation.yield(accumulated)
                     }
                     continuation.finish()

@@ -13,8 +13,10 @@ struct AdvancedTab: View {
                 HStack {
                     SecureField("HF token (optional, for faster downloads)", text: $hfToken)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("HuggingFace token")
                     Button("Save") { saveHFToken() }
                         .disabled(hfToken == savedHFToken)
+                        .accessibilityLabel("Save")
                 }
                 if tokenSaved {
                     Label("Token saved", systemImage: "checkmark.circle.fill")
@@ -30,6 +32,7 @@ struct AdvancedTab: View {
 
             Section {
                 Toggle("Lightweight mode (fewer threads, lower CPU usage)", isOn: $lightweightMode)
+                    .accessibilityLabel("Lightweight mode")
 
                 Button("Clear response cache") {
                     Task {
@@ -80,11 +83,13 @@ struct AdvancedTab: View {
                         .foregroundStyle(.secondary)
                     HStack(spacing: 12) {
                         Button("OpenAI Privacy Policy") {
-                            NSWorkspace.shared.open(URL(string: "https://openai.com/policies/privacy-policy")!)
+                            guard let url = URL(string: "https://openai.com/policies/privacy-policy") else { return }
+                            NSWorkspace.shared.open(url)
                         }
                         .font(.caption)
                         Button("OpenRouter Privacy Policy") {
-                            NSWorkspace.shared.open(URL(string: "https://openrouter.ai/privacy")!)
+                            guard let url = URL(string: "https://openrouter.ai/privacy") else { return }
+                            NSWorkspace.shared.open(url)
                         }
                         .font(.caption)
                     }

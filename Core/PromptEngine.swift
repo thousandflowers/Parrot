@@ -97,7 +97,7 @@ struct PromptEngine {
     private var grammarFamilyInstruction: String {
         switch languageFamily {
         case .latin:
-            return "Fix inflection errors — wrong verb conjugation (person, number, tense, or mood), noun/adjective/article agreement, and required prepositions. When syntax demands a specific grammatical mood (subjunctive, conditional, etc.), use it; do NOT substitute a different mood or tense when both are grammatically valid."
+            return "Fix inflection errors — verb forms that disagree with their explicit subject (e.g. wrong agreement ending), noun/adjective/article gender or number agreement, and required prepositions. Do NOT change the verb tense the author chose (present, past, future, etc.), do NOT change grammatical person (1st/2nd/3rd) or number, and do NOT change narrative point of view. These are authorial choices, not errors. Only correct a tense or person when the surrounding text makes it unambiguously wrong (e.g. explicit subject conflicts with ending)."
         case .cjk:
             return "Preserve CJK punctuation and do not convert to ASCII. Fix particles, measure words, aspect markers, and collocations. Do not rewrite sentences that are already correct."
         case .arabic:
@@ -152,6 +152,47 @@ struct PromptEngine {
         return escaped
     }
 
+    /// Few-shot examples steer small models toward MINIMAL edits (fix the error, keep the rest)
+    /// instead of rephrasing or changing tense. Examples deliberately avoid tense/person changes
+    /// so they never contradict the family instruction. Only languages we can vouch for return
+    /// examples; others fall back to instructions only (still correct, just less guided).
+    private func grammarFewShot() -> String? {
+        let pairs: [(String, String)]
+        switch primaryLanguageCode {
+        case "it":
+            pairs = [
+                ("Lui hanno mangiato la torta.", "Lui ha mangiato la torta."),
+                ("Ho comprato tre libri rosso.", "Ho comprato tre libri rossi."),
+                ("La macchina sono veloce.", "La macchina è veloce.")
+            ]
+        case "en":
+            pairs = [
+                ("She have three cat.", "She has three cats."),
+                ("He don't like it.", "He doesn't like it."),
+                ("The childs is playing.", "The children are playing.")
+            ]
+        case "es":
+            pairs = [
+                ("Ella tienen dos perro.", "Ella tiene dos perros."),
+                ("La casa son bonita.", "La casa es bonita.")
+            ]
+        case "fr":
+            pairs = [
+                ("Il ont mangé la pomme.", "Il a mangé la pomme."),
+                ("Les chat est noir.", "Les chats sont noirs.")
+            ]
+        case "de":
+            pairs = [
+                ("Er haben das Buch gelesen.", "Er hat das Buch gelesen."),
+                ("Die Katze sind klein.", "Die Katze ist klein.")
+            ]
+        default:
+            return nil
+        }
+        let lines = pairs.map { "Input: \($0.0)\nOutput: \($0.1)" }.joined(separator: "\n")
+        return "Examples — fix ONLY the error, change as few words as possible, keep everything else identical:\n\(lines)"
+    }
+
     func buildGrammarPrompt(for text: String, customInstruction: String? = nil) -> String {
         let extra = grammarFamilyInstruction
         let styleLine = styleInstruction
@@ -159,12 +200,13 @@ struct PromptEngine {
         let langName = languageName(for: language)
 
         var parts: [String] = []
-        parts.append("Fix all grammatical errors in the text inside <TEXT>: misspellings, wrong verb forms, wrong agreement, and broken phrases where the words as written are syntactically impossible. You may add or replace words ONLY to fix a clear grammatical error — for example, add a missing verb form or replace a wrong form. Do not rephrase correct sentences, do not reorder, do not substitute synonyms. Return only the corrected text.")
+        parts.append("Fix all grammatical errors in the text inside <TEXT>: misspellings, wrong verb agreement, and broken phrases where the words as written are syntactically impossible. You may add or replace words ONLY to fix a clear grammatical error. NEVER change: verb tense (present/past/future/etc.), grammatical person (1st/2nd/3rd), narrative point of view, or perspective — these are authorial choices, not errors. Do not rephrase correct sentences, do not reorder, do not substitute synonyms. Return only the corrected text.")
         parts.append("CRITICAL: Output MUST be in \(langName). Do NOT translate to any other language.")
         if !extra.isEmpty { parts.append(extra) }
         if !styleLine.isEmpty { parts.append(styleLine) }
         if let custom = customInstruction { parts.append(custom) }
         if let styleHint = StyleProfiler.buildHint(language: language) { parts.append(styleHint) }
+        if let fewShot = grammarFewShot() { parts.append(fewShot) }
         parts.append("\n<TEXT>\(safeText)</TEXT>")
 
         return parts.joined(separator: "\n")
@@ -203,7 +245,7 @@ struct PromptEngine {
         let styleLine = styleInstruction
         let safeText = escapeForPrompt(text)
         var parts: [String] = []
-        parts.append("Fix all grammatical errors AND improve the fluency and natural flow of the text inside <TEXT>. Fix: misspellings, wrong verb forms, wrong agreement, broken phrases. Also: improve awkward phrasing, vary repetitive sentence structure, smooth transitions. Preserve the author's voice and original meaning — do not add information or change the intent. Output only the corrected text in the same language as the input.")
+        parts.append("Fix all grammatical errors AND improve the fluency and natural flow of the text inside <TEXT>. Fix: misspellings, wrong verb agreement, broken phrases. Also: improve awkward phrasing, vary repetitive sentence structure, smooth transitions. NEVER change: verb tense, grammatical person, or narrative point of view — these are authorial choices. Preserve the author's voice and original meaning — do not add information or change the intent. Output only the corrected text in the same language as the input.")
         if !extra.isEmpty { parts.append(extra) }
         if !styleLine.isEmpty { parts.append(styleLine) }
         if let styleHint = StyleProfiler.buildHint(language: language) { parts.append(styleHint) }
@@ -285,7 +327,6 @@ struct PromptEngine {
 
     func buildDeSlopPrompt(for text: String) -> String {
         let safeText = escapeForPrompt(text)
-        let langName = languageName(for: language)
         return """
         Rewrite the following text to sound more human and natural. Remove AI-sounding patterns including:
         - Overused AI phrases: "delve", "testament", "tapestry", "it's important to note", "in conclusion", "foster", "leverage"

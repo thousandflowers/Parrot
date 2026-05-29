@@ -69,6 +69,7 @@ struct PresetsTab: View {
                 Spacer()
                 Button("New preset") { showingAddSheet = true }
                     .buttonStyle(.borderedProminent)
+                    .accessibilityLabel("New preset")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -113,8 +114,10 @@ struct PresetEditSheet: View {
 
             TextField("Preset name", text: $name)
                 .focused($focusedField)
+                .accessibilityLabel("Preset name")
             TextField("Template (use {{TEXT}} for the text)", text: $template, axis: .vertical)
                 .lineLimit(4...8)
+                .accessibilityLabel("Template")
 
             HStack {
                 Picker("Language", selection: $language) {
@@ -127,14 +130,18 @@ struct PresetEditSheet: View {
                 Slider(value: $temperature, in: 0.0...1.0, step: 0.05) {
                     Text("Temp: \(temperature, specifier: "%.2f")")
                 }
+                .accessibilityLabel("Temperature")
             }
 
             TextField("SF Symbol icon (e.g. star, wand.and.stars)", text: $icon)
+                .accessibilityLabel("Icon")
             TextField("Shortcut key (e.g. 1, 2, 3)", text: $shortcutKey)
                 .help("Cmd+Shift+[key] to activate the preset")
+                .accessibilityLabel("Shortcut key")
 
             HStack {
                 Button("Cancel") { dismiss() }
+                    .accessibilityLabel("Cancel")
                 Spacer()
                 Button(preset == nil ? "Create" : "Save") {
                     let p = Preset(
@@ -153,6 +160,7 @@ struct PresetEditSheet: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(name.isEmpty || template.isEmpty)
+                .accessibilityLabel(preset == nil ? "Create" : "Save")
             }
         }
         .padding(24)

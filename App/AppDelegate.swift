@@ -43,8 +43,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Load correction cache persisted from previous session
         Task { await CorrectionCache.shared.loadFromDisk() }
 
-        if UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.realtimeEnabled) {
+        // The AX observer feeds both realtime correction and inline completion — start it if
+        // either feature is on. Inline completion defaults on, so this is usually active.
+        let realtimeOn = UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.realtimeEnabled)
+        let completionOn = PreferencesStore.shared.inlineCompletionEnabled
+        if realtimeOn || completionOn {
             Task { await RealtimeMonitor.shared.start() }
+        }
+        if completionOn {
+            TabInterceptor.shared.start()
         }
 
         // Proactively warm up the local server so first corrections don't block
@@ -75,6 +82,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem?.button else { return }
         button.action = #selector(togglePopover)
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        button.setAccessibilityLabel("Parrot menu")
+        button.setAccessibilityHelp("Open the Parrot correction menu")
         MenuBarParrot.shared.attach(to: button, statusItem: statusItem!)
     }
 
@@ -226,6 +235,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        InlineHighlightController.shared.clear()
         hotkeyManager?.shutdown()
         if let observer = frontAppObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)

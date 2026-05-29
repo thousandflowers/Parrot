@@ -121,6 +121,52 @@ actor ModelManager: Sendable {
         UserDefaults.standard.stringArray(forKey: Constants.UserDefaultsKey.externalModelPaths) ?? []
     }
 
+    /// Removes a downloaded model by ID. Deletes the file from the models directory
+    /// and removes any matching adopted model paths.
+    /// - Parameter id: The model ID (without .gguf extension).
+    func removeModel(id: String) {
+        let cleanID = id.hasSuffix(".gguf") ? String(id.dropLast(5)) : id
+        let dirPath = modelsDir.path(percentEncoded: false)
+
+        if let files = try? FileManager.default.contentsOfDirectory(atPath: dirPath) {
+            let target = "\(cleanID.lowercased()).gguf"
+            if let match = files.first(where: { $0.hasSuffix(".gguf") && $0.lowercased() == target }) {
+                try? FileManager.default.removeItem(at: modelsDir.appendingPathComponent(match))
+                Logger.infra.debug("ModelManager: deleted model file \(match)")
+            }
+        }
+
+        var adopted = adoptedModelPaths()
+        let toRemove = adopted.filter { path in
+            let filename = (path as NSString).lastPathComponent
+            let idLower = cleanID.lowercased()
+            return filename.hasSuffix(".gguf") && (filename.lowercased() == "\(idLower).gguf" || filename.lowercased().contains(idLower))
+        }
+        adopted.removeAll { toRemove.contains($0) }
+        UserDefaults.standard.set(adopted, forKey: Constants.UserDefaultsKey.externalModelPaths)
+        for path in toRemove {
+            try? FileManager.default.removeItem(atPath: path)
+            Logger.infra.debug("ModelManager: deleted adopted model \(path)")
+        }
+
+        invalidateCache()
+    }
+
+    /// Removes a discovered local model by its path.
+    /// - Parameter model: The DiscoveredModel to delete.
+    func removeLocalModel(_ model: DiscoveredModel) {
+        if model.path.contains(modelsDir.path(percentEncoded: false)) {
+            removeModel(id: model.id)
+            return
+        }
+        var adopted = adoptedModelPaths()
+        adopted.removeAll { $0 == model.path }
+        UserDefaults.standard.set(adopted, forKey: Constants.UserDefaultsKey.externalModelPaths)
+        try? FileManager.default.removeItem(atPath: model.path)
+        Logger.infra.debug("ModelManager: deleted adopted model at \(model.path)")
+        invalidateCache()
+    }
+
     func adoptModel(path: String) {
         var paths = adoptedModelPaths()
         guard !paths.contains(path) else { return }

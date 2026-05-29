@@ -20,7 +20,7 @@ struct SpanSuggestionView: View {
             footer
         }
         .frame(width: 420)
-        .background(Color(NSColor.windowBackgroundColor))
+        .background(Color.surfaceBackground)
     }
 
     private var header: some View {
@@ -126,12 +126,14 @@ struct SpanRowView: View {
                         .foregroundStyle(span.accepted == false ? .red : .secondary)
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel("Reject suggestion")
 
                 Button { onAccept() } label: {
                     Image(systemName: span.accepted == true ? "checkmark.circle.fill" : "checkmark.circle")
                         .foregroundStyle(span.accepted == true ? .green : .secondary)
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel("Accept suggestion")
             }
         }
         .padding(8)
@@ -143,7 +145,7 @@ struct SpanRowView: View {
         switch span.accepted {
         case true:  return Color.green.opacity(0.08)
         case false: return Color.red.opacity(0.08)
-        case nil:   return Color(NSColor.controlBackgroundColor)
+        case nil:   return Color.surfaceElevated
         }
     }
 

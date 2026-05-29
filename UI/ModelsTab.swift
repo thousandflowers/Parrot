@@ -53,11 +53,14 @@ struct ModelsTab: View {
                     OpenAIKeyField(prefs: prefs)
                     TextField("Base URL", text: $prefs.openAIBaseURL)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Base URL")
                     TextField("Model", text: $prefs.openAIModel)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Model")
                     VStack(alignment: .leading, spacing: 2) {
                         TextField("Backup model (if primary fails)", text: $prefs.fallbackOpenAIModel)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel("Backup model")
                         Text("Optional. Used automatically when the primary model returns an error.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -67,11 +70,14 @@ struct ModelsTab: View {
                 if prefs.serviceType == .ollama {
                     TextField("Ollama URL", text: $prefs.ollamaBaseURL)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Ollama URL")
                     TextField("Model", text: $prefs.ollamaModel)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Ollama model")
                     VStack(alignment: .leading, spacing: 2) {
                         TextField("Backup model (if primary fails)", text: $prefs.fallbackOllamaModel)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel("Ollama backup model")
                         Text("Optional. Used automatically when the primary model returns an error.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -82,9 +88,11 @@ struct ModelsTab: View {
                     OpenRouterKeyField(prefs: prefs)
                     TextField("Model (e.g. openai/gpt-4o-mini)", text: $prefs.openRouterModel)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("OpenRouter model")
                     VStack(alignment: .leading, spacing: 2) {
                         TextField("Backup model (if primary fails)", text: $prefs.fallbackOpenRouterModel)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel("OpenRouter backup model")
                         Text("Optional. Used automatically when the primary model returns an error.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -167,7 +175,8 @@ struct ModelsTab: View {
                             progress: activeDownloadID == model.id ? downloadProgress : 0,
                             status: activeDownloadID == model.id ? downloadStatus : "",
                             onDownload: { downloadModel(model) },
-                            onSelect: { selectModel(model) }
+                            onSelect: { selectModel(model) },
+                            onDelete: { deleteModel($0) }
                         )
                     }
                 } header: {
@@ -198,7 +207,8 @@ struct ModelsTab: View {
                         LocalModelRow(
                             model: model,
                             isSelected: prefs.selectedModelID.lowercased() == model.id.lowercased(),
-                            onSelect: { selectLocalModel(model) }
+                            onSelect: { selectLocalModel(model) },
+                            onDelete: { deleteLocalModel($0) }
                         )
                     }
                 } header: {
@@ -211,6 +221,7 @@ struct ModelsTab: View {
                     VStack(alignment: .leading, spacing: 2) {
                         TextField("Backup model (if primary fails)", text: $prefs.fallbackLocalModelID)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel("Fallback model")
                         Text("Optional. If the selected model fails to load, Parrot will try this one instead. Enter a model ID from the list above.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -223,6 +234,7 @@ struct ModelsTab: View {
 
         }
         .formStyle(.grouped)
+        .frame(maxHeight: .infinity)
         .task {
             models = await ModelManager.shared.recommendedModels()
             localModels = await ModelManager.shared.localModels()
@@ -307,6 +319,21 @@ struct ModelsTab: View {
         }.map(\.id))
     }
 
+    private func deleteModel(_ id: String) {
+        Task {
+            await ModelManager.shared.removeModel(id: id)
+            downloadedModels.remove(id)
+            localModels = await ModelManager.shared.localModels()
+        }
+    }
+
+    private func deleteLocalModel(_ model: DiscoveredModel) {
+        Task {
+            await ModelManager.shared.removeLocalModel(model)
+            localModels = await ModelManager.shared.localModels()
+        }
+    }
+
     private func downloadModel(_ rec: ModelRecommendation) {
         isDownloading = true
         activeDownloadID = rec.id
@@ -369,6 +396,9 @@ private struct ModelRow: View {
     let status: String
     let onDownload: () -> Void
     let onSelect: () -> Void
+    let onDelete: (String) -> Void
+
+    @State private var showDeleteAlert = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -410,27 +440,41 @@ private struct ModelRow: View {
                         .foregroundColor(.textSecondary)
                 }
             } else if isDownloaded {
-                if isSelected {
-                    Text("In use")
-                        .font(.caption)
-                        .foregroundColor(.statusOk)
-                } else {
-                    HStack(spacing: 6) {
-                        Text("Downloaded")
+                HStack(spacing: 6) {
+                    if isSelected {
+                        Text("In use")
                             .font(.caption)
-                            .foregroundColor(.textSecondary)
+                            .foregroundColor(.statusOk)
+                    } else {
                         Button("Use") { onSelect() }
                             .buttonStyle(.borderedProminent)
                             .controlSize(.small)
+                            .accessibilityLabel("Use \(model.name)")
                     }
+                    Button(action: { showDeleteAlert = true }) {
+                        Image(systemName: "trash")
+                            .foregroundColor(.statusError)
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .accessibilityLabel("Delete \(model.name)")
                 }
             } else {
                 Button("Download") { onDownload() }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
+                    .accessibilityLabel("Download \(model.name)")
             }
         }
         .padding(.vertical, 4)
+        .alert("Delete model?", isPresented: $showDeleteAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                onDelete(model.id)
+            }
+        } message: {
+            Text("Delete the file for \"\(model.name)\"? This cannot be undone.")
+        }
     }
 }
 
@@ -440,6 +484,9 @@ private struct LocalModelRow: View {
     let model: DiscoveredModel
     let isSelected: Bool
     let onSelect: () -> Void
+    let onDelete: (DiscoveredModel) -> Void
+
+    @State private var showDeleteAlert = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -452,17 +499,35 @@ private struct LocalModelRow: View {
                     .foregroundColor(.textSecondary)
             }
             Spacer()
-            if isSelected {
-                Text("In use")
-                    .font(.caption)
-                    .foregroundColor(.statusOk)
-            } else {
-                Button("Use") { onSelect() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+            HStack(spacing: 6) {
+                if isSelected {
+                    Text("In use")
+                        .font(.caption)
+                        .foregroundColor(.statusOk)
+                } else {
+                    Button("Use") { onSelect() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .accessibilityLabel("Use \(model.name)")
+                }
+                Button(action: { showDeleteAlert = true }) {
+                    Image(systemName: "trash")
+                        .foregroundColor(.statusError)
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .accessibilityLabel("Delete \(model.name)")
             }
         }
         .padding(.vertical, 4)
+        .alert("Delete model?", isPresented: $showDeleteAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                onDelete(model)
+            }
+        } message: {
+            Text("Delete the file for \"\(model.name)\"? This cannot be undone.")
+        }
     }
 
     private func formattedSize(_ bytes: Int64) -> String {
@@ -499,6 +564,7 @@ private struct LlamaInstallerSection: View {
                     Button("Install llama-server") { installer.install() }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
+                        .accessibilityLabel("Install llama-server")
                 }
                 .padding(.vertical, 2)
             } header: {
@@ -539,11 +605,14 @@ private struct LlamaInstallerSection: View {
                         Button("Try Again") { installer.install() }
                             .buttonStyle(.borderedProminent)
                             .controlSize(.small)
+                            .accessibilityLabel("Try Again")
                         Button("Install Homebrew first…") {
-                            NSWorkspace.shared.open(URL(string: "https://brew.sh")!)
+                            guard let url = URL(string: "https://brew.sh") else { return }
+                            NSWorkspace.shared.open(url)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .accessibilityLabel("Install Homebrew first")
                     }
                 }
                 .padding(.vertical, 2)
@@ -565,6 +634,7 @@ private struct OpenAIKeyField: View {
             .onAppear { localKey = prefs.openAIAPIKey }
             .onSubmit { prefs.openAIAPIKey = localKey }
             .onDisappear { prefs.openAIAPIKey = localKey }
+            .accessibilityLabel("OpenAI API Key")
     }
 }
 
@@ -577,6 +647,7 @@ private struct OpenRouterKeyField: View {
             .onAppear { localKey = prefs.openRouterAPIKey }
             .onSubmit { prefs.openRouterAPIKey = localKey }
             .onDisappear { prefs.openRouterAPIKey = localKey }
+            .accessibilityLabel("OpenRouter API Key")
     }
 }
 

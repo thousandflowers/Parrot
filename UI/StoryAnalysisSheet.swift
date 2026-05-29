@@ -30,7 +30,7 @@ struct StoryAnalysisSheet: View {
                 }
             }
             .padding()
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .background(Color.surfaceElevated, in: RoundedRectangle(cornerRadius: 12))
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {

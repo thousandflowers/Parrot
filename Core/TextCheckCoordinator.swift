@@ -48,9 +48,6 @@ struct TextCheckCoordinator: Sendable {
             let customText = customResult.text
             let ruleResult = await RuleBasedEngine.shared.check(customText, language: language)
 
-            let hasCustomFixes = !customResult.fixes.isEmpty
-            let hasRuleFixes = ruleResult.hasFixes
-
             let effectiveType: PromptType
             if type == .grammar {
                 // DraftDetector auto-expand removed: silently changing grammar→expand
@@ -90,7 +87,8 @@ struct TextCheckCoordinator: Sendable {
             var harperSpans: [CorrectionSpan] = []
             let harperAvailable = await HarperEngine.shared.isAvailable
             if harperAvailable && language.hasPrefix("en") {
-                if let harperResult = try? await HarperEngine.shared.check(ruleResult.text) {
+                do {
+                    let harperResult = try await HarperEngine.shared.check(ruleResult.text)
                     harperSpans = harperResult.fixes.map { fix in
                         CorrectionSpan(
                             range: fix.byteRange,
@@ -101,13 +99,20 @@ struct TextCheckCoordinator: Sendable {
                             source: .ruleBased
                         )
                     }
+                } catch {
+                    CrashLogger.log("Harper check failed: \(error.localizedDescription)")
                 }
             }
 
             // Layer 2: LanguageTool (when installed locally — 500+ rules, 25+ languages)
             var ltSpans: [CorrectionSpan] = []
             if await LanguageToolEngine.shared.isAvailable {
-                ltSpans = (try? await LanguageToolEngine.shared.check(text, language: language)) ?? []
+                do {
+                    ltSpans = try await LanguageToolEngine.shared.check(text, language: language)
+                } catch {
+                    CrashLogger.log("LanguageTool check failed: \(error.localizedDescription)")
+                    ltSpans = []
+                }
             }
 
             let ruleMerged = SpanMerger.merge(nativeSpans + ruleSpans + harperSpans + ltSpans)
@@ -216,9 +221,10 @@ struct TextCheckCoordinator: Sendable {
             guard !excluded else { throw CancellationError() }
         }
 
+        let prefsLanguage = await MainActor.run { PreferencesStore.shared.language }
         let language = LanguageDetector.detect(
             text: text,
-            fallbackLanguage: Locale.current.language.languageCode?.identifier ?? "en"
+            fallbackLanguage: prefsLanguage
         )
 
         let contextPID: pid_t = if let pid = frontAppPID { pid } else { await AccessibilityBridge.shared.lastKnownFrontAppPID() }

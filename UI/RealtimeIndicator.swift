@@ -44,6 +44,8 @@ final class RealtimeIndicatorController {
                 existing.orderOut(nil)
                 let hv = NSHostingView(rootView: newView)
                 hv.sizingOptions = []
+                hv.setAccessibilityElement(true)
+                hv.setAccessibilityLabel("Realtime indicator")
                 hostingView = hv
                 existing.contentView = hv
                 existing.setFrameOrigin(NSPoint(x: x, y: y))
@@ -65,6 +67,8 @@ final class RealtimeIndicatorController {
 
                 let hv = NSHostingView(rootView: newView)
                 hv.sizingOptions = []
+                hv.setAccessibilityElement(true)
+                hv.setAccessibilityLabel("Realtime indicator")
                 hostingView = hv
                 panel.contentView = hv
                 window = panel
@@ -77,7 +81,7 @@ final class RealtimeIndicatorController {
             autoDismissTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(4))
                 guard !Task.isCancelled else { return }
-                await self?.hide()
+                self?.hide()
             }
         }
     }
@@ -126,11 +130,12 @@ struct RealtimeIndicatorView: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(Color.surfaceBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(Color.primary.opacity(0.15), lineWidth: 0.5)
                 )
         )
+        .drawingGroup()
     }
 }

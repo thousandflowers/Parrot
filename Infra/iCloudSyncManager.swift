@@ -25,14 +25,13 @@ actor iCloudSyncManager {
     var isAvailable: Bool { store.synchronize() }
 
     func syncToCloud(selectedSections: Set<String>) async {
-        var prefData: Data?
-        var rulesData: Data?
-        var promptsData: Data?
-        var presetsData: Data?
-        var flowsData: Data?
-
-        await MainActor.run {
+        let encoded: (pref: Data?, rules: Data?, prompts: Data?, presets: Data?, flows: Data?) = await MainActor.run {
             let prefs = PreferencesStore.shared
+            var prefData: Data?
+            var rulesData: Data?
+            var promptsData: Data?
+            var presetsData: Data?
+            var flowsData: Data?
             if selectedSections.contains("preferences") {
                 prefData = try? JSONEncoder().encode(PreferencesExport(
                     selectedModelID: prefs.selectedModelID, language: prefs.language,
@@ -52,13 +51,14 @@ actor iCloudSyncManager {
                 presetsData = try? JSONEncoder().encode(prefs.presets)
                 flowsData = try? JSONEncoder().encode(prefs.flows)
             }
+            return (prefData, rulesData, promptsData, presetsData, flowsData)
         }
 
-        if let d = prefData { store.set(d, forKey: "sync.preferences") }
-        if let d = rulesData { store.set(d, forKey: "sync.appRules") }
-        if let d = promptsData { store.set(d, forKey: "sync.customPrompts") }
-        if let d = presetsData { store.set(d, forKey: "sync.presets") }
-        if let d = flowsData { store.set(d, forKey: "sync.flows") }
+        if let d = encoded.pref { store.set(d, forKey: "sync.preferences") }
+        if let d = encoded.rules { store.set(d, forKey: "sync.appRules") }
+        if let d = encoded.prompts { store.set(d, forKey: "sync.customPrompts") }
+        if let d = encoded.presets { store.set(d, forKey: "sync.presets") }
+        if let d = encoded.flows { store.set(d, forKey: "sync.flows") }
 
         if selectedSections.contains("history") {
             let entries = await HistoryStore.shared.getAllEntries()
@@ -96,13 +96,16 @@ actor iCloudSyncManager {
         }
 
         if selectedSections.contains("customRules") {
-            await MainActor.run {
+            let importedRules: [String] = await MainActor.run {
                 let prefs = PreferencesStore.shared
-                if let d = rulesData, let r = try? JSONDecoder().decode([AppRule].self, from: d) { prefs.appRules = r; imported.append("appRules") }
-                if let d = promptsData, let r = try? JSONDecoder().decode([CustomPrompt].self, from: d) { prefs.customPrompts = r; imported.append("customPrompts") }
-                if let d = presetsData, let r = try? JSONDecoder().decode([Preset].self, from: d) { prefs.presets = r; imported.append("presets") }
-                if let d = flowsData, let r = try? JSONDecoder().decode([Flow].self, from: d) { prefs.flows = r; imported.append("flows") }
+                var keys: [String] = []
+                if let d = rulesData, let r = try? JSONDecoder().decode([AppRule].self, from: d) { prefs.appRules = r; keys.append("appRules") }
+                if let d = promptsData, let r = try? JSONDecoder().decode([CustomPrompt].self, from: d) { prefs.customPrompts = r; keys.append("customPrompts") }
+                if let d = presetsData, let r = try? JSONDecoder().decode([Preset].self, from: d) { prefs.presets = r; keys.append("presets") }
+                if let d = flowsData, let r = try? JSONDecoder().decode([Flow].self, from: d) { prefs.flows = r; keys.append("flows") }
+                return keys
             }
+            imported.append(contentsOf: importedRules)
         }
 
         if selectedSections.contains("history"), let d = historyData,

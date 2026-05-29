@@ -46,13 +46,7 @@ struct MenuBarView: View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.accentColor.opacity(0.18), Color.accentColor.opacity(0.05)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(Color.surfaceElevated)
                     .frame(width: 36, height: 36)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -322,6 +316,7 @@ struct MenuBarView: View {
         .padding(.vertical, 9)
         .contentShape(Rectangle())
         .onTapGesture { NSApplication.shared.terminate(nil) }
+        .accessibilityAddTraits(.isButton)
     }
 
     // MARK: - Helpers
@@ -338,7 +333,7 @@ struct MenuBarView: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary.opacity(0.6))
                 .rotationEffect(isExpanded ? .degrees(0) : .degrees(-90))
-                .animation(.spring(response: 0.3, dampingFraction: 0.82), value: isExpanded)
+                .animation(.spring(response: 0.3, dampingFraction: 0.70), value: isExpanded)
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -446,7 +441,7 @@ private struct QuietDisclosureStyle: DisclosureGroupStyle {
     func makeBody(configuration: Configuration) -> some View {
         VStack(spacing: 0) {
             Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.70)) {
                     configuration.isExpanded.toggle()
                 }
             } label: {

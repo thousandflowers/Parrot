@@ -269,6 +269,24 @@ final class PreferencesStore {
     func updateAppRule(_ rule: AppRule) { update(&appRules, with: rule) { $0.id == rule.id } }
     func deleteAppRule(_ rule: AppRule) { appRules.removeAll { $0.id == rule.id } }
 
+    // MARK: - Inline completion (SP1)
+    var inlineCompletionEnabled: Bool {
+        get { bool(Constants.UserDefaultsKey.inlineCompletionEnabled, default: true) }
+        set { set(newValue, for: Constants.UserDefaultsKey.inlineCompletionEnabled) }
+    }
+    var maxCompletionLength: Int {
+        get { int(Constants.UserDefaultsKey.maxCompletionLength, fallback: Constants.completionDefaultMaxWords) }
+        set { set(newValue, for: Constants.UserDefaultsKey.maxCompletionLength) }
+    }
+    var completionDebounceMs: Int {
+        get { int(Constants.UserDefaultsKey.completionDebounceMs, fallback: Constants.completionDefaultDebounceMs) }
+        set { set(newValue, for: Constants.UserDefaultsKey.completionDebounceMs) }
+    }
+    var completionUserPrompt: String {
+        get { string(Constants.UserDefaultsKey.completionUserPrompt, fallback: "") }
+        set { set(newValue, for: Constants.UserDefaultsKey.completionUserPrompt) }
+    }
+
     private func string(_ key: String, fallback: String = "") -> String {
         observe()
         return UserDefaults.standard.string(forKey: key) ?? fallback
@@ -277,6 +295,25 @@ final class PreferencesStore {
     private func bool(_ key: String) -> Bool {
         observe()
         return UserDefaults.standard.bool(forKey: key)
+    }
+
+    /// Bool with an explicit default used when the key was never set (UserDefaults.bool is false otherwise).
+    private func bool(_ key: String, default defaultValue: Bool) -> Bool {
+        observe()
+        guard UserDefaults.standard.object(forKey: key) != nil else { return defaultValue }
+        return UserDefaults.standard.bool(forKey: key)
+    }
+
+    private func int(_ key: String, fallback: Int) -> Int {
+        observe()
+        guard UserDefaults.standard.object(forKey: key) != nil else { return fallback }
+        return UserDefaults.standard.integer(forKey: key)
+    }
+
+    private func set(_ value: Int, for key: String) {
+        let current = UserDefaults.standard.object(forKey: key) as? Int
+        UserDefaults.standard.set(value, forKey: key)
+        if current != value { invalidate() }
     }
 
     private func service(_ key: String) -> ServiceType {

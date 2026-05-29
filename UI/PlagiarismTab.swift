@@ -29,6 +29,7 @@ struct PlagiarismTab: View {
                     )) {
                         Label(method.rawValue, systemImage: method.icon)
                     }
+                    .accessibilityLabel(method.rawValue)
                 }
             } header: {
                 Text("Detection methods")
@@ -80,8 +81,8 @@ struct PlagiarismTab: View {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
-                                if let url = finding.url {
-                                    Link("Search", destination: URL(string: url)!)
+                                if let urlStr = finding.url, let url = URL(string: urlStr) {
+                                    Link("Search", destination: url)
                                         .font(.caption2)
                                 }
                             }

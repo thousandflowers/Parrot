@@ -39,7 +39,7 @@ struct InlineAnnotationsTab: View {
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
-                            .help("Re-enable deep scan for this app")
+                            .accessibilityLabel("Re-enable deep scan for \(bundleID)")
                         }
                         .padding(.vertical, 2)
                     }

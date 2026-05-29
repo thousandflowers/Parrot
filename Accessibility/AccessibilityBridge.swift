@@ -5,16 +5,16 @@ actor AccessibilityBridge: AXBridgeProtocol {
     static let shared = AccessibilityBridge()
 
     nonisolated private static func asElement(_ ref: CFTypeRef) -> AXUIElement? {
-        CFGetTypeID(ref) == AXUIElementGetTypeID() ? (ref as! AXUIElement) : nil
+        CFGetTypeID(ref) == AXUIElementGetTypeID() ? (ref as! AXUIElement) : nil // safe: CFGetTypeID checked
     }
 
     nonisolated private static func asAXValue(_ ref: CFTypeRef) -> AXValue? {
-        CFGetTypeID(ref) == AXValueGetTypeID() ? (ref as! AXValue) : nil
+        CFGetTypeID(ref) == AXValueGetTypeID() ? (ref as! AXValue) : nil // safe: CFGetTypeID checked
     }
 
     nonisolated static func asElementPublic(_ ref: CFTypeRef?) -> AXUIElement? {
         guard let ref else { return nil }
-        return CFGetTypeID(ref) == AXUIElementGetTypeID() ? (ref as! AXUIElement) : nil
+        return CFGetTypeID(ref) == AXUIElementGetTypeID() ? (ref as! AXUIElement) : nil // safe: CFGetTypeID checked
     }
 
     private static let _boundsLock = OSAllocatedUnfairLock<CGRect>(initialState: .zero)
@@ -221,13 +221,13 @@ actor AccessibilityBridge: AXBridgeProtocol {
 
     private func injectViaClipboard(correctedText: String, targetPID: pid_t = 0) async throws {
         // NSPasteboard is not thread-safe — all reads/writes must happen on the main thread.
-        let originalItems: [NSPasteboardItem] = await MainActor.run {
-            NSPasteboard.general.pasteboardItems?.compactMap { item in
-                let copy = NSPasteboardItem()
+        let originalItems: [[String: Data]] = await MainActor.run {
+            NSPasteboard.general.pasteboardItems?.compactMap { item -> [String: Data]? in
+                var dict: [String: Data] = [:]
                 for type in item.types {
-                    if let data = item.data(forType: type) { copy.setData(data, forType: type) }
+                    if let data = item.data(forType: type) { dict[type.rawValue] = data }
                 }
-                return copy
+                return dict.isEmpty ? nil : dict
             } ?? []
         }
 
@@ -251,7 +251,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
         let pid = targetPID != 0 ? targetPID : _lastKnownFrontAppPID
         if pid != 0 {
             await MainActor.run {
-                NSRunningApplication(processIdentifier: pid)?.activate(options: [])
+                _ = NSRunningApplication(processIdentifier: pid)?.activate(options: [])
             }
             // Wait for the app to become key before we post the keystroke.
             try await Task.sleep(for: .milliseconds(80))
@@ -288,7 +288,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
         await MainActor.run {
             let pb = NSPasteboard.general
             pb.clearContents()
-            pb.writeObjects(pending.items)
+            pb.writeObjects(pending.pasteboardItems())
         }
     }
 
@@ -344,6 +344,62 @@ actor AccessibilityBridge: AXBridgeProtocol {
 
     // MARK: - Public AX utilities
 
+    // MARK: - Inline completion (SP1)
+
+    /// Reads the focused field's text split at the caret, the caret screen rect, and whether the
+    /// field is a secure (password) field. Returns nil if nothing usable is focused.
+    func completionContext(pid: pid_t) async -> CompletionAXContext? {
+        guard AXIsProcessTrusted() else { return nil }
+        let appAX = AXUIElementCreateApplication(pid)
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(appAX, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
+              let focused = focusedRef, let element = Self.asElement(focused) else { return nil }
+
+        var roleRef: CFTypeRef?
+        AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef)
+        var subroleRef: CFTypeRef?
+        AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subroleRef)
+        // No public constant for the secure-field role; match the AX string ("AXSecureTextField").
+        let isSecure = (roleRef as? String) == "AXSecureTextField"
+            || (subroleRef as? String) == "AXSecureTextField"
+
+        var rangeRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
+              let rv = rangeRef, let axRange = Self.asAXValue(rv) else { return nil }
+        var caretRange = CFRange(location: 0, length: 0)
+        AXValueGetValue(axRange, .cfRange, &caretRange)
+        // Only complete at a collapsed caret — never when a selection exists.
+        guard caretRange.length == 0 else { return nil }
+
+        var valueRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success,
+              let fullText = valueRef as? String else { return nil }
+        let ns = fullText as NSString
+        let caret = max(0, min(caretRange.location, ns.length))
+        let pre = ns.substring(to: caret)
+        let post = ns.substring(from: caret)
+
+        let probe = caret > 0 ? CFRange(location: caret - 1, length: 1) : CFRange(location: 0, length: 1)
+        let rect = axBoundsForRange(probe, on: element) ?? .zero
+
+        return CompletionAXContext(preContext: pre, postContext: post, caretRect: rect, isSecure: isSecure)
+    }
+
+    /// Inserts completion text at the caret (collapsed selection → insertion). Returns success.
+    func insertCompletion(_ text: String, pid: pid_t) async -> Bool {
+        guard AXIsProcessTrusted(), !text.isEmpty else { return false }
+        let bid = await AppDetector.shared.frontAppBundleID(forPID: pid)
+        if let b = bid, await ElectronFallbackHandler.shared.isElectronApp(bundleID: b) {
+            try? await injectViaClipboard(correctedText: text, targetPID: pid)
+            return true
+        }
+        let appAX = AXUIElementCreateApplication(pid)
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(appAX, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
+              let focused = focusedRef, let element = Self.asElement(focused) else { return false }
+        return AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFTypeRef) == .success
+    }
+
     func boundsForRange(_ range: CFRange, pid: pid_t) async -> CGRect? {
         guard AXIsProcessTrusted() else { return nil }
         let appAX = AXUIElementCreateApplication(pid)
@@ -386,7 +442,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
         guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenRef) == .success,
               let ref = childrenRef,
               CFGetTypeID(ref) == CFArrayGetTypeID() else { return nil }
-        let arr = ref as! CFArray
+        let arr = ref as! CFArray // safe: CFGetTypeID checked above
         let count = CFArrayGetCount(arr)
         guard count > 0 && count < 300 else { return nil }
         for i in 0..<count {
@@ -496,29 +552,35 @@ actor AccessibilityBridge: AXBridgeProtocol {
 
 // MARK: - Clipboard Restore
 
-struct PendingClipboardRestore {
-    let items: [NSPasteboardItem]
+/// Snapshot of the pasteboard captured before Parrot overwrites it.
+/// Stored as a Sendable `[type: data]` representation (not `NSPasteboardItem`,
+/// which is non-Sendable) so it can cross actor boundaries safely.
+struct PendingClipboardRestore: Sendable {
+    let items: [[String: Data]]
 
     private static var stateFileURL: URL {
         let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         let parrotDir = dir.appendingPathComponent("Parrot")
-        try? FileManager.default.createDirectory(at: parrotDir, withIntermediateDirectories: true)
         return parrotDir.appendingPathComponent("clipboard_state.json")
     }
 
-    func persistToDisk() {
-        let data = items.compactMap { item -> [String: Data]? in
-            var dict: [String: Data] = [:]
-            for type in item.types {
-                if let d = item.data(forType: type) {
-                    dict[type.rawValue] = d
-                }
+    /// Reconstructs `NSPasteboardItem`s from the snapshot. Call on the main thread.
+    func pasteboardItems() -> [NSPasteboardItem] {
+        items.compactMap { dict -> NSPasteboardItem? in
+            let item = NSPasteboardItem()
+            for (typeRaw, data) in dict {
+                item.setData(data, forType: NSPasteboard.PasteboardType(rawValue: typeRaw))
             }
-            return dict.isEmpty ? nil : dict
+            return item.types.isEmpty ? nil : item
         }
+    }
+
+    func persistToDisk() {
         do {
-            let encoded = try JSONEncoder().encode(data)
+            let dir = Self.stateFileURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let encoded = try JSONEncoder().encode(items)
             try encoded.write(to: Self.stateFileURL, options: .atomic)
         } catch {
             Logger.ax.error("AccessibilityBridge: failed to persist clipboard state — \(error.localizedDescription, privacy: .public)")
@@ -526,20 +588,21 @@ struct PendingClipboardRestore {
     }
 
     func cleanupDiskState() {
-        try? FileManager.default.removeItem(at: Self.stateFileURL)
+        do {
+            try FileManager.default.removeItem(at: Self.stateFileURL)
+        } catch {
+            Logger.ax.warning("AccessibilityBridge: clipboard state cleanup failed — \(error.localizedDescription, privacy: .public)")
+        }
     }
 
-    static func restoreFromDiskIfAvailable() -> [NSPasteboardItem]? {
-        guard let data = try? Data(contentsOf: stateFileURL),
-              let plist = try? JSONDecoder().decode([[String: Data]].self, from: data) else {
+    static func restoreFromDiskIfAvailable() -> PendingClipboardRestore? {
+        do {
+            let data = try Data(contentsOf: stateFileURL)
+            let plist = try JSONDecoder().decode([[String: Data]].self, from: data)
+            return plist.isEmpty ? nil : PendingClipboardRestore(items: plist)
+        } catch {
+            Logger.ax.warning("AccessibilityBridge: clipboard state restore failed — \(error.localizedDescription, privacy: .public)")
             return nil
-        }
-        return plist.compactMap { dict -> NSPasteboardItem? in
-            let item = NSPasteboardItem()
-            for (typeRaw, data) in dict {
-                item.setData(data, forType: NSPasteboard.PasteboardType(rawValue: typeRaw))
-            }
-            return item.types.isEmpty ? nil : item
         }
     }
 }

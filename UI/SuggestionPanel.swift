@@ -144,13 +144,13 @@ final class SuggestionPanelController {
 
     func show(result: CorrectionResult) {
         let state: SuggestionState = result.hasChanges ? .suggestion(result) : .noErrors
-        MenuBarParrot.shared.setState(result.hasChanges ? .excited : .grooming)
+        MenuBarParrot.shared.setState(result.hasChanges ? .excited : .approving)
         showOrUpdate(result: result, state: state)
     }
 
     func showFluency(result: CorrectionResult) {
         let state: SuggestionState = result.hasChanges ? .fluencySuggestion(result) : .noErrors
-        MenuBarParrot.shared.setState(result.hasChanges ? .excited : .grooming)
+        MenuBarParrot.shared.setState(result.hasChanges ? .excited : .approving)
         showOrUpdate(result: result, state: state)
     }
 
