@@ -381,3 +381,22 @@ if [ "${SIGNING_IDENTITY}" = "-" ]; then
     echo "    First-launch: right-click Parrot.app → Open to bypass Gatekeeper."
     echo "    For distribution without warnings: set SIGNING_IDENTITY + NOTARIZE_* and rebuild."
 fi
+
+# ---------------------------------------------------------------------------
+# Canary — the inline-completion app. Same binary, different identity → AppMode.canary.
+# (Parrot = correction; Canary = completion. See App/AppMode.swift.)
+# ---------------------------------------------------------------------------
+echo "[*] Generating Canary.app (completion mode)..."
+CANARY_APP="Canary.app"
+rm -rf "${CANARY_APP}"
+cp -R "${APP_DIR}" "${CANARY_APP}"
+CANARY_PLIST="${CANARY_APP}/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.thousandflowers.canary" "${CANARY_PLIST}"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName Canary" "${CANARY_PLIST}" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Add :CFBundleName string Canary" "${CANARY_PLIST}"
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Canary" "${CANARY_PLIST}" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Canary" "${CANARY_PLIST}"
+# Editing Info.plist invalidates the signature → re-seal the outer bundle.
+# shellcheck disable=SC2086
+codesign --force --deep --sign "${SIGNING_IDENTITY}" --entitlements "${ENTITLEMENTS}" ${SIGN_OPTS} "${CANARY_APP}"
+echo "[✓] Canary.app ready (com.thousandflowers.canary)."

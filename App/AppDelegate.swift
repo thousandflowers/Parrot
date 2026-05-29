@@ -43,10 +43,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Load correction cache persisted from previous session
         Task { await CorrectionCache.shared.loadFromDisk() }
 
-        // The AX observer feeds both realtime correction and inline completion — start it if
-        // either feature is on. Inline completion defaults on, so this is usually active.
-        let realtimeOn = UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.realtimeEnabled)
-        let completionOn = PreferencesStore.shared.inlineCompletionEnabled
+        // Parrot = correction, Canary = completion. The AX observer feeds whichever this app runs.
+        let mode = AppMode.current
+        let realtimeOn = mode.showsCorrection && UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.realtimeEnabled)
+        let completionOn = mode.showsCompletion && PreferencesStore.shared.inlineCompletionEnabled
         if realtimeOn || completionOn {
             Task { await RealtimeMonitor.shared.start() }
         }
@@ -54,10 +54,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             TabInterceptor.shared.start()
         }
 
-        // Proactively warm up the local server so first corrections don't block
+        // Proactively warm up the local server so first corrections don't block.
+        // Canary (completion-only) doesn't run the correction model — skip the warmup.
         let serviceType = LLMServiceFactory.resolveDefaultServiceType()
         CrashLogger.log("launch: serviceType=\(serviceType.rawValue)")
-        if serviceType == .local {
+        if mode.showsCorrection && serviceType == .local {
             Task {
                 await MainActor.run { MenuBarParrot.shared.setState(.sleeping) }
                 await LocalLLMService.shared.warmup()

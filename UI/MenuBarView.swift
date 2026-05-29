@@ -17,14 +17,18 @@ struct MenuBarView: View {
                     Divider()
                 }
 
-                serviceSection
-                Divider()
+                if AppMode.current.showsCorrection {
+                    serviceSection
+                    Divider()
+                }
 
                 toggleSection
                 Divider()
 
-                actionsSection
-                Divider()
+                if AppMode.current.showsCorrection {
+                    actionsSection
+                    Divider()
+                }
 
                 utilitySection
                 Divider()
@@ -60,7 +64,7 @@ struct MenuBarView: View {
             .onHover { headerHovered = $0 }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Parrot")
+                Text(AppMode.current.displayName)
                     .font(.title3.weight(.bold))
                 Text(serviceSubtitle)
                     .font(.caption2)
@@ -196,48 +200,51 @@ struct MenuBarView: View {
 
     private var toggleSection: some View {
         VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Automatic check")
-                        .font(.callout)
-                    Text("On text field activation")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+            if AppMode.current.showsCorrection {
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Automatic check")
+                            .font(.callout)
+                        Text("On text field activation")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $prefs.autoCheckEnabled)
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .labelsHidden()
+                        .accessibilityLabel("Automatic check")
                 }
-                Spacer()
-                Toggle("", isOn: $prefs.autoCheckEnabled)
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                    .labelsHidden()
-                    .accessibilityLabel("Automatic check")
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
 
-            Divider()
-                .padding(.leading, 16)
+                Divider()
+                    .padding(.leading, 16)
 
-            HStack {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Real time")
-                        .font(.callout)
-                    Text("Analyzes while you type")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Real time")
+                            .font(.callout)
+                        Text("Analyzes while you type")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $prefs.realtimeEnabled)
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .labelsHidden()
+                        .accessibilityLabel("Real time")
                 }
-                Spacer()
-                Toggle("", isOn: $prefs.realtimeEnabled)
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                    .labelsHidden()
-                    .accessibilityLabel("Real time")
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
+
+                Divider()
+                    .padding(.leading, 16)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
 
-            Divider()
-                .padding(.leading, 16)
-
+            if AppMode.current.showsCompletion {
             HStack {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Inline completion")
@@ -267,6 +274,7 @@ struct MenuBarView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
+            }
         }
     }
 

@@ -3,7 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @State private var prefs = PreferencesStore.shared
     @State private var serverIsRunning = false
-    @State private var selectedTab: SettingsTab = .prompt
+    @State private var selectedTab: SettingsTab = AppMode.current.showsCompletion ? .completion : .prompt
 
     var body: some View {
         HStack(spacing: 0) {
@@ -139,9 +139,18 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         }
     }
 
-    static let behaviorTabs: [SettingsTab] = [.prompt, .appRules, .customRules, .exclusions, .inlineAnnotations, .completion, .dictionary, .shortcuts, .presets]
-    static let dataTabs: [SettingsTab] = [.history, .exportImport, .iCloud, .knowledge, .contacts]
-    static let systemTabs: [SettingsTab] = [.advanced, .plagiarism]
+    // Tabs are mode-specific: Canary shows completion + shared settings; Parrot shows correction.
+    static var behaviorTabs: [SettingsTab] {
+        AppMode.current.showsCompletion
+            ? [.completion, .exclusions, .shortcuts]
+            : [.prompt, .appRules, .customRules, .exclusions, .inlineAnnotations, .dictionary, .shortcuts, .presets]
+    }
+    static var dataTabs: [SettingsTab] {
+        AppMode.current.showsCompletion ? [.exportImport] : [.history, .exportImport, .iCloud, .knowledge, .contacts]
+    }
+    static var systemTabs: [SettingsTab] {
+        AppMode.current.showsCompletion ? [.advanced] : [.advanced, .plagiarism]
+    }
 
     @ViewBuilder
     func destination(prefs: PreferencesStore, serverIsRunning: Bool) -> some View {
