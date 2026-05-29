@@ -47,6 +47,18 @@ final class CompletionController {
             return
         }
 
+        // Typo fix: if the just-typed word is misspelled, Tab corrects it (instead of completing).
+        // Skipped in code editors (identifiers aren't typos). Cheap on-device spell check, no LLM.
+        if !allowCode, ax.caretRect != .zero,
+           let fix = TypoFix.check(preContext: ax.preContext, language: PreferencesStore.shared.language) {
+            current = CompletionSuggestion(text: fix.correction, kind: .replaceLastWord(wrong: fix.wrong))
+            currentPID = pid
+            TabInterceptor.setSuggestionVisible(true)
+            overlay.show(text: "✓ " + fix.correction, atCaretRect: ax.caretRect)
+            Logger.infra.debug("completion: typo fix \(fix.wrong, privacy: .public) -> \(fix.correction, privacy: .public)")
+            return
+        }
+
         // Enrich the prefix with on-screen context (the conversation/email above the field, which is
         // NOT in the text field) so suggestions are grounded, not "pulled from a hat". The user's own
         // text stays LAST so the model continues IT. Screen OCR is cached/throttled (anti-stutter).
@@ -81,13 +93,21 @@ final class CompletionController {
         Logger.infra.debug("completion: showing \(suggestion.text, privacy: .public) at \(NSStringFromRect(ax.caretRect), privacy: .public)")
     }
 
-    /// Tab — insert the whole suggestion.
+    /// Tab — accept the suggestion: insert a completion, or fix a typo by replacing the last word.
     func acceptFull() {
         guard let s = current, currentPID != 0 else { return }
         let pid = currentPID
         let text = s.text
+        let kind = s.kind
         clearSuggestion()
-        Task { _ = await AccessibilityBridge.shared.insertCompletion(text, pid: pid) }
+        Task {
+            switch kind {
+            case .insert:
+                _ = await AccessibilityBridge.shared.insertCompletion(text, pid: pid)
+            case .replaceLastWord(let wrong):
+                _ = await AccessibilityBridge.shared.replaceLastWord(wrong: wrong, with: text, pid: pid)
+            }
+        }
     }
 
     /// Partial accept — insert the first word only, then re-suggest from the new position.

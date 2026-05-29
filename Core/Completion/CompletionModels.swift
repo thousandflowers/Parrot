@@ -13,10 +13,17 @@ struct CompletionContext: Sendable, Equatable {
     }
 }
 
+/// Whether accepting a suggestion inserts text at the caret or replaces the mistyped last word.
+enum SuggestionKind: Sendable, Equatable {
+    case insert
+    case replaceLastWord(wrong: String)
+}
+
 /// A cleaned completion suggestion ready to display as ghost text and insert on accept.
 struct CompletionSuggestion: Sendable, Equatable {
-    /// What gets inserted on a full (Tab) accept.
+    /// What gets inserted on a full (Tab) accept (or the replacement word for a typo fix).
     let text: String
+    var kind: SuggestionKind = .insert
 
     /// First whitespace-delimited word, for partial accept. Includes the trailing space if present
     /// so repeated partial-accepts read naturally.

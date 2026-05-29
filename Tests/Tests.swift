@@ -1306,6 +1306,23 @@ final class CompletionEngineTests: XCTestCase {
 }
 
 @MainActor
+final class TypoFixTests: XCTestCase {
+    func testCheck_misspelledWord_returnsCorrection() {
+        let fix = TypoFix.check(preContext: "I will teh", language: "en")
+        XCTAssertNotNil(fix)
+        XCTAssertEqual(fix?.wrong, "teh")
+    }
+
+    func testCheck_correctWord_returnsNil() {
+        XCTAssertNil(TypoFix.check(preContext: "I will go home", language: "en"))
+    }
+
+    func testCheck_tooShort_returnsNil() {
+        XCTAssertNil(TypoFix.check(preContext: "go", language: "en"))
+    }
+}
+
+@MainActor
 final class CompletionPreferencesTests: XCTestCase {
     func testInlineCompletionEnabled_defaultsTrue() {
         UserDefaults.standard.removeObject(forKey: Constants.UserDefaultsKey.inlineCompletionEnabled)

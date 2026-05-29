@@ -385,6 +385,19 @@ actor AccessibilityBridge: AXBridgeProtocol {
         return CompletionAXContext(preContext: pre, postContext: post, caretRect: rect, isSecure: isSecure)
     }
 
+    /// Fixes a typo: deletes the mistyped last word (backspaces) then types the correction.
+    /// Synthesized keystrokes work across AppKit/Electron/web/terminal.
+    func replaceLastWord(wrong: String, with correction: String, pid: pid_t) async -> Bool {
+        guard !wrong.isEmpty else { return await insertCompletion(correction, pid: pid) }
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let kVKDelete: CGKeyCode = 51
+        for _ in 0..<wrong.count {
+            CGEvent(keyboardEventSource: source, virtualKey: kVKDelete, keyDown: true)?.post(tap: .cghidEventTap)
+            CGEvent(keyboardEventSource: source, virtualKey: kVKDelete, keyDown: false)?.post(tap: .cghidEventTap)
+        }
+        return await insertCompletion(correction, pid: pid)
+    }
+
     /// Inserts completion text at the caret by synthesizing typing (a Unicode keyboard event).
     /// This is the most universal method — it works in AppKit, Electron, web fields, terminals —
     /// where AX value-setting silently fails. Returns false only if event creation fails.
