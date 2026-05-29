@@ -41,7 +41,9 @@ struct LlamaCompletionClient: CompletionProviding {
         let body = ChatRequest(
             model: modelProvider(), messages: messages,
             temperature: Constants.completionTemperature,
-            max_tokens: max(8, Int(Double(maxWords) * 1.8) + 4),
+            // Generate enough tokens for WHOLE words (avoid mid-word cut-off like "Sono fel"),
+            // then trim to `maxWords` in the postprocessor. Decoupled so "short" never means "cut".
+            max_tokens: max(12, maxWords * 5),
             stream: false,
             // Anti-repetition is critical for small models: without it they loop
             // ("Non posso amare. Non posso amare."). repeat_penalty + frequency/presence

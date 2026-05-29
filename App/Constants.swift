@@ -23,10 +23,12 @@ enum Constants {
 
     // MARK: - Inline completion (SP1)
     static let completionTemperature: Double = 0.3
-    static let completionDefaultMaxWords = 8        // "short" completion budget (Cotypist: 4)
-    static let completionDefaultDebounceMs = 400    // shorter than the 800ms correction debounce
+    static let completionDefaultMaxWords = 2        // a couple words → granular control + fast
+    static let completionDefaultDebounceMs = 200    // feel near-instant after a typing pause
     static let completionMinPrefixChars = 3         // don't suggest on near-empty fields
-    static let completionMaxPrefixChars = 2000      // cap context sent to the model
+    // Short context = far less prompt processing per keystroke = much lower latency. A couple
+    // words of completion only need the immediate preceding context, not the whole document.
+    static let completionMaxPrefixChars = 240
 
     /// Self-consistency passes for local grammar checks. Small models are noisy: running
     /// the deterministic grammar task a few times and taking the agreed / most conservative
