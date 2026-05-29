@@ -39,9 +39,20 @@ struct LlamaCompletionClient: CompletionProviding {
         if compID.isEmpty || compID.caseInsensitiveCompare(mainID) == .orderedSame {
             return await mainTarget()
         }
-        guard let model = await ModelManager.shared.localModels()
-                .first(where: { $0.id.caseInsensitiveCompare(compID) == .orderedSame }) else {
+        let local = await ModelManager.shared.localModels()
+        guard let model = local.first(where: { $0.id.caseInsensitiveCompare(compID) == .orderedSame }) else {
             Logger.infra.debug("completion: model '\(compID, privacy: .public)' not local — falling back to main")
+            return await mainTarget()
+        }
+        // RAM guard: running a dedicated completion model AND a different correction model means two
+        // models + two servers resident at once. On low-RAM machines (e.g. 8GB) that swaps and can
+        // freeze the system. If the combined model size exceeds a safe fraction of physical RAM,
+        // fall back to a single shared model. Auto-adapts: 8GB → single, 16GB → dedicated allowed.
+        let ramBytes = Double(ProcessInfo.processInfo.physicalMemory)
+        let mainSize = Double(local.first(where: { $0.id.caseInsensitiveCompare(mainID) == .orderedSame })?.size ?? 0)
+        let combined = mainSize + Double(model.size)
+        if combined > ramBytes * 0.30 {
+            Logger.infra.info("completion: combined models too large for RAM — using single shared model")
             return await mainTarget()
         }
         do {

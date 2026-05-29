@@ -113,6 +113,11 @@ actor ServerManager: Sendable {
 
         let logHandle = Self.openServerLogHandle()
 
+        // RAM-aware context: KV cache scales with context length. On low-RAM machines (≤8GB)
+        // cap it to keep memory in check.
+        let ramGB = Int(ProcessInfo.processInfo.physicalMemory / (1024 * 1024 * 1024))
+        let effectiveContext = ramGB <= 8 ? min(contextSize, 2048) : contextSize
+
         for attempt in 0..<3 {
             let (port, probeSock) = try allocatePort()
             currentPort = port
@@ -125,7 +130,7 @@ actor ServerManager: Sendable {
                 "-m", modelPath,
                 "--host", "127.0.0.1",
                 "--port", "\(currentPort)",
-                "-c", "\(contextSize)",
+                "-c", "\(effectiveContext)",
                 "--threads", "\(max(2, ProcessInfo.processInfo.processorCount / 2))",
                 "--n-gpu-layers", gpuLayers(),
                 "--flash-attn", "auto"
