@@ -46,10 +46,21 @@ final class CompletionController {
             return
         }
 
-        let context = CompletionContext(preContext: ax.preContext, postContext: ax.postContext,
+        // Enrich the prefix with on-screen context (the conversation/email above the field, which is
+        // NOT in the text field) so suggestions are grounded, not "pulled from a hat". The user's own
+        // text stays LAST so the model continues IT. Screen OCR is cached/throttled (anti-stutter).
+        var preContext = ax.preContext
+        if PreferencesStore.shared.completionUseScreenContext {
+            let screen = await ScreenContextProvider.shared.currentContext()
+            if !screen.isEmpty {
+                preContext = screen + "\n\n" + ax.preContext
+            }
+        }
+
+        let context = CompletionContext(preContext: preContext, postContext: ax.postContext,
                                         language: PreferencesStore.shared.language)
-        Logger.infra.debug("completion: preContext tail=…\(String(ax.preContext.suffix(40)), privacy: .public)| post=\(String(ax.postContext.prefix(20)), privacy: .public)")
-        guard context.isUsable else { return }
+        Logger.infra.debug("completion: preContext tail=…\(String(ax.preContext.suffix(40)), privacy: .public)| screenCtx=\(PreferencesStore.shared.completionUseScreenContext)")
+        guard CompletionContext(preContext: ax.preContext, postContext: ax.postContext, language: "").isUsable else { return }
         let maxWords = PreferencesStore.shared.maxCompletionLength
         guard let suggestion = await CompletionEngine.shared.suggest(context: context, maxWords: maxWords) else {
             Logger.infra.debug("completion: engine returned no suggestion")

@@ -26,9 +26,11 @@ enum Constants {
     static let completionDefaultMaxWords = 2        // a couple words → granular control + fast
     static let completionDefaultDebounceMs = 350    // wait for a real pause → far fewer inferences
     static let completionMinPrefixChars = 3         // don't suggest on near-empty fields
-    // Short context = far less prompt processing per keystroke = much lower latency. A couple
-    // words of completion only need the immediate preceding context, not the whole document.
-    static let completionMaxPrefixChars = 240
+    // Preceding text sent to the model. Longer = more relevant ("not pulled from a hat"); KV-cache
+    // reuse makes the extra context cheap after the first decode.
+    static let completionMaxPrefixChars = 800
+    static let completionScreenContextMaxChars = 600   // OCR'd on-screen text injected as context
+    static let completionScreenContextTTL: TimeInterval = 3   // re-OCR at most this often (anti-stutter)
 
     /// Self-consistency passes for local grammar checks. Small models are noisy: running
     /// the deterministic grammar task a few times and taking the agreed / most conservative
@@ -107,5 +109,7 @@ enum Constants {
         static let completionDebounceMs = "completionDebounceMs"
         static let completionUserPrompt = "completionUserPrompt"
         static let completionModelID = "completionModelID"   // "" = same as main correction model
+        static let completionUseAppContext = "completionUseAppContext"
+        static let completionUseScreenContext = "completionUseScreenContext"
     }
 }

@@ -58,6 +58,21 @@ struct CompletionTab: View {
             }
 
             Section {
+                Toggle("Use screen context", isOn: Binding(
+                    get: { prefs.completionUseScreenContext },
+                    set: { newValue in
+                        prefs.completionUseScreenContext = newValue
+                        if newValue { ScreenContextProvider.requestPermission() }
+                    }
+                ))
+            } header: {
+                Label("Context", systemImage: "rectangle.dashed.and.paperclip")
+            } footer: {
+                Text("Reads on-screen text (the conversation or email you're replying to — not just the text field) so suggestions fit the context. On-device OCR, throttled. Requires Screen Recording permission.")
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 TextField("e.g. Write in a friendly, concise voice.", text: $prefs.completionUserPrompt, axis: .vertical)
                     .lineLimit(2...5)
             } header: {

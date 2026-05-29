@@ -291,6 +291,14 @@ final class PreferencesStore {
         get { string(Constants.UserDefaultsKey.completionModelID, fallback: "") }
         set { set(newValue, for: Constants.UserDefaultsKey.completionModelID) }
     }
+    var completionUseAppContext: Bool {
+        get { bool(Constants.UserDefaultsKey.completionUseAppContext, default: true) }
+        set { set(newValue, for: Constants.UserDefaultsKey.completionUseAppContext) }
+    }
+    var completionUseScreenContext: Bool {
+        get { bool(Constants.UserDefaultsKey.completionUseScreenContext, default: false) }
+        set { set(newValue, for: Constants.UserDefaultsKey.completionUseScreenContext) }
+    }
 
     private func string(_ key: String, fallback: String = "") -> String {
         observe()
