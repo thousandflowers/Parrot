@@ -36,6 +36,14 @@ enum CompletionPostprocessor {
         // 5. A pure-whitespace result is useless.
         if text.trimmingCharacters(in: .whitespaces).isEmpty { return nil }
 
+        // 6. Loop guard: small models sometimes echo text the user just wrote. If the suggestion
+        //    (trimmed) already appears at the tail of the recent context, it's a repetition — drop it.
+        let suggestionCore = text.trimmingCharacters(in: .whitespaces).lowercased()
+        if suggestionCore.count >= 4 {
+            let tail = String(preContext.suffix(160)).lowercased()
+            if tail.contains(suggestionCore) { return nil }
+        }
+
         return text
     }
 }

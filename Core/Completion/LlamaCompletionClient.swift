@@ -43,7 +43,11 @@ struct LlamaCompletionClient: CompletionProviding {
             temperature: Constants.completionTemperature,
             max_tokens: max(8, Int(Double(maxWords) * 1.8) + 4),
             stream: false,
-            sampling: SamplingParams(topP: 0.9, topK: 40, minP: 0.05, repeatPenalty: 1.1, seed: nil)
+            // Anti-repetition is critical for small models: without it they loop
+            // ("Non posso amare. Non posso amare."). repeat_penalty + frequency/presence
+            // penalties break the loop; verified to also improve relevance.
+            sampling: SamplingParams(topP: 0.9, topK: 40, minP: 0.05, repeatPenalty: 1.3,
+                                     seed: nil, frequencyPenalty: 0.7, presencePenalty: 0.4)
         )
 
         var request = URLRequest(url: url)

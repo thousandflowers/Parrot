@@ -1,5 +1,6 @@
 import AppKit
 import os
+import IOKit.hid
 
 /// Global keyboard tap that accepts an inline suggestion with Tab. SAFETY: the tap swallows a key
 /// ONLY when a suggestion is currently visible AND the key is Tab; in every other case it passes
@@ -27,6 +28,15 @@ final class TabInterceptor {
         guard AXIsProcessTrusted() else {
             Logger.infra.error("TabInterceptor: not starting — Accessibility not trusted")
             return
+        }
+        // A keyboard CGEventTap that SWALLOWS keys needs Input Monitoring (kIOHIDRequestTypeListenEvent),
+        // not just Accessibility. Without it the tap is created but receives no key events — Tab passes
+        // through as a literal tab. Request it so macOS adds Parrot to the Input Monitoring list / prompts.
+        let access = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
+        Logger.infra.info("TabInterceptor: input-monitoring access=\(access.rawValue) (0=granted,1=denied,2=unknown)")
+        if access != kIOHIDAccessTypeGranted {
+            let granted = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+            Logger.infra.info("TabInterceptor: requested input monitoring, granted=\(granted)")
         }
         let mask: CGEventMask = (1 << CGEventType.keyDown.rawValue)
             | (1 << CGEventType.tapDisabledByTimeout.rawValue)

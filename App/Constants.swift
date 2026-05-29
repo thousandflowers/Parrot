@@ -22,7 +22,7 @@ enum Constants {
         topP: 0.95, topK: 60, minP: 0.03, repeatPenalty: 1.1, seed: nil)
 
     // MARK: - Inline completion (SP1)
-    static let completionTemperature: Double = 0.2
+    static let completionTemperature: Double = 0.3
     static let completionDefaultMaxWords = 8        // "short" completion budget (Cotypist: 4)
     static let completionDefaultDebounceMs = 400    // shorter than the 800ms correction debounce
     static let completionMinPrefixChars = 3         // don't suggest on near-empty fields

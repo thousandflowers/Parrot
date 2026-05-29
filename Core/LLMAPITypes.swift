@@ -10,6 +10,8 @@ struct SamplingParams: Sendable, Equatable {
     var minP: Double?
     var repeatPenalty: Double?
     var seed: Int?
+    var frequencyPenalty: Double?
+    var presencePenalty: Double?
 }
 
 struct ChatRequest: Encodable {
@@ -25,6 +27,8 @@ struct ChatRequest: Encodable {
     var min_p: Double?
     var repeat_penalty: Double?
     var seed: Int?
+    var frequency_penalty: Double?
+    var presence_penalty: Double?
 
     init(model: String, messages: [ChatMessage], temperature: Double, max_tokens: Int,
          stream: Bool, sampling: SamplingParams? = nil) {
@@ -38,11 +42,13 @@ struct ChatRequest: Encodable {
         self.min_p = sampling?.minP
         self.repeat_penalty = sampling?.repeatPenalty
         self.seed = sampling?.seed
+        self.frequency_penalty = sampling?.frequencyPenalty
+        self.presence_penalty = sampling?.presencePenalty
     }
 
     enum CodingKeys: String, CodingKey {
         case model, messages, temperature, max_tokens, stream
-        case top_p, top_k, min_p, repeat_penalty, seed
+        case top_p, top_k, min_p, repeat_penalty, seed, frequency_penalty, presence_penalty
     }
 
     func encode(to encoder: Encoder) throws {
@@ -57,6 +63,8 @@ struct ChatRequest: Encodable {
         try c.encodeIfPresent(min_p, forKey: .min_p)
         try c.encodeIfPresent(repeat_penalty, forKey: .repeat_penalty)
         try c.encodeIfPresent(seed, forKey: .seed)
+        try c.encodeIfPresent(frequency_penalty, forKey: .frequency_penalty)
+        try c.encodeIfPresent(presence_penalty, forKey: .presence_penalty)
     }
 }
 

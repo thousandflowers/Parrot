@@ -20,13 +20,23 @@ BUNDLE_ID="com.thousandflowers.parrot"
 # Signing — set SIGNING_IDENTITY to use Developer ID (required for Gatekeeper + notarization).
 # Example: SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./build-app.sh
 # Leave unset (or empty) for ad-hoc signing (testers must right-click → Open on first launch).
-SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
+# Signing identity resolution:
+#   1. Explicit SIGNING_IDENTITY env var wins (Developer ID for distribution/notarization).
+#   2. Otherwise auto-pick a local "Apple Development" identity if one exists. This gives a STABLE
+#      code signature, so macOS (TCC) keeps Accessibility / Input Monitoring grants across rebuilds —
+#      ad-hoc signing changes the cdhash every build and silently resets those permissions.
+#   3. Fall back to ad-hoc.
+if [ -z "${SIGNING_IDENTITY:-}" ]; then
+    DEV_ID_HASH="$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -1 | awk '{print $2}')"
+    SIGNING_IDENTITY="${DEV_ID_HASH:--}"
+fi
 if [ "${SIGNING_IDENTITY}" = "-" ]; then
     SIGN_OPTS="--force --timestamp=none"
-    echo "[i] Ad-hoc signing. Set SIGNING_IDENTITY for Developer ID + notarization."
+    echo "[i] Ad-hoc signing (no stable identity). Permissions reset on each rebuild."
 else
-    SIGN_OPTS="--force --options runtime"  # hardened runtime required for notarization
-    echo "[i] Signing with Developer ID: ${SIGNING_IDENTITY}"
+    # Stable local dev signature (no hardened runtime — avoids entitlement breakage for local use).
+    SIGN_OPTS="--force --timestamp=none"
+    echo "[i] Signing with stable identity: ${SIGNING_IDENTITY}"
 fi
 
 echo "[*] Building arm64 (${CONFIG})..."

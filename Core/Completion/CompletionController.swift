@@ -31,6 +31,12 @@ final class CompletionController {
     }
 
     private func requestSuggestion() async {
+        // The Tab tap can only install once Accessibility is trusted. The user often grants it
+        // AFTER launch, so the launch-time start() bailed. Retry here (idempotent): once we are
+        // reading context successfully, AX is trusted, so the tap installs and — crucially — this
+        // is where IOHIDRequestAccess fires to put Parrot in the Input Monitoring list.
+        TabInterceptor.shared.start()
+
         let pid = await AccessibilityBridge.shared.lastKnownFrontAppPID()
         guard pid != 0 else { return }
         if let id = await AppDetector.shared.frontAppBundleID(forPID: pid),

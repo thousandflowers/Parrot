@@ -1206,6 +1206,13 @@ final class CompletionPostprocessorTests: XCTestCase {
         XCTAssertEqual(r, "Hello world")
     }
 
+    func testClean_dropsLoopRepeatingRecentContext() {
+        // Model echoes text already written → repetition loop → must be dropped.
+        let r = CompletionPostprocessor.clean(raw: "Non posso amare.",
+                                              preContext: "Sì amo. Non posso amare. ", maxWords: 8)
+        XCTAssertNil(r)
+    }
+
     func testClean_onlyNewline_returnsNil() {
         XCTAssertNil(CompletionPostprocessor.clean(raw: "\n\n", preContext: "x", maxWords: 8))
     }
