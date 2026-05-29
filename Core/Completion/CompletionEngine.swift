@@ -5,7 +5,9 @@ import OSLog
 /// when a newer `suggest` starts, any in-flight older result is discarded (returns nil), so a
 /// late completion for text the user has already moved past never appears.
 actor CompletionEngine {
-    static let shared = CompletionEngine(provider: LlamaCompletionClient())
+    // In-process helper for dedicated completion models (warm KV reuse); falls back to the
+    // server-based client when no dedicated model is configured or RAM is tight.
+    static let shared = CompletionEngine(provider: HelperCompletionProvider())
 
     private let provider: CompletionProviding
     private var generation: UInt64 = 0

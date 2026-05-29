@@ -1,0 +1,5 @@
+module CLlama [system] {
+    header "/opt/homebrew/include/llama.h"
+    link "llama"
+    export *
+}

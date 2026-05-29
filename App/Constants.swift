@@ -24,7 +24,7 @@ enum Constants {
     // MARK: - Inline completion (SP1)
     static let completionTemperature: Double = 0.3
     static let completionDefaultMaxWords = 2        // a couple words → granular control + fast
-    static let completionDefaultDebounceMs = 200    // feel near-instant after a typing pause
+    static let completionDefaultDebounceMs = 350    // wait for a real pause → far fewer inferences
     static let completionMinPrefixChars = 3         // don't suggest on near-empty fields
     // Short context = far less prompt processing per keystroke = much lower latency. A couple
     // words of completion only need the immediate preceding context, not the whole document.

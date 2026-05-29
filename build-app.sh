@@ -43,7 +43,9 @@ echo "[*] Building arm64 (${CONFIG})..."
 swift build -c "${CONFIG}" --arch arm64
 
 echo "[*] Building x86_64 (${CONFIG})..."
-if swift build -c "${CONFIG}" --arch x86_64 2>/dev/null; then
+# Only the main app for x86_64 — the completion helper links libllama from Apple-Silicon Homebrew
+# and is bundled arm64-only (its target machines are Apple Silicon).
+if swift build -c "${CONFIG}" --arch x86_64 --product Parrot 2>/dev/null; then
     echo "[*] Creating universal binary..."
     mkdir -p ".build/universal-apple-macosx/${CONFIG}"
     lipo -create -output "${BINARY_PATH}" "${ARM64_PATH}" "${X86_PATH}"
@@ -66,6 +68,18 @@ done
 
 cp "${BINARY_PATH}" "${MACOS}/Parrot"
 install_name_tool -add_rpath "@loader_path/../Frameworks" "${MACOS}/Parrot"
+
+# In-process completion helper (arm64 only). Reuses the bundled libllama/ggml dylibs in Frameworks.
+HELPER_SRC=".build/arm64-apple-macosx/${CONFIG}/ParrotCompletionHelper"
+if [ -f "${HELPER_SRC}" ]; then
+    echo "[*] Bundling ParrotCompletionHelper..."
+    cp "${HELPER_SRC}" "${MACOS}/ParrotCompletionHelper"
+    install_name_tool -add_rpath "@loader_path/../Frameworks" "${MACOS}/ParrotCompletionHelper" 2>/dev/null || true
+    # Drop the dev-only Homebrew rpath so the bundled app resolves libllama from Frameworks.
+    install_name_tool -delete_rpath "/opt/homebrew/lib" "${MACOS}/ParrotCompletionHelper" 2>/dev/null || true
+else
+    echo "[!] ParrotCompletionHelper not built — inline completion will use the server fallback."
+fi
 
 # Embed Sparkle.framework (always from arm64 build — framework is architecture-independent)
 SPARKLE_SRC=".build/arm64-apple-macosx/${CONFIG}/Sparkle.framework"
@@ -214,6 +228,9 @@ done
     codesign --sign "${SIGNING_IDENTITY}" ${SIGN_OPTS} "${SPARKLE_VB}/Autoupdate"
 # shellcheck disable=SC2086
 codesign --sign "${SIGNING_IDENTITY}" ${SIGN_OPTS} "${SPARKLE_VB}/Sparkle"
+
+# shellcheck disable=SC2086
+[ -f "${MACOS}/ParrotCompletionHelper" ] && codesign --sign "${SIGNING_IDENTITY}" ${SIGN_OPTS} "${MACOS}/ParrotCompletionHelper"
 
 echo "[*] Signing Parrot.app..."
 # shellcheck disable=SC2086
