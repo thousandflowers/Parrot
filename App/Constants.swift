@@ -106,5 +106,6 @@ enum Constants {
         static let maxCompletionLength = "maxCompletionLength"
         static let completionDebounceMs = "completionDebounceMs"
         static let completionUserPrompt = "completionUserPrompt"
+        static let completionModelID = "completionModelID"   // "" = same as main correction model
     }
 }

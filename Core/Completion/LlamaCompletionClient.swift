@@ -1,22 +1,18 @@
 import Foundation
 import OSLog
 
-/// Talks to the warm `llama-server` over the OpenAI-compatible `/v1/chat/completions` endpoint
+/// Talks to a warm `llama-server` over the OpenAI-compatible `/v1/chat/completions` endpoint
 /// using a tight "continue the text" system prompt.
 ///
-/// Why chat, not `/completion` or `/infill`: Parrot's models are instruct-tuned. Verified
-/// 2026-05-29 that raw `/completion` on an instruct model produces off-context / empty output,
-/// while a chat continuation prompt produces relevant short continuations (even for code).
-/// `/infill` needs a FIM model (none here).
+/// Why chat, not `/completion`/`/infill`: Parrot's models are instruct-tuned. Verified 2026-05-29
+/// that raw `/completion` on an instruct model produces off-context/empty output; a chat
+/// continuation prompt produces relevant short continuations. `/infill` needs a FIM model.
+///
+/// Model/server selection (user-configurable):
+/// - `completionModelID` empty or == the main model → reuse the main correction server.
+/// - otherwise → a dedicated `ServerManager.completion` instance runs the chosen model so the
+///   user can trade a separate fast/base completion model against the heavier correction model.
 struct LlamaCompletionClient: CompletionProviding {
-    var portProvider: @Sendable () async -> Int = { await ServerManager.shared.currentPort }
-    var modelProvider: @Sendable () -> String = {
-        let id = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID)
-        return id?.replacingOccurrences(of: ".gguf", with: "") ?? "local"
-    }
-    var userPromptProvider: @Sendable () -> String = {
-        UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.completionUserPrompt) ?? ""
-    }
     var session: URLSession = .shared
 
     static func systemPrompt(userPrompt: String) -> String {
@@ -28,26 +24,56 @@ struct LlamaCompletionClient: CompletionProviding {
         return s
     }
 
+    /// Resolves which server port + model name to use for completion.
+    private func resolveTarget() async -> (port: Int, model: String)? {
+        let mainID = (UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID) ?? "")
+            .replacingOccurrences(of: ".gguf", with: "")
+        let compID = (UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.completionModelID) ?? "")
+            .trimmingCharacters(in: .whitespaces)
+
+        func mainTarget() async -> (Int, String)? {
+            let port = await ServerManager.shared.currentPort
+            return port > 0 ? (port, mainID.isEmpty ? "local" : mainID) : nil
+        }
+
+        if compID.isEmpty || compID.caseInsensitiveCompare(mainID) == .orderedSame {
+            return await mainTarget()
+        }
+        // Dedicated completion model on its own server.
+        guard let model = await ModelManager.shared.localModels()
+                .first(where: { $0.id.caseInsensitiveCompare(compID) == .orderedSame }) else {
+            Logger.infra.debug("completion: model '\(compID, privacy: .public)' not found locally — falling back to main")
+            return await mainTarget()
+        }
+        do {
+            let port = try await ServerManager.completion.ensureRunning(modelPath: model.path)
+            return (port, model.id)
+        } catch {
+            Logger.infra.debug("completion: dedicated server failed (\(error.localizedDescription, privacy: .public)) — falling back to main")
+            return await mainTarget()
+        }
+    }
+
     func complete(context: CompletionContext, maxWords: Int) async throws -> String {
-        let port = await portProvider()
-        guard port > 0, let url = URL(string: "http://127.0.0.1:\(port)/v1/chat/completions") else {
+        guard let (port, model) = await resolveTarget(),
+              let url = URL(string: "http://127.0.0.1:\(port)/v1/chat/completions") else {
             throw CorrectionError.serverNotRunning
         }
         let pre = String(context.preContext.suffix(Constants.completionMaxPrefixChars))
+        let userPrompt = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.completionUserPrompt) ?? ""
         let messages = [
-            ChatMessage(role: "system", content: Self.systemPrompt(userPrompt: userPromptProvider())),
+            ChatMessage(role: "system", content: Self.systemPrompt(userPrompt: userPrompt)),
             ChatMessage(role: "user", content: pre)
         ]
         let body = ChatRequest(
-            model: modelProvider(), messages: messages,
+            model: model, messages: messages,
             temperature: Constants.completionTemperature,
             // Generate enough tokens for WHOLE words (avoid mid-word cut-off like "Sono fel"),
             // then trim to `maxWords` in the postprocessor. Decoupled so "short" never means "cut".
             max_tokens: max(12, maxWords * 5),
             stream: false,
             // Anti-repetition is critical for small models: without it they loop
-            // ("Non posso amare. Non posso amare."). repeat_penalty + frequency/presence
-            // penalties break the loop; verified to also improve relevance.
+            // ("Non posso amare. Non posso amare."). Verified to also improve relevance.
             sampling: SamplingParams(topP: 0.9, topK: 40, minP: 0.05, repeatPenalty: 1.3,
                                      seed: nil, frequencyPenalty: 0.7, presencePenalty: 0.4)
         )

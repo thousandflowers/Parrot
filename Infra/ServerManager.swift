@@ -7,7 +7,14 @@ extension Notification.Name {
 }
 
 actor ServerManager: Sendable {
+    /// Main server for correction/fluency (may reuse an external llama-server on the standard ports).
     static let shared = ServerManager()
+    /// Dedicated server for inline completion when the user picks a different completion model.
+    /// Never reuses an external server (that would serve the wrong model) and uses its own port range.
+    static let completion = ServerManager(allowExternalReuse: false)
+
+    private let allowExternalReuse: Bool
+    init(allowExternalReuse: Bool = true) { self.allowExternalReuse = allowExternalReuse }
 
     private var process: Process?
     private var startupTask: Task<Void, Error>?
@@ -35,8 +42,9 @@ actor ServerManager: Sendable {
             }
         }
 
-        // 2. Try to find an external server
-        if let externalPort = await findExistingServer() {
+        // 2. Try to find an external server (main server only — the completion server must run
+        //    its own model and never adopt whatever is already on the standard ports).
+        if allowExternalReuse, let externalPort = await findExistingServer() {
             self.currentPort = externalPort
             self.isExternalServer = true
             return externalPort

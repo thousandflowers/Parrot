@@ -286,6 +286,11 @@ final class PreferencesStore {
         get { string(Constants.UserDefaultsKey.completionUserPrompt, fallback: "") }
         set { set(newValue, for: Constants.UserDefaultsKey.completionUserPrompt) }
     }
+    /// Empty = use the same model as correction (single server). Non-empty = dedicated completion model.
+    var completionModelID: String {
+        get { string(Constants.UserDefaultsKey.completionModelID, fallback: "") }
+        set { set(newValue, for: Constants.UserDefaultsKey.completionModelID) }
+    }
 
     private func string(_ key: String, fallback: String = "") -> String {
         observe()

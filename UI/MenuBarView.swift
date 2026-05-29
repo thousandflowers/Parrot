@@ -234,6 +234,39 @@ struct MenuBarView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
+
+            Divider()
+                .padding(.leading, 16)
+
+            HStack {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Inline completion")
+                        .font(.callout)
+                    Text("Ghost suggestions · press Tab")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { prefs.inlineCompletionEnabled },
+                    set: { newValue in
+                        prefs.inlineCompletionEnabled = newValue
+                        if newValue {
+                            TabInterceptor.shared.start()
+                            Task { await RealtimeMonitor.shared.start() }
+                        } else {
+                            TabInterceptor.shared.stop()
+                            CompletionController.shared.dismiss()
+                        }
+                    }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .labelsHidden()
+                .accessibilityLabel("Inline completion")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
         }
     }
 
