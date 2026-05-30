@@ -1322,6 +1322,30 @@ final class TypoFixTests: XCTestCase {
     }
 }
 
+final class SnippetTests: XCTestCase {
+    func testParseEspanso_triggerReplacePairs() {
+        let y = """
+        matches:
+          - trigger: ":sig"
+            replace: "Best regards"
+          - trigger: "addr"
+            replace: 'Via Roma 1'
+        """
+        let parsed = MigrationImporter.parseEspanso(y)
+        XCTAssertEqual(parsed[":sig"], "Best regards")
+        XCTAssertEqual(parsed["addr"], "Via Roma 1")
+    }
+
+    func testSnippetStore_mergeAndExpand() async {
+        let store = SnippetStore.shared
+        let abbr = "wrentest\(Int.random(in: 1000...9999))"
+        _ = await store.merge([abbr: "EXPANSION TEXT"])
+        let v = await store.expansion(for: abbr)
+        XCTAssertEqual(v, "EXPANSION TEXT")
+        await store.remove(abbr)
+    }
+}
+
 final class EmojiCompletionTests: XCTestCase {
     func testMatch_shortcode() {
         let m = EmojiCompletion.match(preContext: "great work :fire")

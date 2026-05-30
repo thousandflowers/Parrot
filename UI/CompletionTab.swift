@@ -30,14 +30,16 @@ struct CompletionTab: View {
                     .foregroundStyle(.secondary)
             }
 
-            if CotypistMigration.isAvailable {
+            if MigrationImporter.hasAnySource {
                 Section {
                     Button {
-                        let imported = CotypistMigration.migrate()
-                        migrationResult = imported.isEmpty ? "Nothing to import." : "Imported: " + imported.joined(separator: ", ") + "."
-                        Task { downloadedModels = await ModelManager.shared.localModels() }
+                        Task {
+                            let r = await MigrationImporter.importAll()
+                            migrationResult = "Imported — " + r.lines.joined(separator: " · ")
+                            downloadedModels = await ModelManager.shared.localModels()
+                        }
                     } label: {
-                        Label("Import from Cotypist", systemImage: "square.and.arrow.down.on.square")
+                        Label("Import from other apps", systemImage: "square.and.arrow.down.on.square")
                     }
                     if let migrationResult {
                         Text(migrationResult).font(.caption).foregroundStyle(.secondary)
@@ -45,7 +47,7 @@ struct CompletionTab: View {
                 } header: {
                     Label("Migrate", systemImage: "arrow.right.arrow.left")
                 } footer: {
-                    Text("Brings over your personalization and reuses Cotypist's downloaded models (instant, no re-download). Your typing history stays in Cotypist — Wren learns its own as you go.")
+                    Text("Brings over your data from Cotypist (personalization, settings, models — reused via symlink, no re-download), macOS Text Replacements, and espanso. Encrypted learning data is never touched; Wren learns its own as you go.")
                         .foregroundStyle(.secondary)
                 }
             }
