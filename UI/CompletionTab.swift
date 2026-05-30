@@ -68,8 +68,12 @@ struct CompletionTab: View {
             }
 
             Section {
-                Stepper(value: $prefs.maxCompletionLength, in: 1...30) {
-                    LabeledContent("Max words", value: "\(prefs.maxCompletionLength)")
+                VStack(alignment: .leading, spacing: 4) {
+                    LabeledContent("Words per suggestion", value: "\(prefs.maxCompletionLength)")
+                    Slider(value: Binding(
+                        get: { Double(prefs.maxCompletionLength) },
+                        set: { prefs.maxCompletionLength = Int($0.rounded()) }
+                    ), in: 1...8, step: 1)
                 }
                 Stepper(value: $prefs.completionDebounceMs, in: 120...1500, step: 20) {
                     LabeledContent("Typing pause", value: "\(prefs.completionDebounceMs) ms")

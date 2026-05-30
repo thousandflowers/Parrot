@@ -68,7 +68,7 @@ final class TabInterceptor {
 
 private let kVKTab: Int64 = 48
 private let kVKEscape: Int64 = 53
-private let kVKRightArrow: Int64 = 124   // ⌘→ = accept one word (partial)
+private let kVKBackslash: Int64 = 42   // \ = accept the whole suggestion
 
 /// C-compatible tap callback. Must not capture context. Keeps work minimal; UI calls are bounced
 /// to the main actor. Returns nil only to swallow Tab while a suggestion is shown.
@@ -85,16 +85,16 @@ private func tabTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: CG
     let flags = event.flags
     // Ignore Tab combined with modifiers (e.g. ⌘Tab app switch) — only plain Tab accepts.
     let hasModifier = flags.contains(.maskCommand) || flags.contains(.maskControl) || flags.contains(.maskAlternate)
+    // Tab = accept the first word (partial). \ = accept the whole suggestion.
     if keycode == kVKTab && !hasModifier {
-        Logger.infra.debug("TabInterceptor: Tab accepted suggestion")
-        Task { @MainActor in CompletionController.shared.acceptFull() }
+        Logger.infra.debug("TabInterceptor: Tab → partial accept (first word)")
+        Task { @MainActor in CompletionController.shared.acceptPartial() }
         return nil   // swallow the Tab
     }
-    // ⌘→ accepts a single word (partial accept), then re-suggests.
-    if keycode == kVKRightArrow && flags.contains(.maskCommand) {
-        Logger.infra.debug("TabInterceptor: ⌘→ partial accept")
-        Task { @MainActor in CompletionController.shared.acceptPartial() }
-        return nil
+    if keycode == kVKBackslash && !hasModifier {
+        Logger.infra.debug("TabInterceptor: \\ → full accept")
+        Task { @MainActor in CompletionController.shared.acceptFull() }
+        return nil   // swallow the backslash
     }
     if keycode == kVKEscape {
         Task { @MainActor in CompletionController.shared.dismiss() }
