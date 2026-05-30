@@ -5,6 +5,7 @@ import SwiftUI
 struct CompletionTab: View {
     @Bindable var prefs: PreferencesStore
     @State private var downloadedModels: [DiscoveredModel] = []
+    @State private var migrationResult: String?
 
     var body: some View {
         Form {
@@ -27,6 +28,26 @@ struct CompletionTab: View {
             } footer: {
                 Text("As you type in any app, Parrot suggests a continuation in grey. Press Tab to accept. On-device.")
                     .foregroundStyle(.secondary)
+            }
+
+            if CotypistMigration.isAvailable {
+                Section {
+                    Button {
+                        let imported = CotypistMigration.migrate()
+                        migrationResult = imported.isEmpty ? "Nothing to import." : "Imported: " + imported.joined(separator: ", ") + "."
+                        Task { downloadedModels = await ModelManager.shared.localModels() }
+                    } label: {
+                        Label("Import from Cotypist", systemImage: "square.and.arrow.down.on.square")
+                    }
+                    if let migrationResult {
+                        Text(migrationResult).font(.caption).foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Label("Migrate", systemImage: "arrow.right.arrow.left")
+                } footer: {
+                    Text("Brings over your personalization and reuses Cotypist's downloaded models (instant, no re-download). Your typing history stays in Cotypist — Wren learns its own as you go.")
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section {

@@ -90,6 +90,9 @@ final class CompletionController {
         // NOT in the text field) so suggestions are grounded, not "pulled from a hat". The user's own
         // text stays LAST so the model continues IT. Screen OCR is cached/throttled (anti-stutter).
         var contextParts: [String] = []
+        // Personalization (imported from Cotypist or set by the user) conditions the base model's voice.
+        let userPrompt = PreferencesStore.shared.completionUserPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !userPrompt.isEmpty { contextParts.append(userPrompt) }
         if PreferencesStore.shared.completionUseClipboardContext,
            let clip = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
            !clip.isEmpty, clip.count <= 400 {
