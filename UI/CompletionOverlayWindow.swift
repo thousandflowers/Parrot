@@ -22,18 +22,19 @@ final class CompletionOverlayWindow {
         guard !text.isEmpty, rect != .zero else { hide(); return }
         let panel = ensurePanel()
         // Derive the font size from the caret/line height so the ghost matches the field's text.
+        // A line box of height H typically holds a font of ~H/1.2.
         let lineH = max(10, rect.height)
-        let fontSize = (lineH * 0.72).rounded()
+        let fontSize = (lineH / 1.22).rounded()
         label.font = .systemFont(ofSize: fontSize)
         label.stringValue = text
         label.sizeToFit()
         let size = label.frame.size
 
-        // Place right at the caret; vertically center the text within the caret's line box.
-        let panelH = lineH
-        let origin = CGPoint(x: rect.maxX, y: rect.minY)
-        panel.setFrame(CGRect(origin: origin, size: CGSize(width: size.width + 4, height: panelH)), display: true)
-        label.frame = CGRect(x: 1, y: (panelH - size.height) / 2, width: size.width, height: size.height)
+        // Place right at the caret; vertically center the glyphs within the caret's line box.
+        let panelH = max(size.height, lineH)
+        let origin = CGPoint(x: rect.maxX, y: rect.minY - (panelH - lineH) / 2)
+        panel.setFrame(CGRect(origin: origin, size: CGSize(width: size.width + 3, height: panelH)), display: true)
+        label.frame = CGRect(x: 0, y: (panelH - size.height) / 2, width: size.width, height: size.height)
         panel.orderFrontRegardless()
     }
 

@@ -69,8 +69,13 @@ actor ScreenContextProvider {
     private static func recognizeText(in image: CGImage) async -> String {
         await withCheckedContinuation { (cont: CheckedContinuation<String, Never>) in
             let request = VNRecognizeTextRequest { req, _ in
-                let lines = (req.results as? [VNRecognizedTextObservation])?
-                    .compactMap { $0.topCandidates(1).first?.string } ?? []
+                // Sort observations into reading order (top → bottom) so the joined text is the
+                // actual content flow, and the TAIL is what's nearest the input field.
+                let obs = (req.results as? [VNRecognizedTextObservation]) ?? []
+                let lines = obs
+                    .sorted { $0.boundingBox.maxY > $1.boundingBox.maxY }   // higher on screen first
+                    .compactMap { $0.topCandidates(1).first?.string }
+                    .filter { $0.trimmingCharacters(in: .whitespaces).count >= 2 }
                 cont.resume(returning: lines.joined(separator: "\n"))
             }
             request.recognitionLevel = .fast      // speed over accuracy — context, not transcription
