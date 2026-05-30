@@ -87,6 +87,25 @@ actor CompletionLearningStore {
         return nil
     }
 
+    /// Seeds learned entries (e.g. from the user's own writing) as already-confident.
+    @discardableResult
+    func seed(_ entries: [(key: String, text: String)], accepts: Int = 2) -> Int {
+        loadIfNeeded()
+        let now = Date().timeIntervalSince1970
+        var added = 0
+        for e in entries {
+            guard !e.key.isEmpty, !e.text.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
+            if var x = map[e.key], x.text == e.text {
+                x.accepts = max(x.accepts, accepts); map[e.key] = x
+            } else if map[e.key] == nil {
+                map[e.key] = Entry(text: e.text, accepts: accepts, shows: 0, lastUsed: now); added += 1
+            }
+        }
+        if map.count > maxEntries { evictOldest() }
+        save()
+        return added
+    }
+
     private func evictOldest() {
         let sorted = map.sorted { $0.value.lastUsed < $1.value.lastUsed }
         for (k, _) in sorted.prefix(map.count - maxEntries) { map.removeValue(forKey: k) }

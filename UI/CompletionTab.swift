@@ -6,6 +6,7 @@ struct CompletionTab: View {
     @Bindable var prefs: PreferencesStore
     @State private var downloadedModels: [DiscoveredModel] = []
     @State private var migrationResult: String?
+    @State private var learnResult: String?
 
     var body: some View {
         Form {
@@ -93,6 +94,34 @@ struct CompletionTab: View {
                 Label("Context", systemImage: "rectangle.dashed.and.paperclip")
             } footer: {
                 Text("Screen context reads on-screen text (the conversation/email you're replying to) via on-device OCR (throttled, needs Screen Recording). Clipboard context adds your copied text. Both ground suggestions so they fit.")
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Button {
+                    let panel = NSOpenPanel()
+                    panel.canChooseFiles = true; panel.canChooseDirectories = true; panel.allowsMultipleSelection = true
+                    panel.allowedContentTypes = [.plainText, .text]
+                    panel.prompt = "Learn"
+                    if panel.runModal() == .OK {
+                        let urls = panel.urls
+                        Task {
+                            let n = await CorpusLearner.learn(fromFiles: urls)
+                            learnResult = n > 0 ? "Learned \(n) phrases from your writing." : "No recurring phrases found."
+                        }
+                    }
+                } label: {
+                    Label("Learn from my writing…", systemImage: "text.book.closed")
+                }
+                if let learnResult { Text(learnResult).font(.caption).foregroundStyle(.secondary) }
+                Picker("Emoji skin tone", selection: $prefs.completionEmojiSkinTone) {
+                    Text("Default").tag(0)
+                    ForEach(1...5, id: \.self) { Text("Tone \($0)").tag($0) }
+                }
+            } header: {
+                Label("Learning & Emoji", systemImage: "brain")
+            } footer: {
+                Text("Seed your completion memory from a folder of your own text (emails, notes). Recurring phrases come back instantly. Snippets support {{date}} {{time}} {{clipboard}} placeholders.")
                     .foregroundStyle(.secondary)
             }
 

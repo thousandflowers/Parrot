@@ -303,6 +303,10 @@ final class PreferencesStore {
         get { bool(Constants.UserDefaultsKey.completionUseClipboardContext, default: false) }
         set { set(newValue, for: Constants.UserDefaultsKey.completionUseClipboardContext) }
     }
+    var completionEmojiSkinTone: Int {
+        get { int(Constants.UserDefaultsKey.completionEmojiSkinTone, fallback: 0) }
+        set { set(newValue, for: Constants.UserDefaultsKey.completionEmojiSkinTone) }
+    }
 
     private func string(_ key: String, fallback: String = "") -> String {
         observe()

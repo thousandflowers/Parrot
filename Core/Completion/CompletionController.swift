@@ -52,7 +52,8 @@ final class CompletionController {
         if ax.caretRect != .zero {
             let token = String(ax.preContext.reversed().prefix { !$0.isWhitespace }.reversed())
             if token.count >= 2, token.count <= 30,
-               let expansion = await SnippetStore.shared.expansion(for: token) {
+               let raw = await SnippetStore.shared.expansion(for: token) {
+                let expansion = SnippetExpander.expand(raw)
                 current = CompletionSuggestion(text: expansion, kind: .replaceLastWord(wrong: token))
                 currentPID = pid
                 TabInterceptor.setSuggestionVisible(true)
@@ -63,7 +64,7 @@ final class CompletionController {
         }
 
         // Emoji: typing ":shortcode" → Tab replaces it with the emoji.
-        if ax.caretRect != .zero, let em = EmojiCompletion.match(preContext: ax.preContext) {
+        if ax.caretRect != .zero, let em = EmojiCompletion.match(preContext: ax.preContext, skinTone: PreferencesStore.shared.completionEmojiSkinTone) {
             current = CompletionSuggestion(text: em.emoji, kind: .replaceLastWord(wrong: em.shortcode))
             currentPID = pid
             TabInterceptor.setSuggestionVisible(true)

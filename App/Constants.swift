@@ -112,5 +112,6 @@ enum Constants {
         static let completionUseAppContext = "completionUseAppContext"
         static let completionUseScreenContext = "completionUseScreenContext"
         static let completionUseClipboardContext = "completionUseClipboardContext"
+        static let completionEmojiSkinTone = "completionEmojiSkinTone"   // 0=none, 1..5 Fitzpatrick
     }
 }

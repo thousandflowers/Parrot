@@ -1346,6 +1346,30 @@ final class SnippetTests: XCTestCase {
     }
 }
 
+final class CorpusLearnerTests: XCTestCase {
+    func testExtract_repeatedPhrase() {
+        let text = "buongiorno a tutti come state\nbuongiorno a tutti come state\nbuongiorno a tutti come state"
+        let entries = CorpusLearner.extract(from: text, minCount: 2)
+        XCTAssertTrue(entries.contains { $0.key == "a tutti" && $0.text.contains("come state") })
+    }
+    func testExtract_noRepeat_empty() {
+        XCTAssertTrue(CorpusLearner.extract(from: "one two three four five", minCount: 2).isEmpty)
+    }
+}
+
+final class SnippetExpanderTests: XCTestCase {
+    func testExpand_year() {
+        let y = String(Calendar.current.component(.year, from: Date()))
+        XCTAssertEqual(SnippetExpander.expand("© {{year}} me"), "© \(y) me")
+    }
+    func testExpand_plainUnchanged() {
+        XCTAssertEqual(SnippetExpander.expand("no placeholders"), "no placeholders")
+    }
+    func testExpand_date_nonEmpty() {
+        XCTAssertFalse(SnippetExpander.expand("{{date}}").contains("{{"))
+    }
+}
+
 final class EmojiCompletionTests: XCTestCase {
     func testMatch_shortcode() {
         let m = EmojiCompletion.match(preContext: "great work :fire")
