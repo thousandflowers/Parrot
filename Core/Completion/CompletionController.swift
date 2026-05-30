@@ -104,10 +104,10 @@ final class CompletionController {
         // Enrich the prefix with on-screen context (the conversation/email above the field, which is
         // NOT in the text field) so suggestions are grounded, not "pulled from a hat". The user's own
         // text stays LAST so the model continues IT. Screen OCR is cached/throttled (anti-stutter).
+        // Note: the persona/userPrompt is NOT prepended to the base completion model — base models
+        // continue text, not instructions, and the meta text dilutes the continuation. Personalization
+        // comes from the learning store (your accepted phrases) instead.
         var contextParts: [String] = []
-        // Personalization (imported from Cotypist or set by the user) conditions the base model's voice.
-        let userPrompt = PreferencesStore.shared.completionUserPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !userPrompt.isEmpty { contextParts.append(userPrompt) }
         if PreferencesStore.shared.completionUseClipboardContext,
            let clip = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
            !clip.isEmpty, clip.count <= 400 {

@@ -21,13 +21,19 @@ final class CompletionOverlayWindow {
     func show(text: String, atCaretRect rect: CGRect) {
         guard !text.isEmpty, rect != .zero else { hide(); return }
         let panel = ensurePanel()
+        // Derive the font size from the caret/line height so the ghost matches the field's text.
+        let lineH = max(10, rect.height)
+        let fontSize = (lineH * 0.72).rounded()
+        label.font = .systemFont(ofSize: fontSize)
         label.stringValue = text
         label.sizeToFit()
         let size = label.frame.size
-        // Place just to the right of the caret, vertically aligned with the caret rect.
-        let origin = CGPoint(x: rect.maxX + 1, y: rect.minY)
-        panel.setFrame(CGRect(origin: origin, size: CGSize(width: size.width + 4, height: max(size.height, rect.height))), display: true)
-        label.frame = CGRect(x: 2, y: 0, width: size.width, height: panel.frame.height)
+
+        // Place right at the caret; vertically center the text within the caret's line box.
+        let panelH = lineH
+        let origin = CGPoint(x: rect.maxX, y: rect.minY)
+        panel.setFrame(CGRect(origin: origin, size: CGSize(width: size.width + 4, height: panelH)), display: true)
+        label.frame = CGRect(x: 1, y: (panelH - size.height) / 2, width: size.width, height: size.height)
         panel.orderFrontRegardless()
     }
 

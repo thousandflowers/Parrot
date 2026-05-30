@@ -52,6 +52,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if completionOn {
             TabInterceptor.shared.start()
+            // Screen context: if enabled, make sure Screen Recording is granted (prompts once).
+            if PreferencesStore.shared.completionUseScreenContext, !ScreenContextProvider.hasPermission {
+                ScreenContextProvider.requestPermission()
+            }
         }
 
         // Proactively warm up the local server so first corrections don't block.
