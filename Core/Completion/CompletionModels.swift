@@ -7,6 +7,19 @@ struct CompletionContext: Sendable, Equatable {
     /// Text immediately after the caret. May be empty (end-of-text, the common case).
     let postContext: String
     let language: String
+    /// If set, overrides the default completion user prompt (e.g. per-app rules).
+    var userPromptOverride: String? = nil
+    /// Personalization instructions (steers model toward the user's voice). Empty = use fallback.
+    var personalizationInstructions: String = ""
+    /// How strongly personalization affects the completion (0.0 = coldest, 1.0 = default temp).
+    var personalizationStrength: Double = 0.5
+    /// The selected model ID for completion (empty = use the same model as correction).
+    var completionModelID: String = ""
+    /// The selected model ID for correction (used to check if a dedicated completion model is configured).
+    var selectedModelID: String = ""
+    /// Per-attempt generation seed. 0 on the first attempt; bumped on a retry so the sampler draws
+    /// a different token sequence (otherwise near-deterministic models return the same empty output).
+    var generationSeed: UInt32 = 0
 
     var isUsable: Bool {
         preContext.trimmingCharacters(in: .whitespacesAndNewlines).count >= Constants.completionMinPrefixChars

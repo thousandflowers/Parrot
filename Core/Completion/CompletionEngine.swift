@@ -24,8 +24,10 @@ actor CompletionEngine {
         let mine = generation
 
         for attempt in 0..<2 {
+            var attemptCtx = context
+            attemptCtx.generationSeed = UInt32(attempt)   // 0 first, 1 on retry → different sampling
             let raw: String
-            do { raw = try await provider.complete(context: context, maxWords: maxWords) }
+            do { raw = try await provider.complete(context: attemptCtx, maxWords: maxWords) }
             catch is CancellationError { return nil }
             catch {
                 Logger.infra.debug("CompletionEngine: provider failed — \(error.localizedDescription, privacy: .public)")

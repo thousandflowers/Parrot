@@ -8,7 +8,7 @@ import Foundation
 //   stdin  : one JSON object per line  {"prefix": "...", "maxTokens": 12}
 //   stdout : one JSON object per line  {"text": "..."}   (and {"ready":true} once warm)
 
-struct Req: Decodable { let prefix: String; let maxTokens: Int?; let id: Int?; let latinOnly: Bool? }
+struct Req: Decodable { let prefix: String; let maxTokens: Int?; let id: Int?; let latinOnly: Bool?; let seed: UInt32? }
 struct Resp: Encodable { let text: String; let id: Int }   // echo the request id so the parent matches responses 1:1
 
 let args = CommandLine.arguments
@@ -88,6 +88,7 @@ while let (seq, line) = queue.next() {
     guard !line.isEmpty, let data = line.data(using: .utf8),
           let req = try? JSONDecoder().decode(Req.self, from: data) else { continue }
     let text = session.complete(prefix: req.prefix, maxTokens: req.maxTokens ?? 12,
+                                seed: req.seed ?? 0,
                                 latinOnly: req.latinOnly ?? false,
                                 shouldCancel: { queue.hasNewer(than: seq) })
     emit(Resp(text: text, id: req.id ?? 0))
