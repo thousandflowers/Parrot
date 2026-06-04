@@ -8,6 +8,7 @@ actor RealtimeMonitor {
     private var observedPID: pid_t = 0
     private var lastTextHash: Int?
     private var debounceTask: Task<Void, Never>?
+    private var correctionTask: Task<Void, Never>?
     private var isEnabled = false
 
     func start() {
@@ -16,11 +17,13 @@ actor RealtimeMonitor {
         Task { await attachToFocusedApp() }
     }
 
-    func stop() {
+    func stop() async {
         isEnabled = false
-        detachObserver()
+        await detachObserver()
         debounceTask?.cancel()
         debounceTask = nil
+        correctionTask?.cancel()
+        correctionTask = nil
         lastTextHash = nil
     }
 
@@ -52,7 +55,7 @@ actor RealtimeMonitor {
 
         if pid == observedPID { return }
 
-        detachObserver()
+        await detachObserver()
 
         var newObserver: AXObserver?
         guard AXObserverCreate(pid, axNotificationCallback, &newObserver) == .success,
@@ -82,11 +85,11 @@ actor RealtimeMonitor {
         lastTextHash = nil
     }
 
-    private func detachObserver() {
+    private func detachObserver() async {
         guard let obs = observer else { return }
         let runLoopSource = AXObserverGetRunLoopSource(obs)
         // CFRunLoop ops must run on the run loop's own thread (main thread).
-        DispatchQueue.main.async {
+        await MainActor.run {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .defaultMode)
         }
         observer = nil
@@ -94,8 +97,13 @@ actor RealtimeMonitor {
     }
 
     nonisolated func handleNotification() {
+        // Cancel any in-flight correction so stale results don't overwrite the indicator.
+        // Completion is debounced inside textChanged() and uses its own cancellation.
         Task { await Self.shared.onAccessibilityEvent() }
-        // Inline completion runs independently of realtime correction (different feature/toggle).
+        // AX notifications fire on every keystroke. textChanged() clears the old suggestion
+        // and debounces; the completion pipeline then re-suggests from the new position.
+        // Spawned as a separate Task so correction and completion can run concurrently
+        // (they serve different features with independent state).
         Task { @MainActor in CompletionController.shared.textChanged() }
     }
 
@@ -118,13 +126,19 @@ actor RealtimeMonitor {
         guard hash != lastTextHash else { return }
         lastTextHash = hash
 
+        // Cancel any in-flight correction so rapid keystrokes don't race.
+        correctionTask?.cancel()
         debounceTask?.cancel()
         debounceTask = Task {
             try? await Task.sleep(for: .milliseconds(800))
             guard !Task.isCancelled else { return }
             let bundleID = await AppDetector.shared.frontAppBundleID(forPID: pid)
             let (promptType, overrideService, overridePrompt) = await resolvePromptInfo(for: bundleID)
-            await performCheck(text: text, promptType: promptType, overrideServiceType: overrideService, overrideCustomPrompt: overridePrompt)
+            // Store the correction Task handle so it can be cancelled if a new
+            // AX notification arrives before this one finishes.
+            let task = Task { await performCheck(text: text, promptType: promptType, overrideServiceType: overrideService, overrideCustomPrompt: overridePrompt) }
+            correctionTask = task
+            _ = await task.value
         }
     }
 

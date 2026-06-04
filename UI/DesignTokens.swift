@@ -28,6 +28,12 @@ extension NSColor {
         dark: NSColor(displayP3Red: 0.30, green: 0.28, blue: 0.26, alpha: 1)
     )
 
+    // Parrot eye (custom NSBezierPath drawing in the menu bar icon)
+    static let eyeSurface = appearanceColor(
+        light: NSColor.white,
+        dark: NSColor(white: 0.2, alpha: 1)
+    )
+
     // Generic surfaces
     static let surfaceBackground = appearanceColor(
         light: NSColor(displayP3Red: 0.96, green: 0.97, blue: 0.98, alpha: 1),
@@ -63,7 +69,7 @@ extension Color {
 
     static let accentBrand = Color.accentColor
     static let accentGreen = Color(nsColor: .statusOk)
-    static let accentPurple = Color.accentColor
+    static let accentPurple = Color(nsColor: .systemPurple)
     static let textPrimary = Color.primary
     static let textSecondary = Color.secondary
 }

@@ -108,9 +108,14 @@ enum Constants {
         static let maxCompletionLength = "maxCompletionLength"
         static let completionDebounceMs = "completionDebounceMs"
         static let completionUserPrompt = "completionUserPrompt"
+        static let completionScreenContextEnabled = "completionScreenContextEnabled"
         static let completionModelID = "completionModelID"   // "" = same as main correction model
         static let completionUseAppContext = "completionUseAppContext"
         static let completionUseScreenContext = "completionUseScreenContext"
         static let completionUseClipboardContext = "completionUseClipboardContext"
+        static let personalizationStrength = "personalizationStrength"
+        static let personalizationInstructions = "personalizationInstructions"
+        static let snippets = "snippets"
+        static let completionOverlayFontSize = "completionOverlayFontSize"
     }
 }

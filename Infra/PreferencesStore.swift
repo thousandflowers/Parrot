@@ -147,7 +147,10 @@ final class PreferencesStore {
             return decoded
         }
         set {
-            guard let newData = try? JSONEncoder().encode(newValue) else { return }
+            guard let newData = try? JSONEncoder().encode(newValue) else {
+                Logger.infra.warning("PreferencesStore: failed to encode presets")
+                return
+            }
             let currentData = UserDefaults.standard.data(forKey: Constants.UserDefaultsKey.presets)
             if currentData != newData {
                 UserDefaults.standard.set(newData, forKey: Constants.UserDefaultsKey.presets)
@@ -170,7 +173,10 @@ final class PreferencesStore {
             return decoded.isEmpty ? defaultFlows : decoded
         }
         set {
-            guard let newData = try? JSONEncoder().encode(newValue) else { return }
+            guard let newData = try? JSONEncoder().encode(newValue) else {
+                Logger.infra.warning("PreferencesStore: failed to encode flows")
+                return
+            }
             let currentData = UserDefaults.standard.data(forKey: Constants.UserDefaultsKey.flows)
             if currentData != newData {
                 UserDefaults.standard.set(newData, forKey: Constants.UserDefaultsKey.flows)
@@ -282,6 +288,12 @@ final class PreferencesStore {
         get { int(Constants.UserDefaultsKey.completionDebounceMs, fallback: Constants.completionDefaultDebounceMs) }
         set { set(newValue, for: Constants.UserDefaultsKey.completionDebounceMs) }
     }
+    /// Use OCR of the conversation/email above the caret as extra completion context (Wren).
+    /// Defaults on; no-ops without Screen Recording permission.
+    var completionScreenContextEnabled: Bool {
+        get { bool(Constants.UserDefaultsKey.completionScreenContextEnabled, default: true) }
+        set { set(newValue, for: Constants.UserDefaultsKey.completionScreenContextEnabled) }
+    }
     var completionUserPrompt: String {
         get { string(Constants.UserDefaultsKey.completionUserPrompt, fallback: "") }
         set { set(newValue, for: Constants.UserDefaultsKey.completionUserPrompt) }
@@ -303,6 +315,46 @@ final class PreferencesStore {
         get { bool(Constants.UserDefaultsKey.completionUseClipboardContext, default: false) }
         set { set(newValue, for: Constants.UserDefaultsKey.completionUseClipboardContext) }
     }
+
+    var personalizationStrength: Double {
+        get { double(Constants.UserDefaultsKey.personalizationStrength, fallback: 0.5) }
+        set { set(newValue, for: Constants.UserDefaultsKey.personalizationStrength) }
+    }
+    var personalizationInstructions: String {
+        get { string(Constants.UserDefaultsKey.personalizationInstructions, fallback: "") }
+        set { set(newValue, for: Constants.UserDefaultsKey.personalizationInstructions) }
+    }
+
+    var completionOverlayFontSize: Double {
+        get { double(Constants.UserDefaultsKey.completionOverlayFontSize, fallback: 0.0) }
+        set { set(newValue, for: Constants.UserDefaultsKey.completionOverlayFontSize) }
+    }
+
+    // MARK: - Snippets
+
+    var snippets: [Snippet] {
+        get {
+            observe()
+            guard let data = UserDefaults.standard.data(forKey: Constants.UserDefaultsKey.snippets),
+                  let decoded = try? JSONDecoder().decode([Snippet].self, from: data) else { return [] }
+            return decoded
+        }
+        set {
+            guard let newData = try? JSONEncoder().encode(newValue) else {
+                Logger.infra.warning("PreferencesStore: failed to encode snippets")
+                return
+            }
+            let currentData = UserDefaults.standard.data(forKey: Constants.UserDefaultsKey.snippets)
+            if currentData != newData {
+                UserDefaults.standard.set(newData, forKey: Constants.UserDefaultsKey.snippets)
+                invalidate()
+            }
+        }
+    }
+
+    func addSnippet(_ snippet: Snippet) { var s = snippets; s.append(snippet); snippets = s }
+    func updateSnippet(_ snippet: Snippet) { update(&snippets, with: snippet) { $0.id == snippet.id } }
+    func deleteSnippet(_ snippet: Snippet) { snippets.removeAll { $0.id == snippet.id } }
 
     private func string(_ key: String, fallback: String = "") -> String {
         observe()
@@ -345,8 +397,20 @@ final class PreferencesStore {
         if current != value { invalidate() }
     }
 
+    private func double(_ key: String, fallback: Double) -> Double {
+        observe()
+        guard UserDefaults.standard.object(forKey: key) != nil else { return fallback }
+        return UserDefaults.standard.double(forKey: key)
+    }
+
     private func set(_ value: Bool, for key: String) {
         let current = UserDefaults.standard.bool(forKey: key)
+        UserDefaults.standard.set(value, forKey: key)
+        if current != value { invalidate() }
+    }
+
+    private func set(_ value: Double, for key: String) {
+        let current = UserDefaults.standard.double(forKey: key)
         UserDefaults.standard.set(value, forKey: key)
         if current != value { invalidate() }
     }
@@ -366,7 +430,10 @@ final class PreferencesStore {
 
     private func setShortcut(_ value: ShortcutConfig, for key: String) {
         let currentData = UserDefaults.standard.data(forKey: key)
-        guard let data = try? JSONEncoder().encode(value) else { return }
+        guard let data = try? JSONEncoder().encode(value) else {
+            Logger.infra.warning("PreferencesStore: failed to encode shortcut for \(key, privacy: .public)")
+            return
+        }
         if currentData != data {
             UserDefaults.standard.set(data, forKey: key)
             invalidate()

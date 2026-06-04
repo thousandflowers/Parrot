@@ -16,6 +16,6 @@ struct ErrorAnnotation: Identifiable, Sendable {
     let id: UUID
     let charRange: CFRange
     let originalSnippet: String
-    let suggestedFix: String
-    let severity: ErrorSeverity
+    var suggestedFix: String
+    var severity: ErrorSeverity
 }

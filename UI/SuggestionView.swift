@@ -1,36 +1,4 @@
 import SwiftUI
-import AVFoundation
-
-@MainActor
-private final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
-    private let synthesizer = AVSpeechSynthesizer()
-    @Published var isSpeaking = false
-    private var continuationTask: Task<Void, Never>?
-
-    func speak(_ text: String) {
-        stop()
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-        synthesizer.delegate = self
-        synthesizer.speak(utterance)
-        isSpeaking = true
-    }
-
-    func stop() {
-        synthesizer.stopSpeaking(at: .immediate)
-        continuationTask?.cancel()
-        continuationTask = nil
-        isSpeaking = false
-    }
-
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor in self.isSpeaking = false }
-    }
-
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        Task { @MainActor in self.isSpeaking = false }
-    }
-}
 
 struct SuggestionView: View {
     let result: CorrectionResult?
@@ -338,15 +306,10 @@ struct SuggestionView: View {
                 Label("Text replaced", systemImage: "checkmark.circle")
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.primary.opacity(0.1)).frame(height: 2)
-                        Capsule()
-                            .fill(Color.statusOk.opacity(0.7))
-                            .frame(width: geo.size.width * appliedProgress, height: 2)
-                    }
-                }
-                .frame(height: 2)
+                ProgressView(value: appliedProgress, total: 1.0)
+                    .progressViewStyle(.linear)
+                    .tint(Color.statusOk.opacity(0.7))
+                    .frame(height: 2)
             }
             .frame(height: 48)
             .frame(maxWidth: .infinity)

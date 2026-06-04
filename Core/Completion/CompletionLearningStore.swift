@@ -26,6 +26,8 @@ actor CompletionLearningStore {
     }
 
     /// Variable-order keys for a context: last 3, 2, and 1 words (lowercased), longest first.
+    /// Single-word (1-gram) keys must be at least 3 characters to avoid matching completely
+    /// unrelated contexts on generic function words ("a", "di", "il", "per", "in", etc.).
     nonisolated static func keys(forContext preContext: String) -> [String] {
         let words = preContext
             .replacingOccurrences(of: "\n", with: " ")
@@ -34,6 +36,8 @@ actor CompletionLearningStore {
         guard !words.isEmpty else { return [] }
         var result: [String] = []
         for n in [3, 2, 1] where words.count >= n {
+            // Skip 1-gram keys for very short words (function words match too broadly).
+            if n == 1, words.last!.count < 3 { continue }
             result.append(words.suffix(n).joined(separator: " "))
         }
         return result   // longest → shortest
@@ -53,11 +57,24 @@ actor CompletionLearningStore {
         guard !text.trimmingCharacters(in: .whitespaces).isEmpty, !keys.isEmpty else { return }
         loadIfNeeded()
         let now = Date().timeIntervalSince1970
+        // Single-slot LFU per key. A different completion competing for the same key must NOT reset
+        // the count to 1 — that starved both candidates so neither reached `minAccepts` and learning
+        // never fired for varied contexts. Decrement the incumbent instead; the challenger only takes
+        // the slot once the incumbent loses, so the dominant phrase accrues accepts and gets served.
         for k in keys {
-            if var e = map[k], e.text == text {
-                e.accepts += 1; e.lastUsed = now; map[k] = e
+            if var e = map[k] {
+                if e.text == text {
+                    e.accepts += 1
+                    e.lastUsed = now
+                } else {
+                    e.accepts -= 1
+                    if e.accepts <= 0 {
+                        e = Entry(text: text, accepts: 1, shows: 0, lastUsed: now)
+                    }
+                }
+                map[k] = e
             } else {
-                map[k] = Entry(text: text, accepts: 1, shows: map[k]?.shows ?? 0, lastUsed: now)
+                map[k] = Entry(text: text, accepts: 1, shows: 0, lastUsed: now)
             }
         }
         if map.count > maxEntries { evictOldest() }
@@ -74,15 +91,25 @@ actor CompletionLearningStore {
         save()
     }
 
-    /// Best learned completion for the context (tries longest key first), or nil.
-    /// Returns the matched key too, so the caller can attribute the "shown" event.
+    /// Best learned completion across keys, with degressive key-length priority.
+    /// Longer keys (more specific context) are preferred over shorter ones:
+    /// 3-gram beats 2-gram beats 1-gram. Within the same key length, picks the
+    /// highest acceptance rate. This prevents single-word keys from overriding
+    /// multi-word matches. Returns the matched key so the caller can attribute
+    /// the "shown" event.
     func learnedSuggestion(keys: [String]) -> (text: String, key: String)? {
         loadIfNeeded()
+        var bestByOrder: [Int: (text: String, key: String, score: Double)] = [:]
         for k in keys {
             guard let e = map[k], e.accepts >= minAccepts else { continue }
-            // Acceptance-rate suppression: shown a lot but rarely accepted (<20%) → skip.
             if e.shows >= suppressShows && e.accepts * 5 < e.shows { continue }
-            return (e.text, k)
+            let order = k.split(separator: " ").count
+            let score = Double(e.accepts) / max(1, Double(e.shows + 1))
+            if let (_, _, prev) = bestByOrder[order], prev >= score { continue }
+            bestByOrder[order] = (e.text, k, score)
+        }
+        for n in [3, 2, 1] {
+            if let b = bestByOrder[n] { return (b.text, b.key) }
         }
         return nil
     }

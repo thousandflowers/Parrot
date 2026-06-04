@@ -22,6 +22,11 @@ struct MenuBarView: View {
                     Divider()
                 }
 
+                if AppMode.current.showsCompletion && prefs.inlineCompletionEnabled && prefs.completionModelID.isEmpty {
+                    completionBackendBanner
+                    Divider()
+                }
+
                 toggleSection
                 Divider()
 
@@ -137,9 +142,45 @@ struct MenuBarView: View {
         }
     }
 
+    // MARK: - Completion backend banner (Wren mode)
+
+    private var completionBackendBanner: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "cpu.badge.exclamationmark")
+                    .font(.system(size: 18))
+                    .foregroundStyle(Color.statusWarning)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("No completion model configured")
+                        .font(.callout.weight(.semibold))
+                    Text("Completion uses the server fallback. For best performance, pick a dedicated model in settings.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            SettingsLink {
+                Label("Open settings", systemImage: "arrow.up.right.square")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.statusWarning.opacity(0.08))
+    }
+
     private var serviceSubtitle: String {
         switch prefs.serviceType {
-        case .local:             return "Local · \(prefs.selectedModelID.isEmpty ? "no model" : prefs.selectedModelID)"
+        case .local:
+            if AppMode.current.showsCompletion {
+                // Wren completes with the dedicated/bundled model — show that, not the correction model.
+                let cid = (UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.completionModelID) ?? "")
+                    .trimmingCharacters(in: .whitespaces)
+                return "Local · \(cid.isEmpty ? "bundled model" : cid)"
+            }
+            return "Local · \(prefs.selectedModelID.isEmpty ? "no model" : prefs.selectedModelID)"
         case .ollama:            return "Ollama · \(prefs.ollamaModel)"
         case .remote:            return "OpenAI · \(prefs.openAIModel)"
         case .openRouter:        return "OpenRouter · \(prefs.openRouterModel)"
@@ -340,24 +381,24 @@ struct MenuBarView: View {
     // MARK: - Quit
 
     private var quitRow: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "power")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .frame(width: 16, alignment: .center)
-            Text("Quit Parrot")
-                .font(.callout)
-            Spacer()
-            Text("⌘Q")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .monospacedDigit()
+        Button(action: { NSApplication.shared.terminate(nil) }) {
+            HStack(spacing: 10) {
+                Image(systemName: "power")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16, alignment: .center)
+                Text("Quit \(AppMode.current.displayName)")
+                    .font(.callout)
+                Spacer()
+                Text("⌘Q")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
-        .contentShape(Rectangle())
-        .onTapGesture { NSApplication.shared.terminate(nil) }
-        .accessibilityAddTraits(.isButton)
+        .buttonStyle(.plain)
     }
 
     // MARK: - Helpers

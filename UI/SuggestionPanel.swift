@@ -36,7 +36,7 @@ final class FixedSizeHostingView<Content: View>: NSHostingView<Content> {
             if isInUpdateConstraints {
                 // Defer re-entrant write until after the current pass completes.
                 let v = newValue
-                DispatchQueue.main.async { [weak self] in
+                Task { @MainActor [weak self] in
                     self?.needsUpdateConstraints = v
                 }
                 return
@@ -248,6 +248,9 @@ final class SuggestionPanelController {
         panel.hasShadow = true
         panel.isMovableByWindowBackground = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.setAccessibilityElement(true)
+        panel.setAccessibilityRole(.group)
+        panel.setAccessibilityLabel("Correction suggestion")
         // Clamp size: prevents NSHostingView.updateAnimatedWindowSize from calling setFrame
         // with a different value during windowDidLayout, which triggers re-entrant constraint
         // updates and crash on macOS 26. sizingOptions=[] alone is insufficient on macOS 26.
@@ -473,6 +476,9 @@ final class SuggestionPanelController {
         newPanel.hasShadow = true
         newPanel.isMovableByWindowBackground = true
         newPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        newPanel.setAccessibilityElement(true)
+        newPanel.setAccessibilityRole(.group)
+        newPanel.setAccessibilityLabel("Correction suggestion")
 
         let hv = NSHostingView(rootView: view)
         hv.sizingOptions = []

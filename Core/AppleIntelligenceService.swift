@@ -85,10 +85,12 @@ actor AppleIntelligenceService: @preconcurrency LLMService {
                     for try await snapshot in stream {
                         guard !Task.isCancelled else { return }
                         let text = String(snapshot.content)
-                        await MainActor.run {
-                            continuation.yield(text)
-                            return ()
-                        }
+                        // The continuation is bridged through a MainActor hop to
+                        // ensure UI-visible state updates happen on the main thread.
+                        // Explicitly type-erase to avoid the "non-Sendable in @Sendable"
+                        // warning that plain continuation.yield triggers.
+                        let yield: @Sendable () -> Void = { continuation.yield(text) }
+                        await MainActor.run { yield() }
                     }
 
                     continuation.finish()

@@ -2,6 +2,7 @@ import Cocoa
 import os
 import SwiftUI
 import ObjectiveC
+import IOKit.hid
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyManager: GlobalHotkeyManager?
@@ -18,6 +19,69 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.setActivationPolicy(.accessory)
         CrashLogger.log("launch: activation policy set")
+
+        // --- START WARMUP IMMEDIATELY (before UI setup) ---
+        // The local server takes 5-15s to load a GGUF model into RAM on first launch.
+        // A detached high-priority Task starts immediately without waiting for the
+        // main actor's cooperative pool, so the server can be ready before the user
+        // starts typing. Wren mode always needs the server for LlamaCompletionClient fallback.
+        let mode = AppMode.current
+        let serviceType = LLMServiceFactory.resolveDefaultServiceType()
+        let warmupNeeded: Bool
+        if mode.showsCorrection && serviceType == .local {
+            warmupNeeded = true
+        } else if mode.showsCompletion && PreferencesStore.shared.inlineCompletionEnabled {
+            // Always warm up the main server in Wren mode. Even when a dedicated completion
+            // model is set, the main server serves as fallback if the dedicated one fails
+            // (model not local, RAM pressure, etc.). Without this warmup, resolvedTarget()
+            // falls back to mainTarget() which finds currentPort=0 → no suggestions at all.
+            warmupNeeded = true
+        } else {
+            warmupNeeded = false
+        }
+        if warmupNeeded {
+            Task.detached(priority: .userInitiated) {
+                await MainActor.run { MenuBarParrot.shared.setState(.sleeping) }
+                await LocalLLMService.shared.warmup()
+                await MainActor.run { MenuBarParrot.shared.setState(.idle) }
+            }
+        } else if serviceType == .appleIntelligence {
+            if #available(macOS 26.0, *) {
+                Task.detached {
+                    if !AppleIntelligenceService.shared.isAvailable {
+                        os.Logger.infra.info("Apple Intelligence not available: \(AppleIntelligenceService.shared.availabilityDescription)")
+                    }
+                }
+            }
+        }
+
+        // Wren needs an on-device model to generate suggestions. We warm up above, but if NO model is
+        // installed completion can never produce anything — surface that once (with a path to fix it)
+        // instead of failing silently, which reads as "the app is broken".
+        if mode.showsCompletion && PreferencesStore.shared.inlineCompletionEnabled {
+            Task {
+                guard (await ModelManager.shared.localModels()).isEmpty else { return }
+                await MainActor.run {
+                    let ackKey = "hasAcknowledgedNoCompletionModel"
+                    guard !UserDefaults.standard.bool(forKey: ackKey) else { return }
+                    let alert = NSAlert()
+                    alert.messageText = String(localized: "alert.completion.no_model.title",
+                                               defaultValue: "Nessun modello installato")
+                    alert.informativeText = String(localized: "alert.completion.no_model.body",
+                                                   defaultValue: "Wren genera i suggerimenti con un modello on-device. Scarica un modello nelle Impostazioni per attivare il completamento inline.")
+                    alert.alertStyle = .informational
+                    alert.addButton(withTitle: String(localized: "alert.completion.no_model.open_settings",
+                                                      defaultValue: "Apri Impostazioni"))
+                    alert.addButton(withTitle: String(localized: "alert.ok", defaultValue: "OK"))
+                    if alert.runModal() == .alertFirstButtonReturn {
+                        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                    } else {
+                        UserDefaults.standard.set(true, forKey: ackKey)
+                    }
+                }
+            }
+        }
+        // --------------------------------------------------
 
         setupStatusItem()
         CrashLogger.log("launch: status item ready")
@@ -43,8 +107,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Load correction cache persisted from previous session
         Task { await CorrectionCache.shared.loadFromDisk() }
 
-        // Parrot = correction, Wren = completion. The AX observer feeds whichever this app runs.
-        let mode = AppMode.current
         let realtimeOn = mode.showsCorrection && UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.realtimeEnabled)
         let completionOn = mode.showsCompletion && PreferencesStore.shared.inlineCompletionEnabled
         if realtimeOn || completionOn {
@@ -52,26 +114,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if completionOn {
             TabInterceptor.shared.start()
+            // Warm the completion model into RAM now so the first keystroke doesn't trigger a
+            // multi-second cold load (during which fast typing supersedes every request → nothing).
+            Task.detached(priority: .utility) { await CompletionEngine.shared.warmup() }
+            // Screen context (optional): prompt once for Screen Recording so Wren can read the
+            // conversation above the caret. No-ops / degrades to text-field-only if denied.
+            if PreferencesStore.shared.completionScreenContextEnabled, !ScreenContextProvider.hasPermission {
+                ScreenContextProvider.requestPermission()
+            }
         }
+        CrashLogger.log("DIAG completion: mode=\(mode.displayName) completionOn=\(completionOn) axTrusted=\(AXIsProcessTrusted()) inputMon=\(IOHIDCheckAccess(kIOHIDRequestTypeListenEvent).rawValue)")
 
-        // Proactively warm up the local server so first corrections don't block.
-        // Wren (completion-only) doesn't run the correction model — skip the warmup.
-        let serviceType = LLMServiceFactory.resolveDefaultServiceType()
         CrashLogger.log("launch: serviceType=\(serviceType.rawValue)")
-        if mode.showsCorrection && serviceType == .local {
-            Task {
-                await MainActor.run { MenuBarParrot.shared.setState(.sleeping) }
-                await LocalLLMService.shared.warmup()
-                await MainActor.run { MenuBarParrot.shared.setState(.idle) }
-            }
-        } else if serviceType == .appleIntelligence {
-            if #available(macOS 26.0, *) {
-                CrashLogger.log("launch: checking AppleIntelligence availability")
-                if !AppleIntelligenceService.shared.isAvailable {
-                    os.Logger.infra.info("Apple Intelligence not available: \(AppleIntelligenceService.shared.availabilityDescription)")
-                }
-            }
-        }
         CrashLogger.log("launch: complete")
     }
 
@@ -182,7 +236,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return prev
             }
             guard !alreadySent else { return }
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 NSApp.reply(toApplicationShouldTerminate: true)
             }
         }
@@ -279,6 +333,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func observeFrontmostAppChanges() {
+        // Seed the cache with the app already frontmost at launch. The observer below only updates on
+        // SUBSEQUENT activations, so without this seed the cached pid stays 0 until the user's first
+        // app switch — and completion/correction (both read this pid) silently do nothing until then.
+        if let front = NSWorkspace.shared.frontmostApplication,
+           front.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            let seedPID = front.processIdentifier
+            Task { await AccessibilityBridge.shared.setLastKnownFrontAppPID(seedPID) }
+        }
         frontAppObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,

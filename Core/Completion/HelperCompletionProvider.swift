@@ -69,7 +69,9 @@ actor HelperCompletionProvider: CompletionProviding {
         }
 
         // Serialise the pipe exchange so overlapping requests never interleave on the single pipe.
+        let tBeforePipe = Date()
         await acquirePipe()
+        let tInfer = Date()                 // DIAG: time blocked on the pipe vs time in inference
         defer { releasePipe() }
 
         // Warm timeout 12s: gemma-3-4b's FIRST inference compiles Metal kernels (slow, one-time); warm
@@ -84,9 +86,7 @@ actor HelperCompletionProvider: CompletionProviding {
             group.cancelAll()
             return first
         }
-        #if DEBUG
-        CrashLogger.log("DIAG helper: id=\(reqID) ready=\(helperReady) timeout=\(timeoutSeconds) result=\(text == nil ? "TIMEOUT-nil" : "len=\(text!.count)")")
-        #endif
+        CrashLogger.log("DIAG helper-timing: id=\(reqID) pipeWait=\(Int(tInfer.timeIntervalSince(tBeforePipe)*1000))ms infer=\(Int(Date().timeIntervalSince(tInfer)*1000))ms ready=\(helperReady) result=\(text == nil ? "nil" : "len=\(text!.count)")")
         guard let text else {
             // Timed out: abandon THIS request but keep the helper ALIVE (no teardown → no spiral).
             // Clear the dangling continuation; a late response for reqID is ignored by id-match below.

@@ -63,7 +63,12 @@ actor KnowledgeBase {
                 return words.contains { textWords.contains($0) }
             }
             .sorted { a, b in
-                a.source == .file ? true : b.source == .file ? false : a.source == .snippet
+                // File > snippet > auto_learned — numeric priority avoids
+                // the incomplete ternary that produced indeterminate ordering
+                // for equally-classified items.
+                let lhs: Int = a.source == .file ? 3 : a.source == .snippet ? 2 : 1
+                let rhs: Int = b.source == .file ? 3 : b.source == .snippet ? 2 : 1
+                return lhs > rhs
             }
 
         guard !relevant.isEmpty else { return nil }

@@ -143,12 +143,17 @@ struct CorrectionResult: Identifiable, Sendable, Codable {
     func toAnnotations(baseOffset: Int = 0) -> [ErrorAnnotation] {
         guard hasChanges else { return [] }
 
-        // CJK script detection by Unicode range — works even for short strings where
-        // NLLanguageRecognizer is unreliable (< 12 chars).
+        // Script detection by Unicode range — works even for short strings where
+        // NLLanguageRecognizer is unreliable (< 12 chars). Block spacing-sensitive
+        // scripts where our word-token diff produces garbage inline annotations.
         let hasCJK = originalText.unicodeScalars.contains {
             ($0.value >= 0x4E00 && $0.value <= 0x9FFF) ||  // CJK Unified Ideographs
             ($0.value >= 0x3040 && $0.value <= 0x30FF) ||  // Hiragana / Katakana
-            ($0.value >= 0xAC00 && $0.value <= 0xD7AF)     // Hangul
+            ($0.value >= 0xAC00 && $0.value <= 0xD7AF) ||  // Hangul
+            ($0.value >= 0x0E00 && $0.value <= 0x0EFF) ||  // Thai + Lao
+            ($0.value >= 0x1000 && $0.value <= 0x109F) ||  // Myanmar (Burmese)
+            ($0.value >= 0x1780 && $0.value <= 0x17FF) ||  // Khmer
+            ($0.value >= 0x0F00 && $0.value <= 0x0FFF)     // Tibetan
         }
         guard !hasCJK else { return [] }
 
@@ -170,27 +175,36 @@ struct CorrectionResult: Identifiable, Sendable, Codable {
         let corrWords = correctedText.split { $0.isWhitespace }.map(String.init)
         let diff = corrWords.difference(from: origTokens.map { $0.word })
 
-        var removes: [(wordIdx: Int, word: String)] = []
-        var inserts: [String] = []
+        // Process the diff IN SEQUENTIAL ORDER, not as separate remove/insert arrays.
+        // Positional pairing (removes[i] → inserts[i]) is WRONG when a multi-word edit
+        // reorders tokens, e.g. "he go always" → "he always goes" produces:
+        //   remove("go"), remove("always"), insert("always"), insert("goes")
+        // Pairing by index would map "go"→"always" and "always"→"goes" — both wrong.
+        // Instead, walk the diff sequentially: each insert fills the most recent pending
+        // remove that doesn't already have a suggestedFix.
+        var annotations: [ErrorAnnotation] = []
         for change in diff {
             switch change {
-            case .remove(let offset, let word, _): removes.append((offset, word))
-            case .insert(_, let word, _):          inserts.append(word)
+            case .remove(let offset, _, _):
+                guard offset < origTokens.count else { continue }
+                let token = origTokens[offset]
+                annotations.append(ErrorAnnotation(
+                    id: UUID(),
+                    charRange: CFRange(location: baseOffset + token.offset, length: token.word.count),
+                    originalSnippet: token.word,
+                    suggestedFix: "",
+                    severity: .warning
+                ))
+            case .insert(_, let word, _):
+                // Fill the last empty-fix annotation (the nearest preceding remove).
+                for j in (0..<annotations.count).reversed() {
+                    if annotations[j].suggestedFix.isEmpty {
+                        annotations[j].suggestedFix = word
+                        annotations[j].severity = .error
+                        break
+                    }
+                }
             }
-        }
-
-        var annotations: [ErrorAnnotation] = []
-        for (i, remove) in removes.enumerated() {
-            guard remove.wordIdx < origTokens.count else { continue }
-            let token = origTokens[remove.wordIdx]
-            let fix = i < inserts.count ? inserts[i] : ""
-            annotations.append(ErrorAnnotation(
-                id: UUID(),
-                charRange: CFRange(location: baseOffset + token.offset, length: token.word.count),
-                originalSnippet: token.word,
-                suggestedFix: fix,
-                severity: fix.isEmpty ? .warning : .error
-            ))
         }
         return annotations
     }

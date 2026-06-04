@@ -87,6 +87,7 @@ final class CompletionController {
     private func requestSuggestion() async {
         overlay.dim()                                   // dim (not hide) — prevents flicker during computation
         let gen = { self.suggestionGen += 1; return self.suggestionGen }()
+        let t0 = Date()                                 // DIAG: measure where the per-keystroke latency goes
 
         // The Tab tap can only install once Accessibility is trusted. The user often grants it
         // AFTER launch, so the launch-time start() bailed. Retry here (idempotent): once we are
@@ -123,7 +124,9 @@ final class CompletionController {
             lastBufferPID = pid
         }
 
-        var ax = await AccessibilityBridge.shared.completionContext(pid: pid)
+        let tPreAX = Date()
+        let ax = await AccessibilityBridge.shared.completionContext(pid: pid)
+        CrashLogger.log("DIAG timing: setup=\(Int(tPreAX.timeIntervalSince(t0)*1000))ms axRead=\(Int(Date().timeIntervalSince(tPreAX)*1000))ms")
         // Did AX just see a real, readable text field (valid caret & context)?
         let axHasField = ax?.caretRect != .zero && !(ax?.preContext.isEmpty ?? true)
 
@@ -265,16 +268,13 @@ final class CompletionController {
         #if DEBUG
         CrashLogger.log("DIAG req: calling engine, preTail=\(String(preContext.suffix(20))) midWord=\(midWord)")
         #endif
+        let tPreEngine = Date()
         guard let suggestion = await CompletionEngine.shared.suggest(context: context, maxWords: effectiveMaxWords, allowCode: allowCode, midWord: midWord) else {
-            #if DEBUG
-            CrashLogger.log("DIAG req: engine returned nil")
-            #endif
+            CrashLogger.log("DIAG timing: engine=\(Int(Date().timeIntervalSince(tPreEngine)*1000))ms total=\(Int(Date().timeIntervalSince(t0)*1000))ms -> nil")
             Logger.infra.debug("completion: engine returned no suggestion")
             return
         }
-        #if DEBUG
-        CrashLogger.log("DIAG req: engine suggestion='\(suggestion.text.prefix(30))' caretZero=\(ax.caretRect == .zero)")
-        #endif
+        CrashLogger.log("DIAG timing: engine=\(Int(Date().timeIntervalSince(tPreEngine)*1000))ms total=\(Int(Date().timeIntervalSince(t0)*1000))ms suggestion='\(suggestion.text.prefix(30))'")
         guard !Task.isCancelled else { return }
 
         if ax.caretRect == .zero {

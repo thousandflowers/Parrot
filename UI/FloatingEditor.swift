@@ -350,6 +350,15 @@ struct FloatingEditorView: View {
                     .buttonStyle(.borderless)
                     .controlSize(.small)
                     .accessibilityLabel("Retry")
+                Button("Use Stub") {
+                    Task { @MainActor in
+                        PreferencesStore.shared.serviceType = .stub
+                        checkText()
+                    }
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .accessibilityLabel("Switch to stub service and retry")
             }
 
             Spacer()

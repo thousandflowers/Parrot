@@ -5,6 +5,7 @@ actor RequestQueue {
 
     private var queue: [LLMRequest] = []
     private var isProcessing = false
+    private var lastAutoCheckProcessed = Date.distantPast
 
     struct LLMRequest {
         let id = UUID()
@@ -71,7 +72,17 @@ actor RequestQueue {
         isProcessing = true
         
         while !queue.isEmpty {
+            // Starvation guard: if no .autoCheck has been processed in 3 seconds,
+            // bump the oldest .autoCheck to the front so it doesn't wait forever.
+            if queue.contains(where: { $0.priority == .autoCheck }),
+               Date().timeIntervalSince(lastAutoCheckProcessed) > 3 {
+                if let idx = queue.firstIndex(where: { $0.priority == .autoCheck }) {
+                    let bumped = queue.remove(at: idx)
+                    queue.insert(bumped, at: 0)
+                }
+            }
             let request = queue.removeFirst()
+            if request.priority == .autoCheck { lastAutoCheckProcessed = Date() }
             
             if Date() > request.deadline {
                 request.continuation.yield(.failure(CorrectionError.serverTimeout))

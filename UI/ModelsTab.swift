@@ -234,7 +234,8 @@ struct ModelsTab: View {
 
         }
         .formStyle(.grouped)
-        .frame(maxHeight: .infinity)
+        .scrollIndicators(.hidden)
+        .frame(minHeight: 640, maxHeight: .infinity)
         .task {
             models = await ModelManager.shared.recommendedModels()
             localModels = await ModelManager.shared.localModels()

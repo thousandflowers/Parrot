@@ -13,9 +13,7 @@ struct LlamaCompletionClient: CompletionProviding {
     var session: URLSession = .shared
 
     static func systemPrompt(userPrompt: String) -> String {
-        var s = "You are an autocomplete engine. Continue the user's text naturally in the SAME language. "
-            + "Output ONLY the continuation that directly follows the text — do NOT repeat or restate the "
-            + "user's text, no quotes, no explanation. Keep it short: a few words."
+        var s = "Continue the user's text naturally in the SAME language. Output ONLY the few words that directly follow — no restating, no explanation, no quotes."
         let trimmed = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { s += "\nWriting style to match: \(trimmed)" }
         return s
@@ -25,15 +23,34 @@ struct LlamaCompletionClient: CompletionProviding {
     private struct RawCompletionResponse: Decodable { let content: String }
 
     /// Resolves which server + model to use, and whether to use the raw `/completion` endpoint.
-    private func resolveTarget() async -> Target? {
-        let mainID = (UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID) ?? "")
+    private func resolveTarget(context: CompletionContext) async -> Target? {
+        let mainID = context.selectedModelID
             .replacingOccurrences(of: ".gguf", with: "")
-        let compID = (UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.completionModelID) ?? "")
+        let compID = context.completionModelID
             .trimmingCharacters(in: .whitespaces)
 
         func mainTarget() async -> Target? {
-            let port = await ServerManager.shared.currentPort
-            return port > 0 ? Target(port: port, model: mainID.isEmpty ? "local" : mainID, useRawCompletion: false) : nil
+            // Reuse a server that's already up (Parrot warms one; an external llama-server may exist).
+            let running = await ServerManager.shared.currentPort
+            if running > 0 {
+                return Target(port: running, model: mainID.isEmpty ? "local" : mainID, useRawCompletion: false)
+            }
+            // Nothing running. Wren (completion-only) never warms a correction server, so start one now
+            // with the selected model — or any local model — otherwise completion silently never works.
+            let local = await ModelManager.shared.localModels()
+            let modelPath = local.first(where: { $0.id.caseInsensitiveCompare(mainID) == .orderedSame })?.path
+                ?? local.first?.path
+            guard let modelPath else {
+                Logger.infra.error("completion: no local model available — inline completion cannot run")
+                return nil
+            }
+            do {
+                let port = try await ServerManager.shared.ensureRunning(modelPath: modelPath)
+                return port > 0 ? Target(port: port, model: mainID.isEmpty ? "local" : mainID, useRawCompletion: false) : nil
+            } catch {
+                Logger.infra.error("completion: main server start failed — \(error.localizedDescription, privacy: .public)")
+                return nil
+            }
         }
 
         if compID.isEmpty || compID.caseInsensitiveCompare(mainID) == .orderedSame {
@@ -49,7 +66,12 @@ struct LlamaCompletionClient: CompletionProviding {
         // freeze the system. If the combined model size exceeds a safe fraction of physical RAM,
         // fall back to a single shared model. Auto-adapts: 8GB → single, 16GB → dedicated allowed.
         let ramBytes = Double(ProcessInfo.processInfo.physicalMemory)
-        let mainSize = Double(local.first(where: { $0.id.caseInsensitiveCompare(mainID) == .orderedSame })?.size ?? 0)
+        // On Wren the correction model is never resident (completion-only), so don't count its size
+        // toward the combined-RAM budget — that over-counted and needlessly forced the shared-model
+        // fallback. Only count it when this build actually runs correction (Parrot).
+        let mainSize = AppMode.current.showsCorrection
+            ? Double(local.first(where: { $0.id.caseInsensitiveCompare(mainID) == .orderedSame })?.size ?? 0)
+            : 0
         let combined = mainSize + Double(model.size)
         if combined > ramBytes * 0.30 {
             Logger.infra.info("completion: combined models too large for RAM — using single shared model")
@@ -65,15 +87,18 @@ struct LlamaCompletionClient: CompletionProviding {
     }
 
     func complete(context: CompletionContext, maxWords: Int) async throws -> String {
-        guard let target = await resolveTarget() else { throw CorrectionError.serverNotRunning }
+        guard let target = await resolveTarget(context: context) else { throw CorrectionError.serverNotRunning }
         let pre = String(context.preContext.suffix(Constants.completionMaxPrefixChars))
+        let postText = String(context.postContext.prefix(Constants.completionMaxPrefixChars))
         // Generate enough tokens for WHOLE words (avoid mid-word cut-off), trim to maxWords in post.
-        let nPredict = max(12, maxWords * 5)
+        let nPredict = max(6, maxWords * 4)
+
+        let promptOverride = context.userPromptOverride
 
         if target.useRawCompletion {
             return try await rawCompletion(prefix: pre, port: target.port, nPredict: nPredict)
         } else {
-            return try await chatCompletion(prefix: pre, model: target.model, port: target.port, nPredict: nPredict)
+            return try await chatCompletion(context: context, prefix: pre, postText: postText, model: target.model, port: target.port, nPredict: nPredict, promptOverride: promptOverride)
         }
     }
 
@@ -93,18 +118,37 @@ struct LlamaCompletionClient: CompletionProviding {
     }
 
     // MARK: - Chat completion (instruct main model)
-    private func chatCompletion(prefix: String, model: String, port: Int, nPredict: Int) async throws -> String {
+    private func chatCompletion(context: CompletionContext, prefix: String, postText: String, model: String, port: Int, nPredict: Int, promptOverride: String? = nil) async throws -> String {
+        let strength = context.personalizationStrength
         guard let url = URL(string: "http://127.0.0.1:\(port)/v1/chat/completions") else { throw CorrectionError.serverNotRunning }
-        let userPrompt = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.completionUserPrompt) ?? ""
-        let body = ChatRequest(
-            model: model,
-            messages: [ChatMessage(role: "system", content: Self.systemPrompt(userPrompt: userPrompt)),
-                       ChatMessage(role: "user", content: prefix)],
-            temperature: Constants.completionTemperature, max_tokens: nPredict, stream: false,
-            sampling: SamplingParams(topP: 0.9, topK: 40, minP: 0.05, repeatPenalty: 1.3,
-                                     seed: nil, frequencyPenalty: 0.7, presencePenalty: 0.4)
-        )
-        let data = try await post(url: url, body: try JSONEncoder().encode(body))
+        // Priority: per-app rule override → personalizationInstructions → completionUserPrompt.
+        let effectivePrompt: String = {
+            if let ov = promptOverride, !ov.isEmpty { return ov }
+            if !context.personalizationInstructions.isEmpty { return context.personalizationInstructions }
+            return UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.completionUserPrompt) ?? ""
+        }()
+        // Scale temperature by personalization strength (0.0 = no influence, coldest; 1.0 = default temp).
+        let temp = 0.1 + (Constants.completionTemperature - 0.1) * strength
+        // Manual payload so we can pass llama-server's `cache_prompt`: reuses the KV cache of the
+        // constant system prompt across keystrokes, cutting the ~2.6s prompt-eval after the first call
+        // (the dominant latency that made suggestions arrive too late and get superseded).
+        var userContent = prefix
+        if !postText.isEmpty {
+            userContent += "\n\n[this text comes AFTER the cursor, do NOT generate it: \(postText)]"
+        }
+        let payload: [String: Any] = [
+            "model": model,
+            "messages": [["role": "system", "content": Self.systemPrompt(userPrompt: effectivePrompt)],
+                         ["role": "user", "content": userContent]],
+            "temperature": temp,
+            "max_tokens": nPredict,
+            "stream": false,
+            "cache_prompt": true,
+            "stop": ["\n", "User:", "Assistant:"],
+            "top_p": 0.9, "top_k": 40, "min_p": 0.05,
+            "repeat_penalty": 1.3, "frequency_penalty": 0.7, "presence_penalty": 0.4
+        ]
+        let data = try await post(url: url, json: payload)
         return (try? JSONDecoder().decode(ChatResponse.self, from: data))?.choices.first?.message.content ?? ""
     }
 
@@ -112,15 +156,31 @@ struct LlamaCompletionClient: CompletionProviding {
     private func post(url: URL, json: [String: Any]) async throws -> Data {
         try await post(url: url, body: try JSONSerialization.data(withJSONObject: json))
     }
-    private func post(url: URL, body: Data) async throws -> Data {
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = body
-        request.timeoutInterval = 10
-        let (data, response) = try await session.data(for: request)
-        if let http = response as? HTTPURLResponse, http.statusCode != 200 { throw CorrectionError.serverTimeout }
-        try Task.checkCancellation()
-        return data
+    private func post(url: URL, body: Data, retries: Int = 1) async throws -> Data {
+        var lastError: Error = CorrectionError.serverTimeout
+        for attempt in 0...retries {
+            if attempt > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                try Task.checkCancellation()
+            }
+            do {
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.httpBody = body
+                request.timeoutInterval = 10
+                let (data, response) = try await session.data(for: request)
+                if let http = response as? HTTPURLResponse, http.statusCode != 200 { throw CorrectionError.serverTimeout }
+                try Task.checkCancellation()
+                return data
+            } catch {
+                if error is URLError {
+                    lastError = error
+                    continue
+                }
+                throw error
+            }
+        }
+        throw lastError
     }
 }

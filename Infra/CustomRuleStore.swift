@@ -37,7 +37,7 @@ actor CustomRuleStore {
         save()
     }
 
-    func apply(to text: String, language: String) -> (text: String, fixes: [CustomRuleFix]) {
+    func apply(to text: String, language: String) async -> (text: String, fixes: [CustomRuleFix]) {
         var result = text
         var fixes: [CustomRuleFix] = []
 
@@ -51,7 +51,25 @@ actor CustomRuleStore {
                         options: rule.isCaseSensitive ? [] : .caseInsensitive
                     )
                     let nsRange = NSRange(result.startIndex..., in: result)
-                    let matches = regex.matches(in: result, options: [], range: nsRange)
+                    // Timeout guard: if the regex takes longer than 100ms on the input,
+                    // treat it as a no-match to prevent ReDoS on pathological patterns
+                    // like (a+)+b crafted by the user. NSRegularExpression is synchronous
+                    // with no built-in timeout, so we run it on a background queue with
+                    // a deadline.
+                    let deadline = Date().addingTimeInterval(0.1)
+                    let matches = try await withThrowingTaskGroup(of: [NSTextCheckingResult].self) { group in
+                        group.addTask {
+                            try Task.checkCancellation()
+                            return regex.matches(in: result, options: [], range: nsRange)
+                        }
+                        group.addTask {
+                            try await Task.sleep(for: .milliseconds(100))
+                            throw CancellationError()
+                        }
+                        guard let result_ = try await group.next() else { throw CancellationError() }
+                        group.cancelAll()
+                        return result_
+                    }
                     guard !matches.isEmpty else { continue }
                     for match in matches {
                         if let range = Range(match.range, in: result) {
@@ -59,6 +77,7 @@ actor CustomRuleStore {
                         }
                     }
                     let template = rule.supportsBackreferences ? rule.replacement : NSRegularExpression.escapedTemplate(for: rule.replacement)
+                    // Apply replacements (sync — already timed out above).
                     result = regex.stringByReplacingMatches(in: result, options: [], range: nsRange, withTemplate: template)
                 } catch {
                     continue

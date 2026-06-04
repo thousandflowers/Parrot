@@ -17,41 +17,72 @@ actor ScreenContextProvider {
     private var capturing = false
 
     /// Returns recent on-screen text (cached). Empty if unavailable / no permission.
-    /// Captures the focused app's frontmost window when `pid` is given (cleaner, more relevant, and
-    /// faster than the whole display); falls back to the main display.
-    func currentContext(pid: pid_t = 0) async -> String {
-        if Date().timeIntervalSince(lastCapture) < Constants.completionScreenContextTTL { return cached }
-        if capturing { return cached }
-        capturing = true
-        defer { capturing = false }
-
-        let image = (pid != 0 ? Self.captureFrontWindow(pid: pid) : nil) ?? Self.captureMainDisplay()
-        guard let image else { return cached }
-        let text = await Self.recognizeText(in: image)
-        if !text.isEmpty {
-            cached = String(text.suffix(Constants.completionScreenContextMaxChars))
-            lastCapture = Date()
+    /// Captures the focused app's frontmost window, then OCRs ONLY the region strictly above the
+    /// caret (the conversation/email being replied to) — never the user's input field, which is what
+    /// keeps the model from re-reading its own output. Falls back to the whole window when no caret.
+    /// `caretRect` is the Cocoa (bottom-left) screen rect; `screenHeight` flips it to image space.
+    /// NON-BLOCKING: returns the last OCR result immediately (possibly empty/stale) and, when the
+    /// cache is older than the TTL, kicks off a background re-capture+OCR. Completion never waits on
+    /// the screen capture, so screen context adds no latency to the suggestion path.
+    func currentContext(pid: pid_t = 0, caretRect: CGRect = .zero, screenHeight: CGFloat = 0) -> String {
+        if Date().timeIntervalSince(lastCapture) >= Constants.completionScreenContextTTL, !capturing {
+            capturing = true
+            Task { await self.refresh(pid: pid, caretRect: caretRect, screenHeight: screenHeight) }
         }
         return cached
     }
 
-    /// Captures just the frontmost on-screen window owned by `pid` (the app being typed in).
-    private static func captureFrontWindow(pid: pid_t) -> CGImage? {
+    /// Captures the front window, crops to above the caret, OCRs, and updates the cache. Runs in the
+    /// background off the suggestion path.
+    private func refresh(pid: pid_t, caretRect: CGRect, screenHeight: CGFloat) async {
+        defer { capturing = false }
+
+        let captured = (pid != 0 ? Self.captureFrontWindow(pid: pid) : nil)
+        guard var img = captured?.image ?? Self.captureMainDisplay() else { return }
+
+        // Crop to above the caret so the input field is excluded.
+        if caretRect != .zero, screenHeight > 0, let bounds = captured?.bounds {
+            let caretTL = CGRect(x: caretRect.minX, y: screenHeight - caretRect.maxY,
+                                 width: caretRect.width, height: caretRect.height)
+            if let crop = ScreenCropper.cropAboveCaret(windowBounds: bounds,
+                                                       caretRectTopLeft: caretTL,
+                                                       imageSize: CGSize(width: img.width, height: img.height)),
+               let cropped = img.cropping(to: crop) {
+                img = cropped
+            }
+        }
+
+        let text = await Self.recognizeText(in: img)
+        if !text.isEmpty {
+            cached = String(text.suffix(Constants.completionScreenContextMaxChars))
+            lastCapture = Date()
+        }
+    }
+
+    /// Captures just the frontmost on-screen window owned by `pid` (the app being typed in), with its
+    /// on-screen bounds (points, top-left origin) so the image can be cropped relative to the caret.
+    private static func captureFrontWindow(pid: pid_t) -> (image: CGImage, bounds: CGRect)? {
         guard CGPreflightScreenCaptureAccess() else { return nil }
         guard let infoList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return nil }
         // Pick the largest normal-layer window belonging to this PID.
         var bestID: CGWindowID?
+        var bestBounds: CGRect = .zero
         var bestArea: CGFloat = 0
         for w in infoList {
             guard (w[kCGWindowOwnerPID as String] as? pid_t) == pid,
                   (w[kCGWindowLayer as String] as? Int) == 0,
                   let b = w[kCGWindowBounds as String] as? [String: CGFloat],
                   let id = w[kCGWindowNumber as String] as? CGWindowID else { continue }
-            let area = (b["Width"] ?? 0) * (b["Height"] ?? 0)
-            if area > bestArea { bestArea = area; bestID = id }
+            let width = b["Width"] ?? 0, height = b["Height"] ?? 0
+            let area = width * height
+            if area > bestArea {
+                bestArea = area; bestID = id
+                bestBounds = CGRect(x: b["X"] ?? 0, y: b["Y"] ?? 0, width: width, height: height)
+            }
         }
-        guard let windowID = bestID else { return nil }
-        return CGWindowListCreateImage(.null, .optionIncludingWindow, windowID, [.boundsIgnoreFraming, .nominalResolution])
+        guard let windowID = bestID,
+              let image = CGWindowListCreateImage(.null, .optionIncludingWindow, windowID, [.boundsIgnoreFraming, .nominalResolution]) else { return nil }
+        return (image, bestBounds)
     }
 
     /// Asks for Screen Recording permission (no-op if already granted).

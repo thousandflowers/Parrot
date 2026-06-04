@@ -4,7 +4,15 @@ import OSLog
 
 @MainActor
 final class GlobalHotkeyManager {
-    nonisolated(unsafe) private(set) static weak var current: GlobalHotkeyManager?
+    nonisolated private static let _currentLock = OSAllocatedUnfairLock<WeakRef>(initialState: WeakRef())
+
+    private struct WeakRef: @unchecked Sendable {
+        weak var value: GlobalHotkeyManager?
+    }
+
+    static var current: GlobalHotkeyManager? {
+        _currentLock.withLock { $0.value }
+    }
 
     private var eventHandler: EventHandlerRef?
     private var hotKeyRefs: [EventHotKeyRef] = []
@@ -13,7 +21,7 @@ final class GlobalHotkeyManager {
     private var nextID: UInt32 = 1
     private(set) var failedShortcuts: [String] = []
 
-    init() { Self.current = self }
+    init() { Self._currentLock.withLock { $0.value = self } }
 
     func registerHotkeys() {
         unregisterAll()

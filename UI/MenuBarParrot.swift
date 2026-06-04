@@ -361,8 +361,7 @@ final class ParrotView: NSView {
             el.lineWidth = 0.9
             el.stroke()
         } else {
-            let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            let bg = isDark ? NSColor(white: 0.2, alpha: 1) : NSColor.white
+            let bg = NSColor.eyeSurface
             bg.setFill()
             NSBezierPath(ovalIn: CGRect(x: 9.5, y: 9.7, width: 1.8, height: 1.8)).fill()
             ink.setFill()

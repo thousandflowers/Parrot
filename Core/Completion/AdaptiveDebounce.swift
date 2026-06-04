@@ -6,7 +6,10 @@ import Foundation
 struct AdaptiveDebounce {
     let minMs: Int
     let maxMs: Int
-    init(minMs: Int = 40, maxMs: Int = 200) { self.minMs = minMs; self.maxMs = maxMs }
+    // Floor ~140ms: snappy ("quasi in tempo reale") but still coalesces a burst of fast keystrokes
+    // into one request on the pause. Paired with a FAST model (qwen-1.5b) the request completes
+    // before the next pause, so we avoid the supersede storm without making the user wait.
+    init(minMs: Int = 140, maxMs: Int = 300) { self.minMs = minMs; self.maxMs = maxMs }
 
     func nextDelayMs(sinceLastKeystrokeMs: Int) -> Int {
         // Map [0 .. maxMs] gap → [maxMs .. minMs] delay (inverse). Clamp outside.

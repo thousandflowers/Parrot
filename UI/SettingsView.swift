@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     @State private var prefs = PreferencesStore.shared
@@ -57,6 +58,7 @@ struct SettingsView: View {
             .listStyle(.sidebar)
             .tint(.accentColor)
             .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
             .frame(minWidth: 180, idealWidth: 210, maxWidth: 260)
 
             Divider()
@@ -64,6 +66,7 @@ struct SettingsView: View {
             selectedTab.destination(prefs: prefs, serverIsRunning: serverIsRunning)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background()
+                .background(AccessibilityScrollCleaner())
         }
         .frame(minWidth: 680, minHeight: 420)
         .onAppear {
@@ -92,6 +95,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case inlineAnnotations
     case contacts
     case completion
+    case dashboard
 
     var id: String { rawValue }
 
@@ -114,6 +118,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .inlineAnnotations: return "Inline"
         case .contacts:     return "Contacts"
         case .completion:   return "Completion"
+        case .dashboard:    return "Dashboard"
         }
     }
 
@@ -136,13 +141,14 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .inlineAnnotations: return "text.badge.checkmark"
         case .contacts:     return "person.2"
         case .completion:   return "text.append"
+        case .dashboard:    return "chart.bar"
         }
     }
 
     // Tabs are mode-specific: Canary shows completion + shared settings; Parrot shows correction.
     static var behaviorTabs: [SettingsTab] {
         AppMode.current.showsCompletion
-            ? [.completion, .exclusions, .shortcuts]
+            ? [.completion, .exclusions, .shortcuts, .dashboard]
             : [.prompt, .appRules, .customRules, .exclusions, .inlineAnnotations, .dictionary, .shortcuts, .presets]
     }
     static var dataTabs: [SettingsTab] {
@@ -166,6 +172,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .advanced:    AdvancedTab()
         case .inlineAnnotations: InlineAnnotationsTab(prefs: prefs)
         case .completion:  CompletionTab(prefs: prefs)
+        case .dashboard:   DashboardTab()
         case .history:     HistoryTab()
         case .exportImport: ExportImportTab()
         case .iCloud:      iCloudSyncTab()
@@ -174,6 +181,31 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .contacts:    ContactsSettingsTab()
         }
     }
+}
+
+// MARK: - AX Scroll Cleaner
+
+/// NSViewRepresentable that walks the superview chain to find NSScrollViews
+/// and hides their scrollers from the accessibility tree. This prevents ghost
+/// AX elements (size 0×0 for scroll track, thumb, arrows) that SwiftUI leaks
+/// on macOS. The scrollers remain visually present.
+private struct AccessibilityScrollCleaner: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.setAccessibilityElement(false)
+        DispatchQueue.main.async {
+            var current = view.superview
+            while let c = current {
+                if let sv = c as? NSScrollView {
+                    sv.verticalScroller?.setAccessibilityElement(false)
+                    sv.horizontalScroller?.setAccessibilityElement(false)
+                }
+                current = c.superview
+            }
+        }
+        return view
+    }
+    func updateNSView(_: NSView, context: Context) {}
 }
 
 #Preview {

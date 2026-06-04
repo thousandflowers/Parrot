@@ -57,13 +57,18 @@ actor HarperEngine {
         process.standardOutput = outputPipe
         process.standardError = FileHandle.nullDevice
 
+        // Ensure pipes are closed even if process.run() throws between setup and
+        // the write — otherwise file descriptors leak until the actor is deallocated.
+        defer {
+            // Close write-ends so the child process sees EOF even on early return.
+            try? inputPipe.fileHandleForWriting.close()
+        }
+
         try process.run()
 
         let inputData = text.data(using: .utf8) ?? Data()
-        DispatchQueue.global(qos: .userInitiated).async {
-            inputPipe.fileHandleForWriting.write(inputData)
-            try? inputPipe.fileHandleForWriting.close()
-        }
+        inputPipe.fileHandleForWriting.write(inputData)
+        try inputPipe.fileHandleForWriting.close()
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             process.terminationHandler = { _ in continuation.resume() }

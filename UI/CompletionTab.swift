@@ -58,28 +58,23 @@ struct CompletionTab: View {
             }
 
             Section {
-                Toggle("Use screen context", isOn: Binding(
-                    get: { prefs.completionUseScreenContext },
-                    set: { newValue in
-                        prefs.completionUseScreenContext = newValue
-                        if newValue { ScreenContextProvider.requestPermission() }
-                    }
-                ))
-                Toggle("Use clipboard context", isOn: $prefs.completionUseClipboardContext)
-            } header: {
-                Label("Context", systemImage: "rectangle.dashed.and.paperclip")
-            } footer: {
-                Text("Screen context reads on-screen text (the conversation/email you're replying to) via on-device OCR (throttled, needs Screen Recording). Clipboard context adds your copied text. Both ground suggestions so they fit.")
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                TextField("e.g. Write in a friendly, concise voice.", text: $prefs.completionUserPrompt, axis: .vertical)
+                TextField("e.g. Write in a friendly, concise voice.", text: $prefs.personalizationInstructions, axis: .vertical)
                     .lineLimit(2...5)
+                VStack(alignment: .leading, spacing: 4) {
+                    LabeledContent("Personalization strength") {
+                        Text("\(prefs.personalizationStrength, format: .percent.precision(.fractionLength(0)))")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    Slider(value: $prefs.personalizationStrength, in: 0...1, step: 0.1)
+                    Text("How strongly your instructions influence suggestions. 0% = base model only, 100% = full personalization.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
             } header: {
                 Label("Personalization", systemImage: "person.crop.circle")
             } footer: {
-                Text("Optional note about how you write. Used to steer suggestions toward your voice.")
+                Text("Optional note about how you write. Steers suggestions toward your voice. Higher strength = more influence.")
                     .foregroundStyle(.secondary)
             }
         }
