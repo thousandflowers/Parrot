@@ -23,33 +23,24 @@ actor CompletionEngine {
         generation &+= 1
         let mine = generation
 
-        for attempt in 0..<2 {
-            var attemptCtx = context
-            attemptCtx.generationSeed = UInt32(attempt)   // 0 first, 1 on retry → different sampling
-            let raw: String
-            do { raw = try await provider.complete(context: attemptCtx, maxWords: maxWords) }
-            catch is CancellationError { return nil }
-            catch {
-                Logger.infra.debug("CompletionEngine: provider failed — \(error.localizedDescription, privacy: .public)")
-                return nil
-            }
-
-            #if DEBUG
-            CrashLogger.log("DIAG engine: raw='\(raw.replacingOccurrences(of: "\n", with: "\\n").prefix(50))' len=\(raw.count) superseded=\(mine != generation)")
-            #endif
-
-            guard mine == generation else { return nil }
-            if let cleaned = CompletionPostprocessor.clean(raw: raw, preContext: context.preContext,
-                                                           maxWords: maxWords, allowCode: allowCode, midWord: midWord),
-               !cleaned.isEmpty {
-                return CompletionSuggestion(text: cleaned)
-            }
-            #if DEBUG
-            CrashLogger.log("DIAG engine: clean→nil for raw='\(raw.replacingOccurrences(of: "\n", with: "\\n").prefix(50))'")
-            #endif
-            if attempt == 0 { continue }   // one retry, then give up
+        // Single attempt — the retry (a 2nd inference with a different seed) DOUBLED latency on
+        // every rejected output (e.g. the model suggesting a bare year "2016" → rejected → retry →
+        // another number → still rejected), which the user felt as lag. Not worth it.
+        let raw: String
+        do { raw = try await provider.complete(context: context, maxWords: maxWords) }
+        catch is CancellationError { return nil }
+        catch {
+            Logger.infra.debug("CompletionEngine: provider failed — \(error.localizedDescription, privacy: .public)")
+            return nil
         }
-        return nil
+        #if DEBUG
+        CrashLogger.log("DIAG engine: raw='\(raw.replacingOccurrences(of: "\n", with: "\\n").prefix(50))' len=\(raw.count) superseded=\(mine != generation)")
+        #endif
+        guard mine == generation else { return nil }
+        guard let cleaned = CompletionPostprocessor.clean(raw: raw, preContext: context.preContext,
+                                                          maxWords: maxWords, allowCode: allowCode, midWord: midWord),
+              !cleaned.isEmpty else { return nil }
+        return CompletionSuggestion(text: cleaned)
     }
 
     /// Prefetch variant: does NOT touch `generation`, so it can never cancel a live request.

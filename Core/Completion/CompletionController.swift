@@ -293,20 +293,10 @@ final class CompletionController {
         await StatsStore.shared.recordShown()
         Logger.infra.debug("completion: showing \(suggestion.text, privacy: .public) at \(NSStringFromRect(ax.caretRect), privacy: .public)")
 
-        // Task 6 — speculative accepted-branch pre-compute: compute the completion of
-        // (preContext + suggestion.text) in the background and warm the cache, so when the
-        // user accepts the full suggestion the next completion is instant from the cache.
-        let acceptedContext = preContext + suggestion.text
-        let postCtx = ax.postContext
-        let mw = maxWords        // original maxWords, not effectiveMaxWords
-        prefetchTask?.cancel()
-        prefetchTask = Task { [weak self] in
-            let ctx = CompletionContext(preContext: acceptedContext, postContext: postCtx,
-                                        language: PreferencesStore.shared.language)
-            guard let next = await CompletionEngine.shared.suggestForPrefetch(context: ctx, maxWords: mw, allowCode: allowCode),
-                  !Task.isCancelled else { return }
-            await MainActor.run { self?.cache.set(contextHash: String(acceptedContext.suffix(80)), suggestion: next.text) }
-        }
+        // NOTE: speculative accepted-branch pre-compute was tried here and REMOVED — the background
+        // prefetch shares the single helper pipe and, with a 4B model, held it long enough that live
+        // requests waited seconds (suggestions "disappeared, new only after seconds"). Cancelling the
+        // Swift Task doesn't free the in-flight helper inference, so the contention stayed.
     }
 
     /// Tab — accept the suggestion: insert a completion, or fix a typo by replacing the last word.
