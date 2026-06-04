@@ -39,7 +39,7 @@ enum CompletionPostprocessor {
             // Strip a LEADING list/enumeration marker ("1)", "2.", "- ", "• ") — the model sometimes
             // slips into a numbered/bulleted list or internal reasoning ("1) First, …") instead of
             // continuing the sentence. After stripping, a bare " 1)" leaves nothing → rejected below.
-            text = text.replacingOccurrences(of: "^\\s*(\\d{1,2}[.)]|[-•*])\\s*", with: "",
+            text = text.replacingOccurrences(of: "^\\s*(\\d{1,4}[.):]|[-•*])\\s*", with: "",
                                              options: .regularExpression)
             // Only reject keywords in code-definition form (e.g. "function foo()")
             // — standalone "function" or "import" in plain English is valid text.
@@ -88,7 +88,7 @@ enum CompletionPostprocessor {
         //    - mid-word → CONTINUE the token, no space, even if the model emitted one ("rece"→"ption");
         //    - word boundary after a non-space char → exactly one leading space;
         //    - empty preContext or already ends with whitespace → no leading space (never double).
-        let lead = String(capped.drop(while: { $0 == " " }))
+        let lead = String(capped.drop(while: { $0.isWhitespace }))   // strip leading space OR tab (model echoes "\t")
         if midWord {
             capped = lead                                       // continue the token, no space ("rece"+" ption"→"ption")
         } else if let last = preContext.last, !last.isWhitespace {
