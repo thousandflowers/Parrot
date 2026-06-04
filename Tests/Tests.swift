@@ -1259,6 +1259,24 @@ final class CompletionPostprocessorTests: XCTestCase {
             raw: " molto gentile.", preContext: "sei stato", maxWords: 6)
         XCTAssertEqual(out, " molto gentile.")
     }
+
+    func test_rejectsScriptSwitch_latinToCJK() {
+        let out = CompletionPostprocessor.clean(
+            raw: "你好世界吗", preContext: "Ti scrivo per ", maxWords: 6)
+        XCTAssertNil(out)
+    }
+    func test_allowsCJK_whenContextIsCJK() {
+        let out = CompletionPostprocessor.clean(
+            raw: "世界很大", preContext: "你好，", maxWords: 6)
+        XCTAssertNotNil(out)
+    }
+    func test_allowsForeignNameMidLatin() {
+        // a single non-Latin token inside a Latin suggestion is NOT a full script switch — must not be nil
+        let out = CompletionPostprocessor.clean(
+            raw: " di George Orwell", preContext: "un libro ", maxWords: 6)
+        XCTAssertNotNil(out)
+        XCTAssertEqual(out?.trimmingCharacters(in: .whitespaces), "di George Orwell")
+    }
 }
 
 final class LlamaCompletionClientTests: XCTestCase {

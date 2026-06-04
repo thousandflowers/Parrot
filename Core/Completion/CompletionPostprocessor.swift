@@ -24,14 +24,9 @@ enum CompletionPostprocessor {
         // 0. In plain-text fields, base (web-pretrained) models sometimes drift into HTML/markdown/
         //    code. Strip inline markup and reject code-looking output. SKIPPED in code editors, where
         //    code/markup is exactly what the user wants.
-        // Language containment: qwen is a Chinese-origin model and sometimes drifts into CJK mid-
-        // completion. Reject any suggestion containing CJK (Han / kana / Hangul) — Wren's users write
-        // Latin-script languages, so a CJK run is always wrong output, not a useful completion.
-        if text.unicodeScalars.contains(where: { s in
-            (0x4E00...0x9FFF).contains(s.value) || (0x3400...0x4DBF).contains(s.value) ||
-            (0x3040...0x30FF).contains(s.value) || (0xAC00...0xD7AF).contains(s.value) ||
-            (0xF900...0xFAFF).contains(s.value) || (0xFF00...0xFFEF).contains(s.value)
-        }) { return nil }
+        // Reject only an UNWANTED script switch: if the context is Latin and the suggestion is
+        // (mostly) CJK, drop it; if the user writes CJK, CJK is fine. Granular, supports all users.
+        if isCJKDominant(text) && !isCJKDominant(preContext) { return nil }
 
         if !allowCode {
             text = text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
@@ -112,6 +107,20 @@ enum CompletionPostprocessor {
         if !text.contains(where: { $0.isLetter }) { return nil }
 
         return text
+    }
+
+    private static func isCJKDominant(_ s: String) -> Bool {
+        func isCJK(_ v: UInt32) -> Bool {
+            (0x4E00...0x9FFF).contains(v) || (0x3400...0x4DBF).contains(v) ||
+            (0x3040...0x30FF).contains(v) || (0xAC00...0xD7AF).contains(v) ||
+            (0xF900...0xFAFF).contains(v)
+        }
+        var letters = 0, cjk = 0
+        for ch in s {
+            for v in ch.unicodeScalars where ch.isLetter { letters += 1; if isCJK(v.value) { cjk += 1 }; break }
+        }
+        guard letters > 0 else { return false }
+        return Double(cjk) / Double(letters) >= 0.5
     }
 
     /// Removes any leading run of `suggestion` that merely restates the tail of `preContext`.
