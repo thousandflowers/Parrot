@@ -69,6 +69,18 @@ enum CompletionPostprocessor {
                 words.removeFirst()
             }
         }
+        // 3b. Collapse internal repetitions so the model's looping reads as a clean sentence instead
+        //     of being thrown away (#2 "frasi con ripetizioni"): drop immediate duplicate words
+        //     ("the the" → "the") and a whole-phrase doubling ("I think I think" → "I think").
+        var deduped: [String] = []
+        for w in words where deduped.last?.lowercased() != w.lowercased() { deduped.append(w) }
+        words = deduped
+        if words.count >= 4, words.count % 2 == 0 {
+            let half = words.count / 2
+            if words.prefix(half).map({ $0.lowercased() }) == words.suffix(half).map({ $0.lowercased() }) {
+                words = Array(words.prefix(half))
+            }
+        }
         guard !words.isEmpty else { return nil }
         var capped = words.prefix(max(1, maxWords)).joined(separator: " ")
 

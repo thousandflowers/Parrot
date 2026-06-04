@@ -130,28 +130,17 @@ final class CompletionController {
         // Universal fallback when AX gives nothing readable — nil OR an empty value (Chromium web
         // fields, terminals often expose an empty AX value rather than nil). Complete from the
         // typed-input buffer, anchoring the ghost near the mouse cursor (floating hint).
+        // AX-blind fallback DISABLED for now: fabricating a mouse-anchored ghost from the typed-input
+        // buffer produced unreliable / nonsense suggestions outside real text fields (#5 — even "not in
+        // a text box"). Wren suggests ONLY where AX exposes a real field. Proper AX-blind support for
+        // Chromium/Electron is deferred to dedicated caret-bounds work.
         if ax == nil || (ax?.preContext.isEmpty ?? true) {
-            let pre = typedBuffer.preContext
             #if DEBUG
-            CrashLogger.log("DIAG req: AX empty → typedBuffer len=\(pre.count)")
+            CrashLogger.log("DIAG req: AX empty → no suggestion (AX-blind fallback disabled)")
             #endif
-            if !pre.isEmpty {
-                // AX previously saw a real text field — now it doesn't. The user left the field;
-                // the buffer is stale. Clear it and bail instead of ghosting at the mouse cursor.
-                if lastAXFoundField {
-                    typedBuffer.invalidate()
-                    return
-                }
-                let existingCaret = ax?.caretRect ?? .zero
-                let caret: CGRect
-                if existingCaret != .zero {
-                    caret = existingCaret
-                } else {
-                    let mouse = NSEvent.mouseLocation    // screen coords, bottom-left origin
-                    caret = CGRect(x: mouse.x + 12, y: mouse.y - 18, width: 0, height: 16)
-                }
-                ax = CompletionAXContext(preContext: pre, postContext: "", caretRect: caret, isSecure: false)
-            }
+            typedBuffer.invalidate()
+            lastAXFoundField = false
+            return
         }
         lastAXFoundField = axHasField
         guard let ax, !ax.isSecure else {
