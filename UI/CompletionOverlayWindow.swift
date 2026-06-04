@@ -35,7 +35,6 @@ final class CompletionOverlayWindow {
     func show(text: String, atCaretRect rect: CGRect, fontName: String? = nil, fontSize: CGFloat = 0) {
         guard !text.isEmpty, rect != .zero else { hide(); return }
         let panel = ensurePanel()
-
         // Attributed string: first word bold + brighter (partial-accept target), rest dimmed.
         let attributed = NSMutableAttributedString(string: text)
         let fullRange = NSRange(location: 0, length: text.count)

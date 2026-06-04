@@ -157,8 +157,23 @@ final class CompletionController {
         CrashLogger.log("DIAG req: app=\(bundleID ?? "?") preLen=\(ax.preContext.count) caret=\(ax.caretRect != .zero) allowCode=\(allowCode)")
         #endif
 
+        // Snippet expansion: trailing token matches a saved abbreviation → Tab expands it.
+        if ax.caretRect != .zero {
+            let token = String(ax.preContext.reversed().prefix { !$0.isWhitespace }.reversed())
+            if token.count >= 2, token.count <= 30,
+               let raw = await SnippetStore.shared.expansion(for: token) {
+                let expansion = SnippetExpander.expand(raw)
+                current = CompletionSuggestion(text: expansion, kind: .replaceLastWord(wrong: token))
+                currentPID = pid
+                TabInterceptor.setSuggestionVisible(true)
+                overlay.show(text: expansion.count > 30 ? String(expansion.prefix(30)) + "…" : expansion, atCaretRect: ax.caretRect)
+                Logger.infra.debug("completion: snippet \(token, privacy: .public)")
+                return
+            }
+        }
+
         // Emoji: typing ":shortcode" → Tab replaces it with the emoji.
-        if ax.caretRect != .zero, let em = EmojiCompletion.match(preContext: ax.preContext) {
+        if ax.caretRect != .zero, let em = EmojiCompletion.match(preContext: ax.preContext, skinTone: PreferencesStore.shared.completionEmojiSkinTone) {
             current = CompletionSuggestion(text: em.emoji, kind: .replaceLastWord(wrong: em.shortcode))
             currentPID = pid
             guard suggestionGen == gen else { return }
@@ -215,6 +230,27 @@ final class CompletionController {
             return
         }
 
+        // Enrich the prefix with on-screen context (the conversation/email above the field, which is
+        // NOT in the text field) so suggestions are grounded, not "pulled from a hat". The user's own
+        // text stays LAST so the model continues IT. Screen OCR is cached/throttled (anti-stutter).
+        // Note: the persona/userPrompt is NOT prepended to the base completion model — base models
+        // continue text, not instructions, and the meta text dilutes the continuation. Personalization
+        // comes from the learning store (your accepted phrases) instead.
+        var contextParts: [String] = []
+        if PreferencesStore.shared.completionUseClipboardContext,
+           let clip = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !clip.isEmpty, clip.count <= 400 {
+            contextParts.append(String(clip.prefix(400)))
+        }
+        if PreferencesStore.shared.completionUseScreenContext {
+            let screen = await ScreenContextProvider.shared.currentContext(pid: pid)
+            if !screen.isEmpty { contextParts.append(screen) }
+        }
+        // User's own text stays LAST so the model continues IT.
+        let preContext = contextParts.isEmpty ? ax.preContext : (contextParts + [ax.preContext]).joined(separator: "\n\n")
+
+        let context = CompletionContext(preContext: preContext, postContext: ax.postContext,
+                                        language: PreferencesStore.shared.language)
         guard CompletionContext(preContext: ax.preContext, postContext: ax.postContext, language: "").isUsable else { return }
 
         // Use ONLY the text-field content as preContext — no screen-OCR enrichment.

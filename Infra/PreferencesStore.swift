@@ -315,6 +315,10 @@ final class PreferencesStore {
         get { bool(Constants.UserDefaultsKey.completionUseClipboardContext, default: false) }
         set { set(newValue, for: Constants.UserDefaultsKey.completionUseClipboardContext) }
     }
+    var completionEmojiSkinTone: Int {
+        get { int(Constants.UserDefaultsKey.completionEmojiSkinTone, fallback: 0) }
+        set { set(newValue, for: Constants.UserDefaultsKey.completionEmojiSkinTone) }
+    }
 
     var personalizationStrength: Double {
         get { double(Constants.UserDefaultsKey.personalizationStrength, fallback: 0.5) }

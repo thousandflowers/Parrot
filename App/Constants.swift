@@ -23,13 +23,13 @@ enum Constants {
 
     // MARK: - Inline completion (SP1)
     static let completionTemperature: Double = 0.3
-    static let completionDefaultMaxWords = 2        // a couple words → granular control + fast
+    static let completionDefaultMaxWords = 2        // 1–2 words: granular, avoids over-suggesting/drift
     static let completionDefaultDebounceMs = 350    // wait for a real pause → far fewer inferences
     static let completionMinPrefixChars = 3         // don't suggest on near-empty fields
     // Preceding text sent to the model. Longer = more relevant ("not pulled from a hat"); KV-cache
     // reuse makes the extra context cheap after the first decode.
     static let completionMaxPrefixChars = 800
-    static let completionScreenContextMaxChars = 600   // OCR'd on-screen text injected as context
+    static let completionScreenContextMaxChars = 280   // recent on-screen text near the input (tail)
     static let completionScreenContextTTL: TimeInterval = 3   // re-OCR at most this often (anti-stutter)
 
     /// Self-consistency passes for local grammar checks. Small models are noisy: running
@@ -117,5 +117,6 @@ enum Constants {
         static let personalizationInstructions = "personalizationInstructions"
         static let snippets = "snippets"
         static let completionOverlayFontSize = "completionOverlayFontSize"
+        static let completionEmojiSkinTone = "completionEmojiSkinTone"   // 0=none, 1..5 Fitzpatrick
     }
 }

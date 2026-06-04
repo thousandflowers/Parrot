@@ -1360,6 +1360,54 @@ final class TypoFixTests: XCTestCase {
     }
 }
 
+final class SnippetTests: XCTestCase {
+    func testParseEspanso_triggerReplacePairs() {
+        let y = """
+        matches:
+          - trigger: ":sig"
+            replace: "Best regards"
+          - trigger: "addr"
+            replace: 'Via Roma 1'
+        """
+        let parsed = MigrationImporter.parseEspanso(y)
+        XCTAssertEqual(parsed[":sig"], "Best regards")
+        XCTAssertEqual(parsed["addr"], "Via Roma 1")
+    }
+
+    func testSnippetStore_mergeAndExpand() async {
+        let store = SnippetStore.shared
+        let abbr = "wrentest\(Int.random(in: 1000...9999))"
+        _ = await store.merge([abbr: "EXPANSION TEXT"])
+        let v = await store.expansion(for: abbr)
+        XCTAssertEqual(v, "EXPANSION TEXT")
+        await store.remove(abbr)
+    }
+}
+
+final class CorpusLearnerTests: XCTestCase {
+    func testExtract_repeatedPhrase() {
+        let text = "buongiorno a tutti come state\nbuongiorno a tutti come state\nbuongiorno a tutti come state"
+        let entries = CorpusLearner.extract(from: text, minCount: 2)
+        XCTAssertTrue(entries.contains { $0.key == "a tutti" && $0.text.contains("come state") })
+    }
+    func testExtract_noRepeat_empty() {
+        XCTAssertTrue(CorpusLearner.extract(from: "one two three four five", minCount: 2).isEmpty)
+    }
+}
+
+final class SnippetExpanderTests: XCTestCase {
+    func testExpand_year() {
+        let y = String(Calendar.current.component(.year, from: Date()))
+        XCTAssertEqual(SnippetExpander.expand("© {{year}} me"), "© \(y) me")
+    }
+    func testExpand_plainUnchanged() {
+        XCTAssertEqual(SnippetExpander.expand("no placeholders"), "no placeholders")
+    }
+    func testExpand_date_nonEmpty() {
+        XCTAssertFalse(SnippetExpander.expand("{{date}}").contains("{{"))
+    }
+}
+
 final class EmojiCompletionTests: XCTestCase {
     func testMatch_shortcode() {
         let m = EmojiCompletion.match(preContext: "great work :fire")

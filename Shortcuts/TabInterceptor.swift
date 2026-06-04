@@ -69,7 +69,7 @@ final class TabInterceptor {
 
 private let kVKTab: Int64 = 48
 private let kVKEscape: Int64 = 53
-private let kVKRightArrow: Int64 = 124   // ⌘→ = accept one word (partial)
+private let kVKBackslash: Int64 = 42   // \ = accept the whole suggestion
 
 /// C-compatible tap callback. Must not capture context. Keeps work minimal; UI calls are bounced
 /// to the main actor. Returns nil only to swallow Tab while a suggestion is shown.
