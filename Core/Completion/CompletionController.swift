@@ -1,6 +1,8 @@
 import AppKit
 import OSLog
 
+private let kVK_Space: Int64 = 49
+
 /// Orchestrates the live inline-completion loop: debounce text changes, read caret context,
 /// ask the engine, show the ghost overlay, and apply on accept. Main-actor isolated.
 @MainActor
@@ -11,19 +13,39 @@ final class CompletionController {
     private var current: CompletionSuggestion?
     private var currentPID: pid_t = 0
     private var currentContextKeys: [String] = []   // learning keys for the shown completion
+    private var suggestionGen: UInt64 = 0           // bumped each requestSuggestion(); stale reqs skip overlay show
     private var debounce: Task<Void, Never>?
+
+    private let adaptive = AdaptiveDebounce()       // 40ms when paused → up to 200ms under fast typing
+    private var lastKeystrokeAt = Date.distantPast
+    private let cache = SuggestionCache()           // in-memory LRU → the <50ms hot path
+    let typedBuffer = TypedInputBuffer()            // AX-blind fallback context (fed by TabInterceptor)
+    private var lastBufferPID: pid_t = 0            // reset the typed buffer when the focused app changes
+    private var lastAXFoundField = false            // did the previous AX query see a real text field?
 
     private init() {}
 
-    var isEnabled: Bool { PreferencesStore.shared.inlineCompletionEnabled }
+    // Gate on AppMode too: only Wren shows completion. Parrot starts RealtimeMonitor for live
+    // correction, whose AX observer also calls textChanged() — without this gate Parrot would show
+    // ghost text it has no Tab tap to accept (TabInterceptor is started only in Wren).
+    var isEnabled: Bool { AppMode.current.showsCompletion && PreferencesStore.shared.inlineCompletionEnabled }
     var hasSuggestion: Bool { current != nil }
 
     /// Called on every focused-text change (from `RealtimeMonitor`'s AX observer).
     func textChanged() {
         guard isEnabled else { return }
-        clearSuggestion()
+        // Adaptive debounce: a pause since the last change fires fast (~40ms) for an instant feel;
+        // rapid changes wait longer (toward 200ms) so we don't burn inference on text about to change.
+        let gapMs = Int(Date().timeIntervalSince(lastKeystrokeAt) * 1000)
+        lastKeystrokeAt = Date()
+        // Dim the overlay instead of clearing + hiding — prevents flicker during debounce.
+        current = nil
+        currentPID = 0
+        currentContextKeys = []
+        TabInterceptor.setSuggestionVisible(false)
+        overlay.dim()
         debounce?.cancel()
-        let ms = max(120, PreferencesStore.shared.completionDebounceMs)
+        let ms = adaptive.nextDelayMs(sinceLastKeystrokeMs: gapMs)
         debounce = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(ms))
             guard !Task.isCancelled else { return }
@@ -31,30 +53,121 @@ final class CompletionController {
         }
     }
 
+    private func requestImmediately() {
+        guard isEnabled else { return }
+        current = nil
+        currentPID = 0
+        currentContextKeys = []
+        TabInterceptor.setSuggestionVisible(false)
+        overlay.dim()
+        debounce?.cancel()
+        Task { await self.requestSuggestion() }
+    }
+
     private func requestSuggestion() async {
+        overlay.dim()                                   // dim (not hide) — prevents flicker during computation
+        let gen = { self.suggestionGen += 1; return self.suggestionGen }()
+
         // The Tab tap can only install once Accessibility is trusted. The user often grants it
         // AFTER launch, so the launch-time start() bailed. Retry here (idempotent): once we are
         // reading context successfully, AX is trusted, so the tap installs and — crucially — this
         // is where IOHIDRequestAccess fires to put Parrot in the Input Monitoring list.
         TabInterceptor.shared.start()
 
-        let pid = await AccessibilityBridge.shared.lastKnownFrontAppPID()
+        // The target is the current frontmost app. `lastKnownFrontAppPID` is a cache updated only on
+        // app-activation notifications, so it stays 0 from launch until the user's first app switch —
+        // and Wren is a menu-bar accessory, so the user is normally ALREADY in their text app when it
+        // launches (no activation fires). Fall back to the live frontmost app so completion works
+        // immediately instead of silently bailing here on every keystroke.
+        var pid = await AccessibilityBridge.shared.lastKnownFrontAppPID()
+        if pid == 0 {
+            pid = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
+        }
         guard pid != 0 else { return }
         let bundleID = await AppDetector.shared.frontAppBundleID(forPID: pid)
         if let id = bundleID, PreferencesStore.shared.isExcluded(bundleID: id) { return }
         let allowCode = await AppDetector.shared.isCodeEditor(bundleID: bundleID)
-        guard let ax = await AccessibilityBridge.shared.completionContext(pid: pid), !ax.isSecure else {
+
+        // Per-app completion rule: if an AppRule matches this bundleID and has a promptID,
+        // use that custom prompt's template as the user prompt override.
+        let appRulePrompt: String? = {
+            guard let bundleID else { return nil }
+            let rule = PreferencesStore.shared.appRules.first { $0.bundleID == bundleID && $0.isEnabled }
+            guard let r = rule, let promptID = r.promptID else { return nil }
+            return PreferencesStore.shared.customPrompts.first { $0.id == promptID }?.template
+        }()
+        // Reset per-app state when the focused application changes.
+        if pid != lastBufferPID {
+            typedBuffer.focusChanged()
+            lastAXFoundField = false
+            lastBufferPID = pid
+        }
+
+        var ax = await AccessibilityBridge.shared.completionContext(pid: pid)
+        // Did AX just see a real, readable text field (valid caret & context)?
+        let axHasField = ax?.caretRect != .zero && !(ax?.preContext.isEmpty ?? true)
+
+        // Universal fallback when AX gives nothing readable — nil OR an empty value (Chromium web
+        // fields, terminals often expose an empty AX value rather than nil). Complete from the
+        // typed-input buffer, anchoring the ghost near the mouse cursor (floating hint).
+        if ax == nil || (ax?.preContext.isEmpty ?? true) {
+            let pre = typedBuffer.preContext
+            #if DEBUG
+            CrashLogger.log("DIAG req: AX empty → typedBuffer len=\(pre.count)")
+            #endif
+            if !pre.isEmpty {
+                // AX previously saw a real text field — now it doesn't. The user left the field;
+                // the buffer is stale. Clear it and bail instead of ghosting at the mouse cursor.
+                if lastAXFoundField {
+                    typedBuffer.invalidate()
+                    return
+                }
+                let existingCaret = ax?.caretRect ?? .zero
+                let caret: CGRect
+                if existingCaret != .zero {
+                    caret = existingCaret
+                } else {
+                    let mouse = NSEvent.mouseLocation    // screen coords, bottom-left origin
+                    caret = CGRect(x: mouse.x + 12, y: mouse.y - 18, width: 0, height: 16)
+                }
+                ax = CompletionAXContext(preContext: pre, postContext: "", caretRect: caret, isSecure: false)
+            }
+        }
+        lastAXFoundField = axHasField
+        guard let ax, !ax.isSecure else {
+            #if DEBUG
+            CrashLogger.log("DIAG req: ax=nil (no usable field)")
+            #endif
             Logger.infra.debug("completion: no usable focused field (or secure)")
             return
         }
+        #if DEBUG
+        CrashLogger.log("DIAG req: app=\(bundleID ?? "?") preLen=\(ax.preContext.count) caret=\(ax.caretRect != .zero) allowCode=\(allowCode)")
+        #endif
 
         // Emoji: typing ":shortcode" → Tab replaces it with the emoji.
         if ax.caretRect != .zero, let em = EmojiCompletion.match(preContext: ax.preContext) {
             current = CompletionSuggestion(text: em.emoji, kind: .replaceLastWord(wrong: em.shortcode))
             currentPID = pid
+            guard suggestionGen == gen else { return }
             TabInterceptor.setSuggestionVisible(true)
             overlay.show(text: em.emoji, atCaretRect: ax.caretRect)
+            await StatsStore.shared.recordShown()
             Logger.infra.debug("completion: emoji \(em.shortcode, privacy: .public) -> \(em.emoji, privacy: .public)")
+            return
+        }
+
+        // Snippet expansion: type an abbreviation, Tab replaces it with the full expansion.
+        // Checked before typo fix so intentional abbreviations aren't flagged as typos.
+        if ax.caretRect != .zero, let snippet = SnippetMatcher.match(preContext: ax.preContext,
+            snippets: PreferencesStore.shared.snippets) {
+            current = CompletionSuggestion(text: snippet.expansion, kind: .replaceLastWord(wrong: snippet.abbreviation))
+            currentPID = pid
+            guard suggestionGen == gen else { return }
+            TabInterceptor.setSuggestionVisible(true)
+            overlay.show(text: snippet.expansion, atCaretRect: ax.caretRect)
+            await StatsStore.shared.recordSnippetExpansion()
+            Logger.infra.debug("completion: snippet \(snippet.abbreviation, privacy: .public) -> \(snippet.expansion, privacy: .public)")
             return
         }
 
@@ -64,8 +177,10 @@ final class CompletionController {
            let fix = TypoFix.check(preContext: ax.preContext, language: PreferencesStore.shared.language) {
             current = CompletionSuggestion(text: fix.correction, kind: .replaceLastWord(wrong: fix.wrong))
             currentPID = pid
+            guard suggestionGen == gen else { return }
             TabInterceptor.setSuggestionVisible(true)
             overlay.show(text: "✓ " + fix.correction, atCaretRect: ax.caretRect)
+            await StatsStore.shared.recordTypoFix()
             Logger.infra.debug("completion: typo fix \(fix.wrong, privacy: .public) -> \(fix.correction, privacy: .public)")
             return
         }
@@ -80,37 +195,73 @@ final class CompletionController {
             currentPID = pid
             currentContextKeys = contextKeys
             await CompletionLearningStore.shared.noteShown(key: learned.key)
+            guard suggestionGen == gen else { return }
             TabInterceptor.setSuggestionVisible(true)
             overlay.show(text: cleaned, atCaretRect: ax.caretRect)
+            await StatsStore.shared.recordShown()
             Logger.infra.debug("completion: learned suggestion for '\(learned.key, privacy: .public)'")
             return
         }
 
-        // Enrich the prefix with on-screen context (the conversation/email above the field, which is
-        // NOT in the text field) so suggestions are grounded, not "pulled from a hat". The user's own
-        // text stays LAST so the model continues IT. Screen OCR is cached/throttled (anti-stutter).
-        var contextParts: [String] = []
-        if PreferencesStore.shared.completionUseClipboardContext,
-           let clip = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !clip.isEmpty, clip.count <= 400 {
-            contextParts.append(String(clip.prefix(400)))
-        }
-        if PreferencesStore.shared.completionUseScreenContext {
-            let screen = await ScreenContextProvider.shared.currentContext(pid: pid)
-            if !screen.isEmpty { contextParts.append(screen) }
-        }
-        // User's own text stays LAST so the model continues IT.
-        let preContext = contextParts.isEmpty ? ax.preContext : (contextParts + [ax.preContext]).joined(separator: "\n\n")
-
-        let context = CompletionContext(preContext: preContext, postContext: ax.postContext,
-                                        language: PreferencesStore.shared.language)
-        Logger.infra.debug("completion: preContext tail=…\(String(ax.preContext.suffix(40)), privacy: .public)| screenCtx=\(PreferencesStore.shared.completionUseScreenContext)")
         guard CompletionContext(preContext: ax.preContext, postContext: ax.postContext, language: "").isUsable else { return }
+
+        // Use ONLY the text-field content as preContext — no screen-OCR enrichment.
+        // Screen context (OCR of the editor window) includes previously-accepted
+        // completions, which leaks the model's own output back into the prompt → loop.
+        // ax.preContext is what the user actually typed; that's all the model needs.
+        let preContext = ax.preContext
+        let cacheKey = String(preContext.suffix(80))
+
+        // Cache gate: a context we have completed before returns instantly with no model call,
+        // guaranteeing the sub-50ms hot path. Cleared implicitly as the LRU evicts.
+        if ax.caretRect != .zero, let hit = cache.get(contextHash: cacheKey) {
+            current = CompletionSuggestion(text: hit, kind: .insert)
+            currentPID = pid
+            currentContextKeys = contextKeys
+            guard suggestionGen == gen else { return }
+            TabInterceptor.setSuggestionVisible(true)
+            overlay.show(text: hit, atCaretRect: ax.caretRect)
+            await StatsStore.shared.recordShown()
+            Logger.infra.debug("completion: cache hit")
+            return
+        }
+
+        // Screen context: OCR of the conversation/email above the caret, prepended to the model
+        // prompt ONLY (the cache key, learned keys, and typo-fix above all use the raw typed text).
+        // Crop-above-caret excludes the input field, so the model never re-reads its own output.
+        var modelPre = preContext
+        if !allowCode, ax.caretRect != .zero,
+           PreferencesStore.shared.completionScreenContextEnabled, ScreenContextProvider.hasPermission {
+            let screenH = NSScreen.main?.frame.height ?? 0
+            let screen = await ScreenContextProvider.shared.currentContext(pid: pid, caretRect: ax.caretRect, screenHeight: screenH)
+            if !screen.isEmpty { modelPre = screen + "\n" + preContext }
+        }
+
+        let context = CompletionContext(preContext: modelPre, postContext: ax.postContext,
+                                        language: PreferencesStore.shared.language,
+                                        userPromptOverride: appRulePrompt,
+                                        personalizationInstructions: PreferencesStore.shared.personalizationInstructions,
+                                        personalizationStrength: PreferencesStore.shared.personalizationStrength,
+                                        completionModelID: PreferencesStore.shared.completionModelID,
+                                        selectedModelID: PreferencesStore.shared.selectedModelID)
+        Logger.infra.debug("completion: preContext tail=…\(String(ax.preContext.suffix(40)), privacy: .public)")
         let maxWords = PreferencesStore.shared.maxCompletionLength
-        guard let suggestion = await CompletionEngine.shared.suggest(context: context, maxWords: maxWords, allowCode: allowCode) else {
+        let midWord = WordBoundary.isMidWordFast(preContext: preContext)
+        // Mid-word: only finish the current word → ask for a short budget so generation is fast.
+        let effectiveMaxWords = midWord ? 1 : maxWords
+        #if DEBUG
+        CrashLogger.log("DIAG req: calling engine, preTail=\(String(preContext.suffix(20))) midWord=\(midWord)")
+        #endif
+        guard let suggestion = await CompletionEngine.shared.suggest(context: context, maxWords: effectiveMaxWords, allowCode: allowCode, midWord: midWord) else {
+            #if DEBUG
+            CrashLogger.log("DIAG req: engine returned nil")
+            #endif
             Logger.infra.debug("completion: engine returned no suggestion")
             return
         }
+        #if DEBUG
+        CrashLogger.log("DIAG req: engine suggestion='\(suggestion.text.prefix(30))' caretZero=\(ax.caretRect == .zero)")
+        #endif
         guard !Task.isCancelled else { return }
 
         if ax.caretRect == .zero {
@@ -118,17 +269,22 @@ final class CompletionController {
             return
         }
 
+        guard suggestionGen == gen else { return }
         current = suggestion
         currentPID = pid
         currentContextKeys = contextKeys
+        cache.set(contextHash: cacheKey, suggestion: suggestion.text)   // warm the hot path for repeats
         TabInterceptor.setSuggestionVisible(true)
         overlay.show(text: suggestion.text, atCaretRect: ax.caretRect)
+        await StatsStore.shared.recordShown()
         Logger.infra.debug("completion: showing \(suggestion.text, privacy: .public) at \(NSStringFromRect(ax.caretRect), privacy: .public)")
     }
 
     /// Tab — accept the suggestion: insert a completion, or fix a typo by replacing the last word.
-    func acceptFull() {
-        guard let s = current, currentPID != 0 else { return }
+    /// Returns true if a suggestion was actually consumed, false if already stale.
+    @discardableResult
+    func tryAcceptFull() -> Bool {
+        guard let s = current, currentPID != 0 else { return false }
         let pid = currentPID
         let text = s.text
         let kind = s.kind
@@ -138,32 +294,111 @@ final class CompletionController {
             switch kind {
             case .insert:
                 _ = await AccessibilityBridge.shared.insertCompletion(text, pid: pid)
+                await StatsStore.shared.recordAccepted(text: text)
                 if !keys.isEmpty { await CompletionLearningStore.shared.record(keys: keys, accepted: text) }
             case .replaceLastWord(let wrong):
                 _ = await AccessibilityBridge.shared.replaceLastWord(wrong: wrong, with: text, pid: pid)
+                await StatsStore.shared.recordAccepted(text: text)
             }
         }
+        return true
     }
+
+    /// Convenience wrapper for callers that don't need the return value.
+    func acceptFull() { tryAcceptFull() }
 
     /// Partial accept — insert the first word only, then re-suggest from the new position.
     /// Only meaningful for completions; a typo fix has no "partial", so it accepts fully.
-    func acceptPartial() {
-        guard let s = current, currentPID != 0 else { return }
-        guard case .insert = s.kind else { acceptFull(); return }
+    /// Returns true if a suggestion was actually consumed, false if already stale.
+    @discardableResult
+    func tryAcceptPartial() -> Bool {
+        guard let s = current, currentPID != 0 else { return false }
+        guard case .insert = s.kind else { tryAcceptFull(); return true }
         let pid = currentPID
         let word = s.firstWord
-        clearSuggestion()
+        let remaining = String(s.text.dropFirst(word.count))
+        let hasRemaining = !remaining.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        // Advance `current` to the remaining words SYNCHRONOUSLY. This makes rapid Tab predictable:
+        // each press inserts the NEXT word of the SAME suggestion (never re-inserts this word, never
+        // leaves a "no suggestion" gap where Tab would type a literal tab). We re-anchor the ghost at
+        // the new caret WITHOUT a model call; only recompute once the suggestion is exhausted.
+        if hasRemaining {
+            current = CompletionSuggestion(text: remaining, kind: .insert)
+            // keep TabInterceptor visible flag TRUE so the next Tab is still captured
+        } else {
+            current = nil
+            currentContextKeys = []
+            TabInterceptor.setSuggestionVisible(false)
+            overlay.hide()
+        }
         Task {
             _ = await AccessibilityBridge.shared.insertCompletion(word, pid: pid)
-            await MainActor.run { self.textChanged() }
+            await StatsStore.shared.recordAccepted(text: word)
+            if hasRemaining {
+                let ax = await AccessibilityBridge.shared.completionContext(pid: pid)
+                await MainActor.run {
+                    guard self.current != nil else { return }   // typing superseded us meanwhile
+                    if let ax, ax.caretRect != .zero {
+                        self.overlay.show(text: remaining, atCaretRect: ax.caretRect)
+                    } else {
+                        self.overlay.hide()
+                    }
+                }
+            } else {
+                await MainActor.run { self.requestImmediately() }   // exhausted → fresh suggestion
+            }
         }
+        return true
     }
+
+    /// Convenience wrapper for callers that don't need the return value.
+    func acceptPartial() { tryAcceptPartial() }
 
     /// Clears any visible suggestion and cancels in-flight work.
     func dismiss() {
         debounce?.cancel()
+        // Negative learning: increment show count for dismissed suggestions so their
+        // acceptance rate drops — the user chose to keep typing instead of accepting.
+        if !currentContextKeys.isEmpty {
+            let keys = currentContextKeys
+            Task {
+                for k in keys { await CompletionLearningStore.shared.noteShown(key: k) }
+            }
+        }
         clearSuggestion()
-        Task { await CompletionEngine.shared.cancelPending() }
+        Task {
+            await StatsStore.shared.recordDismissed()
+            await CompletionEngine.shared.cancelPending()
+        }
+    }
+
+    /// Dismiss when the user keeps typing (non-Tab key). Auto-corrects typo fixes on Space.
+    func dismissForTyping(keycode: Int64) {
+        debounce?.cancel()
+        let s = current
+        let pid = currentPID
+        // Gboard-style auto-correct: Space accepts a typo fix without explicit Tab.
+        if keycode == kVK_Space, let s, case .replaceLastWord(let wrong) = s.kind {
+            clearSuggestion()
+            Task {
+                await StatsStore.shared.recordTypoFix()
+                _ = await AccessibilityBridge.shared.replaceLastWord(wrong: wrong, with: s.text, pid: pid)
+                await CompletionEngine.shared.cancelPending()
+            }
+            return
+        }
+        // All other keys: normal dismiss.
+        if !currentContextKeys.isEmpty {
+            let keys = currentContextKeys
+            Task {
+                for k in keys { await CompletionLearningStore.shared.noteShown(key: k) }
+            }
+        }
+        clearSuggestion()
+        Task {
+            await StatsStore.shared.recordDismissed()
+            await CompletionEngine.shared.cancelPending()
+        }
     }
 
     private func clearSuggestion() {
