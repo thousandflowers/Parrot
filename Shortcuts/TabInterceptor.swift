@@ -136,7 +136,7 @@ private func tabTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: CG
         return nil   // swallow the backslash
     }
     // ⌘→ accepts a single word (partial accept), then re-suggests.
-    if keycode == kVKRightArrow && flags.contains(.maskCommand) {
+    if keycode == 124 && flags.contains(.maskCommand) {   // kVKRightArrow
         Logger.infra.debug("TabInterceptor: ⌘→ partial accept")
         Task { @MainActor in
             if !CompletionController.shared.tryAcceptPartial() {

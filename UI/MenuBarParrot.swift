@@ -19,8 +19,13 @@ final class MenuBarParrot {
         self.button = button
         self.statusItem = statusItem
         embedView(in: button)
-        startAnimating()
-        measureTrackWidth()
+        if AppMode.current == .wren {
+            // Wren uses a static image — no animation needed.
+            applyLength()
+        } else {
+            startAnimating()
+            measureTrackWidth()
+        }
     }
 
     func setState(_ newState: ParrotState) {
@@ -48,6 +53,23 @@ final class MenuBarParrot {
         animTimer = nil
     }
 
+    /// Wren menu bar icon loaded from bundle (or fallback path for development builds).
+    private static let wrenMenuIcon: NSImage? = {
+        if let bundled = NSImage(named: "MenuIcon") { return bundled }
+        // Fallback for `swift build`/development (no .app bundle).
+        let devPath = URL(fileURLWithPath: "Resources/MenuIcon.png", relativeTo: projectRoot)
+        if let img = NSImage(contentsOf: devPath) { return img }
+        let absPath = URL(fileURLWithPath: "/Users/eugeniozamengopontrelli/Desktop/Progetti dev/Swift/Wren/core/Resources/MenuIcon.png")
+        return NSImage(contentsOf: absPath)
+    }()
+
+    /// Root of the Swift package (used to find development resources).
+    private static let projectRoot: URL = {
+        var url = URL(fileURLWithPath: #file)
+        for _ in 0..<4 { url.deleteLastPathComponent() } // up to package root
+        return url
+    }()
+
     // MARK: - Private state
 
     private weak var button: NSStatusBarButton?
@@ -71,6 +93,17 @@ final class MenuBarParrot {
     // MARK: - Setup
 
     private func embedView(in button: NSStatusBarButton) {
+        if AppMode.current == .wren {
+            let iv = NSImageView(frame: button.bounds)
+            iv.image = Self.wrenMenuIcon
+            iv.image?.isTemplate = true
+            iv.contentTintColor = .labelColor
+            iv.autoresizingMask = [.width, .height]
+            iv.imageScaling = .scaleProportionallyDown
+            button.addSubview(iv)
+            parrotView = nil
+            return
+        }
         let v = ParrotView(frame: button.bounds)
         v.autoresizingMask = [.width, .height]
         button.addSubview(v)

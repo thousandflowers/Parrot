@@ -230,33 +230,9 @@ final class CompletionController {
             return
         }
 
-        // Enrich the prefix with on-screen context (the conversation/email above the field, which is
-        // NOT in the text field) so suggestions are grounded, not "pulled from a hat". The user's own
-        // text stays LAST so the model continues IT. Screen OCR is cached/throttled (anti-stutter).
-        // Note: the persona/userPrompt is NOT prepended to the base completion model — base models
-        // continue text, not instructions, and the meta text dilutes the continuation. Personalization
-        // comes from the learning store (your accepted phrases) instead.
-        var contextParts: [String] = []
-        if PreferencesStore.shared.completionUseClipboardContext,
-           let clip = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !clip.isEmpty, clip.count <= 400 {
-            contextParts.append(String(clip.prefix(400)))
-        }
-        if PreferencesStore.shared.completionUseScreenContext {
-            let screen = await ScreenContextProvider.shared.currentContext(pid: pid)
-            if !screen.isEmpty { contextParts.append(screen) }
-        }
-        // User's own text stays LAST so the model continues IT.
-        let preContext = contextParts.isEmpty ? ax.preContext : (contextParts + [ax.preContext]).joined(separator: "\n\n")
-
-        let context = CompletionContext(preContext: preContext, postContext: ax.postContext,
-                                        language: PreferencesStore.shared.language)
-        guard CompletionContext(preContext: ax.preContext, postContext: ax.postContext, language: "").isUsable else { return }
-
-        // Use ONLY the text-field content as preContext — no screen-OCR enrichment.
-        // Screen context (OCR of the editor window) includes previously-accepted
-        // completions, which leaks the model's own output back into the prompt → loop.
-        // ax.preContext is what the user actually typed; that's all the model needs.
+        // Pre-model: cache and learning use the RAW typed text (ax.preContext), never enriched
+        // context. Screen/OCR context includes previously-accepted completions, which would leak
+        // the model's own output back into the cache/learning → feedback loop.
         let preContext = ax.preContext
         let cacheKey = String(preContext.suffix(80))
 

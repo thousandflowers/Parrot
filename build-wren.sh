@@ -56,6 +56,13 @@ cp "${HELPER}" "${MACOS}/ParrotCompletionHelper"
 install_name_tool -add_rpath "@loader_path/../Frameworks" "${MACOS}/ParrotCompletionHelper" 2>/dev/null || true
 install_name_tool -delete_rpath "/opt/homebrew/lib" "${MACOS}/ParrotCompletionHelper" 2>/dev/null || true
 
+# App icon
+cp Resources/AppIcon.icns "${RES}/"
+
+# Menu bar icon (template image for NSImageView)
+cp Resources/MenuIcon.png "${RES}/"
+cp Resources/MenuIcon@2x.png "${RES}/" 2>/dev/null || true
+
 # Localizations (small) so system strings resolve.
 for lproj in Resources/*.lproj; do [ -d "$lproj" ] && cp -r "$lproj" "${RES}/"; done
 
@@ -106,6 +113,8 @@ sed \
   || /usr/libexec/PlistBuddy -c "Add :CFBundleName string Wren" "${PLIST_DST}"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Wren" "${PLIST_DST}" 2>/dev/null \
   || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Wren" "${PLIST_DST}"
+/usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "${PLIST_DST}" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile AppIcon" "${PLIST_DST}"
 
 # --- Sign inside-out ---
 echo "[*] Signing..."
