@@ -15,6 +15,7 @@ final class CompletionController {
     private var currentContextKeys: [String] = []   // learning keys for the shown completion
     private var suggestionGen: UInt64 = 0           // bumped each requestSuggestion(); stale reqs skip overlay show
     private var debounce: Task<Void, Never>?
+    private var prefetchTask: Task<Void, Never>?
 
     private let adaptive = AdaptiveDebounce()       // 40ms when paused → up to 200ms under fast typing
     private var lastKeystrokeAt = Date.distantPast
@@ -34,6 +35,8 @@ final class CompletionController {
     /// Called on every focused-text change (from `RealtimeMonitor`'s AX observer).
     func textChanged() {
         guard isEnabled else { return }
+        // Cancel any background prefetch immediately — a live request always takes priority.
+        prefetchTask?.cancel()
         // Adaptive debounce: a pause since the last change fires fast (~40ms) for an instant feel;
         // rapid changes wait longer (toward 200ms) so we don't burn inference on text about to change.
         let gapMs = Int(Date().timeIntervalSince(lastKeystrokeAt) * 1000)
@@ -281,6 +284,21 @@ final class CompletionController {
         overlay.show(text: suggestion.text, atCaretRect: ax.caretRect)
         await StatsStore.shared.recordShown()
         Logger.infra.debug("completion: showing \(suggestion.text, privacy: .public) at \(NSStringFromRect(ax.caretRect), privacy: .public)")
+
+        // Task 6 — speculative accepted-branch pre-compute: compute the completion of
+        // (preContext + suggestion.text) in the background and warm the cache, so when the
+        // user accepts the full suggestion the next completion is instant from the cache.
+        let acceptedContext = preContext + suggestion.text
+        let postCtx = ax.postContext
+        let mw = maxWords        // original maxWords, not effectiveMaxWords
+        prefetchTask?.cancel()
+        prefetchTask = Task { [weak self] in
+            let ctx = CompletionContext(preContext: acceptedContext, postContext: postCtx,
+                                        language: PreferencesStore.shared.language)
+            guard let next = await CompletionEngine.shared.suggestForPrefetch(context: ctx, maxWords: mw, allowCode: allowCode),
+                  !Task.isCancelled else { return }
+            await MainActor.run { self?.cache.set(contextHash: String(acceptedContext.suffix(80)), suggestion: next.text) }
+        }
     }
 
     /// Tab — accept the suggestion: insert a completion, or fix a typo by replacing the last word.

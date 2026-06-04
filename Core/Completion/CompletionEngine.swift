@@ -52,6 +52,16 @@ actor CompletionEngine {
         return nil
     }
 
+    /// Prefetch variant: does NOT touch `generation`, so it can never cancel a live request.
+    /// Returns a cleaned suggestion for the speculative accepted-branch context, or nil.
+    func suggestForPrefetch(context: CompletionContext, maxWords: Int, allowCode: Bool) async -> CompletionSuggestion? {
+        guard context.isUsable else { return nil }
+        guard let raw = try? await provider.complete(context: context, maxWords: maxWords) else { return nil }
+        guard let cleaned = CompletionPostprocessor.clean(raw: raw, preContext: context.preContext,
+              maxWords: maxWords, allowCode: allowCode, midWord: false), !cleaned.isEmpty else { return nil }
+        return CompletionSuggestion(text: cleaned)
+    }
+
     /// Invalidates any in-flight suggestion so its result is discarded when it returns.
     func cancelPending() {
         generation &+= 1
