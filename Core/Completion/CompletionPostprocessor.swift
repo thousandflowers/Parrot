@@ -53,10 +53,6 @@ enum CompletionPostprocessor {
             text = String(text[..<nl])
         }
 
-        // The model's OWN leading space is the most reliable boundary signal: if it put a space, it
-        // means "new word". Capture it before we split (which discards leading spaces).
-        let modelGaveLeadingSpace = text.first == " "
-
         // 3. Collapse to the word budget.
         var words = text.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
         // Drop a leading word that merely repeats the last word the user already typed — the model
@@ -71,22 +67,17 @@ enum CompletionPostprocessor {
         guard !words.isEmpty else { return nil }
         var capped = words.prefix(max(1, maxWords)).joined(separator: " ")
 
-        // 4. Join spacing. Priority of signals:
-        //    a. user already ended with whitespace → no leading space (never double-space).
-        //    b. the model itself put a leading space → it's a NEW word → exactly one space (this
-        //       overrides the fragile isMidWord guess, fixing "wrong space" on valid-but-unrecognized
-        //       words like names/slang that the spell-checker flags).
-        //    c. mid-word (and the model gave no space) → CONTINUE the word, no space ("rece"→"ption").
-        //    d. otherwise (word boundary) → exactly one leading space.
+        // 4. Join spacing (the model is unreliable at the boundary space, so decide it here):
+        //    - mid-word → CONTINUE the token, no space, even if the model emitted one ("rece"→"ption");
+        //    - word boundary after a non-space char → exactly one leading space;
+        //    - empty preContext or already ends with whitespace → no leading space (never double).
         let lead = String(capped.drop(while: { $0 == " " }))
-        if let last = preContext.last, last.isWhitespace {
-            capped = lead
-        } else if modelGaveLeadingSpace {
-            capped = " " + lead
-        } else if midWord {
-            capped = lead
+        if midWord {
+            capped = lead                                       // continue the token, no space ("rece"+" ption"→"ption")
+        } else if let last = preContext.last, !last.isWhitespace {
+            capped = " " + lead                                 // boundary after a word → exactly one space
         } else {
-            capped = " " + lead
+            capped = lead                                       // empty preContext, or already ends with space → none
         }
         text = capped
 

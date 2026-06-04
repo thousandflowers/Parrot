@@ -246,7 +246,10 @@ final class CompletionController {
                                         selectedModelID: PreferencesStore.shared.selectedModelID)
         Logger.infra.debug("completion: preContext tail=…\(String(ax.preContext.suffix(40)), privacy: .public)")
         let maxWords = PreferencesStore.shared.maxCompletionLength
-        let midWord = WordBoundary.isMidWordFast(preContext: preContext)
+        // Use the accurate (spell-check) mid-word detector here: a finished word like "ciao" (last
+        // char a letter) must NOT be treated as mid-word, or it gets a phrase glued without a space.
+        // The cheap isMidWordFast over-triggers on finished words; isMidWord disambiguates.
+        let midWord = WordBoundary.isMidWord(preContext: preContext)
         // Mid-word: only finish the current word → ask for a short budget so generation is fast.
         let effectiveMaxWords = midWord ? 1 : maxWords
         #if DEBUG
