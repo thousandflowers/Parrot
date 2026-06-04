@@ -18,33 +18,48 @@ actor CompletionEngine {
 
     /// Returns a cleaned suggestion for the context, or nil if there is nothing to show
     /// (unusable context, empty/echo result, an error, or the request was superseded).
-    func suggest(context: CompletionContext, maxWords: Int, allowCode: Bool = false) async -> CompletionSuggestion? {
+    func suggest(context: CompletionContext, maxWords: Int, allowCode: Bool = false, midWord: Bool = false) async -> CompletionSuggestion? {
         guard context.isUsable else { return nil }
         generation &+= 1
         let mine = generation
 
-        let raw: String
-        do {
-            raw = try await provider.complete(context: context, maxWords: maxWords)
-        } catch is CancellationError {
-            return nil
-        } catch {
-            Logger.infra.debug("CompletionEngine: provider failed — \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
+        for attempt in 0..<2 {
+            let raw: String
+            do { raw = try await provider.complete(context: context, maxWords: maxWords) }
+            catch is CancellationError { return nil }
+            catch {
+                Logger.infra.debug("CompletionEngine: provider failed — \(error.localizedDescription, privacy: .public)")
+                return nil
+            }
 
-        // Superseded by a newer request while we were waiting → drop.
-        guard mine == generation else { return nil }
+            #if DEBUG
+            CrashLogger.log("DIAG engine: raw='\(raw.replacingOccurrences(of: "\n", with: "\\n").prefix(50))' len=\(raw.count) superseded=\(mine != generation)")
+            #endif
 
-        guard let cleaned = CompletionPostprocessor.clean(raw: raw, preContext: context.preContext, maxWords: maxWords, allowCode: allowCode),
-              !cleaned.isEmpty else {
-            return nil
+            guard mine == generation else { return nil }
+            if let cleaned = CompletionPostprocessor.clean(raw: raw, preContext: context.preContext,
+                                                           maxWords: maxWords, allowCode: allowCode, midWord: midWord),
+               !cleaned.isEmpty {
+                return CompletionSuggestion(text: cleaned)
+            }
+            #if DEBUG
+            CrashLogger.log("DIAG engine: clean→nil for raw='\(raw.replacingOccurrences(of: "\n", with: "\\n").prefix(50))'")
+            #endif
+            if attempt == 0 { continue }   // one retry, then give up
         }
-        return CompletionSuggestion(text: cleaned)
+        return nil
     }
 
     /// Invalidates any in-flight suggestion so its result is discarded when it returns.
     func cancelPending() {
         generation &+= 1
+    }
+
+    /// Loads the model into RAM ahead of typing by issuing one throwaway completion. Without this,
+    /// the first real keystroke triggers a multi-second cold load while every following keystroke
+    /// supersedes the in-flight request, so nothing ever completes until the user pauses for ~10s.
+    func warmup() async {
+        let ctx = CompletionContext(preContext: "The", postContext: "", language: "en")
+        _ = try? await provider.complete(context: ctx, maxWords: 2)
     }
 }
