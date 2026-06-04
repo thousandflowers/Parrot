@@ -13,7 +13,8 @@ final class LlamaSession {
 
     init(modelPath: String, contextSize: Int32 = 2048) throws {
         llama_backend_init()
-        let mparams = llama_model_default_params()
+        var mparams = llama_model_default_params()
+        mparams.n_gpu_layers = 999   // offload ALL layers to the Metal GPU (don't rely on the default)
         guard let m = llama_model_load_from_file(modelPath, mparams) else {
             throw NSError(domain: "LlamaSession", code: 1, userInfo: [NSLocalizedDescriptionKey: "model load failed"])
         }
@@ -21,10 +22,10 @@ final class LlamaSession {
         vocab = llama_model_get_vocab(m)
         var cparams = llama_context_default_params()
         cparams.n_ctx = UInt32(contextSize)
-        // Few threads on purpose: completion runs on every typing pause, so it must NOT saturate the
-        // CPU or the whole machine stutters. Low thread counts keep cores free for the UI.
-        cparams.n_threads = 2
-        cparams.n_threads_batch = 4
+        // With all layers on the GPU, generation is GPU-bound; a couple more CPU threads speed up
+        // prompt prefill + sampling without stuttering the UI (the old n_threads=2 throttled us).
+        cparams.n_threads = 4
+        cparams.n_threads_batch = 6
         guard let c = llama_init_from_model(m, cparams) else {
             llama_model_free(m)
             throw NSError(domain: "LlamaSession", code: 2, userInfo: [NSLocalizedDescriptionKey: "context init failed"])
