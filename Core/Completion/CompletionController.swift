@@ -16,6 +16,7 @@ final class CompletionController {
     private var suggestionGen: UInt64 = 0           // bumped each requestSuggestion(); stale reqs skip overlay show
     private var debounce: Task<Void, Never>?
     private var prefetchTask: Task<Void, Never>?
+    private var shownAt = Date.distantPast
 
     private let adaptive = AdaptiveDebounce()       // 40ms when paused → up to 200ms under fast typing
     private var lastKeystrokeAt = Date.distantPast
@@ -37,6 +38,17 @@ final class CompletionController {
         guard isEnabled else { return }
         // Cancel any background prefetch immediately — a live request always takes priority.
         prefetchTask?.cancel()
+        // Task 7 — activation TTL: if a suggestion was shown very recently (~400ms), keep it
+        // alive through spurious AX events by re-arming the debounce without clearing the overlay.
+        if current != nil, Date().timeIntervalSince(shownAt) < 0.4 {
+            debounce?.cancel()
+            debounce = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(180))
+                guard !Task.isCancelled else { return }
+                await self?.requestSuggestion()
+            }
+            return
+        }
         // Adaptive debounce: a pause since the last change fires fast (~40ms) for an instant feel;
         // rapid changes wait longer (toward 200ms) so we don't burn inference on text about to change.
         let gapMs = Int(Date().timeIntervalSince(lastKeystrokeAt) * 1000)
@@ -224,6 +236,7 @@ final class CompletionController {
             guard suggestionGen == gen else { return }
             TabInterceptor.setSuggestionVisible(true)
             overlay.show(text: hit, atCaretRect: ax.caretRect)
+            shownAt = Date()
             await StatsStore.shared.recordShown()
             Logger.infra.debug("completion: cache hit")
             return
@@ -282,6 +295,7 @@ final class CompletionController {
         cache.set(contextHash: cacheKey, suggestion: suggestion.text)   // warm the hot path for repeats
         TabInterceptor.setSuggestionVisible(true)
         overlay.show(text: suggestion.text, atCaretRect: ax.caretRect)
+        shownAt = Date()
         await StatsStore.shared.recordShown()
         Logger.infra.debug("completion: showing \(suggestion.text, privacy: .public) at \(NSStringFromRect(ax.caretRect), privacy: .public)")
 
