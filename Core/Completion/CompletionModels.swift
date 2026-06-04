@@ -59,6 +59,8 @@ struct CompletionAXContext: Sendable, Equatable {
     let postContext: String
     let caretRect: CGRect
     let isSecure: Bool
+    var fontName: String? = nil
+    var fontSize: CGFloat = 0
 }
 
 /// Abstraction over the inference backend so `CompletionEngine` is testable without a live server.

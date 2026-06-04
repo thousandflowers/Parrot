@@ -29,6 +29,10 @@ actor AccessibilityBridge: AXBridgeProtocol {
     }
     private var pendingClipboardRestore: PendingClipboardRestore?
     private var _lastKnownFrontAppPID: pid_t = 0
+    /// PIDs we have already forced `AXManualAccessibility` on. Chromium/Electron apps expose no AX
+    /// tree until a client sets this private attribute; once set it sticks for the process lifetime,
+    /// so we only do it once per pid. Harmless no-op on native apps that ignore the attribute.
+    private var manualAXEnabledPIDs: Set<pid_t> = []
 
     func setLastKnownFrontAppPID(_ pid: pid_t) {
         self._lastKnownFrontAppPID = pid
@@ -253,8 +257,22 @@ actor AccessibilityBridge: AXBridgeProtocol {
             await MainActor.run {
                 _ = NSRunningApplication(processIdentifier: pid)?.activate(options: [])
             }
-            // Wait for the app to become key before we post the keystroke.
-            try await Task.sleep(for: .milliseconds(80))
+            // Poll until the app actually becomes active (up to 500ms) instead of
+            // a fixed 80ms sleep — fast apps respond quickly, slow ones get more time.
+            let deadline = Date().addingTimeInterval(0.5)
+            var becameActive = false
+            while Date() < deadline {
+                if NSRunningApplication(processIdentifier: pid)?.isActive == true {
+                    becameActive = true
+                    break
+                }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            if !becameActive {
+                // The app didn't become active in time — the Cmd+V that follows
+                // may land elsewhere. This is rare but logged for diagnostics.
+                Logger.ax.warning("AccessibilityBridge: target app (pid \(pid)) did not activate within 500ms")
+            }
         }
 
         let source = CGEventSource(stateID: .hidSystemState)
@@ -351,6 +369,23 @@ actor AccessibilityBridge: AXBridgeProtocol {
     func completionContext(pid: pid_t) async -> CompletionAXContext? {
         guard AXIsProcessTrusted() else { return nil }
         let appAX = AXUIElementCreateApplication(pid)
+
+        if let ctx = readCompletionContext(appAX: appAX) { return ctx }
+
+        // Blind read. If we have not yet forced the AX tree on for this process, do it once and
+        // retry — this is what makes Chromium/Electron apps (Slack, VSCode, browsers) readable.
+        // Setting the attribute on a native app that ignores it is harmless.
+        if !manualAXEnabledPIDs.contains(pid) {
+            manualAXEnabledPIDs.insert(pid)
+            AXUIElementSetAttributeValue(appAX, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+            return readCompletionContext(appAX: appAX)   // may still be nil this tick; sticks for next
+        }
+        return nil
+    }
+
+    /// One synchronous attempt to read the focused field's split context + caret rect. Returns nil
+    /// if nothing usable is focused (or the AX tree is not yet exposed).
+    private func readCompletionContext(appAX: AXUIElement) -> CompletionAXContext? {
         var focusedRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(appAX, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
               let focused = focusedRef, let element = Self.asElement(focused) else { return nil }
@@ -382,13 +417,30 @@ actor AccessibilityBridge: AXBridgeProtocol {
         let probe = caret > 0 ? CFRange(location: caret - 1, length: 1) : CFRange(location: 0, length: 1)
         let rect = axBoundsForRange(probe, on: element) ?? .zero
 
-        return CompletionAXContext(preContext: pre, postContext: post, caretRect: rect, isSecure: isSecure)
+        var fName: String? = nil
+        var fSize: CGFloat = 0
+        var fontRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, "AXFont" as CFString, &fontRef) == .success,
+           let dict = fontRef as? [String: Any] {
+            fName = dict["AXFontName"] as? String
+            fSize = (dict["AXFontSize"] as? CGFloat) ?? 0
+        }
+
+        return CompletionAXContext(preContext: pre, postContext: post, caretRect: rect, isSecure: isSecure,
+                                   fontName: fName, fontSize: fSize)
     }
 
     /// Fixes a typo: deletes the mistyped last word (backspaces) then types the correction.
     /// Synthesized keystrokes work across AppKit/Electron/web/terminal.
     func replaceLastWord(wrong: String, with correction: String, pid: pid_t) async -> Bool {
         guard !wrong.isEmpty else { return await insertCompletion(correction, pid: pid) }
+        // Abort if the field's trailing text is no longer `wrong` (user edited since we matched) — we
+        // must never blind-delete characters we haven't verified. Only enforced when AX can read it.
+        if let ctx = readCompletionContext(appAX: AXUIElementCreateApplication(pid)),
+           !ctx.preContext.hasSuffix(wrong) {
+            Logger.ax.debug("replaceLastWord: trailing word changed, aborting")
+            return false
+        }
         let source = CGEventSource(stateID: .combinedSessionState)
         let kVKDelete: CGKeyCode = 51
         for _ in 0..<wrong.count {
@@ -595,9 +647,16 @@ struct PendingClipboardRestore: Sendable {
 
     func persistToDisk() {
         do {
+            // Capping each item to 256 KB prevents OOM when the clipboard contains
+            // images or rich-text blobs — base64-encoded Data can balloon 33%.
+            let capped = items.map { dict in
+                dict.mapValues { $0.count > 262_144 ? Data() : $0 }
+                    .filter { !$0.value.isEmpty }
+            }.filter { !$0.isEmpty }
+            guard !capped.isEmpty else { return }
             let dir = Self.stateFileURL.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let encoded = try JSONEncoder().encode(items)
+            let encoded = try JSONEncoder().encode(capped)
             try encoded.write(to: Self.stateFileURL, options: .atomic)
         } catch {
             Logger.ax.error("AccessibilityBridge: failed to persist clipboard state — \(error.localizedDescription, privacy: .public)")

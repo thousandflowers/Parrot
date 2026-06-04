@@ -166,7 +166,7 @@ final class CompletionController {
             currentPID = pid
             guard suggestionGen == gen else { return }
             TabInterceptor.setSuggestionVisible(true)
-            overlay.show(text: em.emoji, atCaretRect: ax.caretRect)
+            overlay.show(text: em.emoji, atCaretRect: ax.caretRect, fontName: ax.fontName, fontSize: ax.fontSize)
             await StatsStore.shared.recordShown()
             Logger.infra.debug("completion: emoji \(em.shortcode, privacy: .public) -> \(em.emoji, privacy: .public)")
             return
@@ -180,7 +180,7 @@ final class CompletionController {
             currentPID = pid
             guard suggestionGen == gen else { return }
             TabInterceptor.setSuggestionVisible(true)
-            overlay.show(text: snippet.expansion, atCaretRect: ax.caretRect)
+            overlay.show(text: snippet.expansion, atCaretRect: ax.caretRect, fontName: ax.fontName, fontSize: ax.fontSize)
             await StatsStore.shared.recordSnippetExpansion()
             Logger.infra.debug("completion: snippet \(snippet.abbreviation, privacy: .public) -> \(snippet.expansion, privacy: .public)")
             return
@@ -194,7 +194,7 @@ final class CompletionController {
             currentPID = pid
             guard suggestionGen == gen else { return }
             TabInterceptor.setSuggestionVisible(true)
-            overlay.show(text: "✓ " + fix.correction, atCaretRect: ax.caretRect)
+            overlay.show(text: "✓ " + fix.correction, atCaretRect: ax.caretRect, fontName: ax.fontName, fontSize: ax.fontSize)
             await StatsStore.shared.recordTypoFix()
             Logger.infra.debug("completion: typo fix \(fix.wrong, privacy: .public) -> \(fix.correction, privacy: .public)")
             return
@@ -212,7 +212,7 @@ final class CompletionController {
             await CompletionLearningStore.shared.noteShown(key: learned.key)
             guard suggestionGen == gen else { return }
             TabInterceptor.setSuggestionVisible(true)
-            overlay.show(text: cleaned, atCaretRect: ax.caretRect)
+            overlay.show(text: cleaned, atCaretRect: ax.caretRect, fontName: ax.fontName, fontSize: ax.fontSize)
             await StatsStore.shared.recordShown()
             Logger.infra.debug("completion: learned suggestion for '\(learned.key, privacy: .public)'")
             return
@@ -235,7 +235,7 @@ final class CompletionController {
             currentContextKeys = contextKeys
             guard suggestionGen == gen else { return }
             TabInterceptor.setSuggestionVisible(true)
-            overlay.show(text: hit, atCaretRect: ax.caretRect)
+            overlay.show(text: hit, atCaretRect: ax.caretRect, fontName: ax.fontName, fontSize: ax.fontSize)
             shownAt = Date()
             await StatsStore.shared.recordShown()
             Logger.infra.debug("completion: cache hit")
@@ -294,7 +294,7 @@ final class CompletionController {
         currentContextKeys = contextKeys
         cache.set(contextHash: cacheKey, suggestion: suggestion.text)   // warm the hot path for repeats
         TabInterceptor.setSuggestionVisible(true)
-        overlay.show(text: suggestion.text, atCaretRect: ax.caretRect)
+        overlay.show(text: suggestion.text, atCaretRect: ax.caretRect, fontName: ax.fontName, fontSize: ax.fontSize)
         shownAt = Date()
         await StatsStore.shared.recordShown()
         Logger.infra.debug("completion: showing \(suggestion.text, privacy: .public) at \(NSStringFromRect(ax.caretRect), privacy: .public)")
