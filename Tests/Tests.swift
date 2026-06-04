@@ -1239,6 +1239,26 @@ final class CompletionPostprocessorTests: XCTestCase {
         let s = CompletionSuggestion(text: " informarti del fatto")
         XCTAssertEqual(s.firstWord, " informarti ")
     }
+
+    func test_stripsRestatedSentence_withInsertedLeadingWord() {
+        let out = CompletionPostprocessor.clean(
+            raw: "il 1984 è un libro di George Orwell",
+            preContext: "1984 è un libro di ", maxWords: 6)
+        XCTAssertEqual(out?.trimmingCharacters(in: .whitespaces), "George Orwell")
+    }
+
+    func test_stripsExactRestate() {
+        let out = CompletionPostprocessor.clean(
+            raw: "the cat sat on the mat",
+            preContext: "the cat sat ", maxWords: 6)
+        XCTAssertEqual(out?.trimmingCharacters(in: .whitespaces), "on the mat")
+    }
+
+    func test_keepsNormalContinuation_noOverlap() {
+        let out = CompletionPostprocessor.clean(
+            raw: " molto gentile.", preContext: "sei stato", maxWords: 6)
+        XCTAssertEqual(out, " molto gentile.")
+    }
 }
 
 final class LlamaCompletionClientTests: XCTestCase {
