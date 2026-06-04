@@ -450,22 +450,91 @@ actor AccessibilityBridge: AXBridgeProtocol {
         return await insertCompletion(correction, pid: pid)
     }
 
-    /// Inserts completion text at the caret by synthesizing typing (a Unicode keyboard event).
-    /// This is the most universal method — it works in AppKit, Electron, web fields, terminals —
-    /// where AX value-setting silently fails. Returns false only if event creation fails.
+    /// Inserts completion text at the caret.
+    ///
+    /// Fast path: saves the clipboard, writes `text`, synthesises Cmd+V to the target pid, waits
+    /// 120ms for the paste to consume the value, then restores the saved clipboard (or defers
+    /// restore using the same `PendingClipboardRestore` mechanism as `injectViaClipboard`).
+    ///
+    /// Fallback: if the clipboard cannot be written or Cmd+V event creation fails, falls back to
+    /// the original per-character Unicode keyboard-event synthesis, which works across AppKit,
+    /// Electron, web fields, and terminals.
     func insertCompletion(_ text: String, pid: pid_t) async -> Bool {
         guard !text.isEmpty else { return false }
-        let source = CGEventSource(stateID: .combinedSessionState)
+
+        // --- Fast paste path ---
+        let savedItems: [[String: Data]] = await MainActor.run {
+            NSPasteboard.general.pasteboardItems?.compactMap { item -> [String: Data]? in
+                var dict: [String: Data] = [:]
+                for type in item.types {
+                    if let data = item.data(forType: type) { dict[type.rawValue] = data }
+                }
+                return dict.isEmpty ? nil : dict
+            } ?? []
+        }
+
+        // Flush any previously deferred restore before overwriting the board again.
+        if let existing = self.pendingClipboardRestore {
+            await restoreClipboard(existing)
+            self.pendingClipboardRestore = nil
+        }
+
+        let token = UUID().uuidString
+        await MainActor.run {
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(text, forType: .string)
+            pb.setString(token, forType: Self.clipboardTokenType)
+        }
+
+        // Build Cmd+V events (virtual key 0x09 = V).
+        let source = CGEventSource(stateID: .hidSystemState)
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: true),
+           let keyUp   = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: false) {
+            keyDown.flags = .maskCommand
+            keyUp.flags   = .maskCommand
+            keyDown.post(tap: .cghidEventTap)
+            keyUp.post(tap: .cghidEventTap)
+            Logger.ax.debug("insertCompletion: paste path, \(text.count, privacy: .public) chars")
+
+            // Wait for the receiving app to consume the paste value.
+            try? await Task.sleep(for: .milliseconds(120))
+
+            // Restore clipboard: if the token is still present the paste consumed nothing else —
+            // safe to restore immediately. Otherwise defer (same logic as injectViaClipboard).
+            let existingToken = await MainActor.run { NSPasteboard.general.string(forType: Self.clipboardTokenType) }
+            if existingToken == token {
+                if !savedItems.isEmpty {
+                    await restoreClipboard(PendingClipboardRestore(items: savedItems))
+                } else {
+                    await MainActor.run { NSPasteboard.general.clearContents() }
+                }
+            } else if !savedItems.isEmpty {
+                let pending = PendingClipboardRestore(items: savedItems)
+                pending.persistToDisk()
+                self.pendingClipboardRestore = pending
+            }
+            return true
+        }
+
+        // Cmd+V event creation failed — clobber undone, but we must clean up the board first.
+        await MainActor.run { NSPasteboard.general.clearContents() }
+        if !savedItems.isEmpty {
+            await restoreClipboard(PendingClipboardRestore(items: savedItems))
+        }
+
+        // --- Per-character fallback ---
+        let charSource = CGEventSource(stateID: .combinedSessionState)
         var utf16 = Array(text.utf16)
-        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+        guard let charDown = CGEvent(keyboardEventSource: charSource, virtualKey: 0, keyDown: true),
+              let charUp   = CGEvent(keyboardEventSource: charSource, virtualKey: 0, keyDown: false) else {
             return false
         }
-        keyDown.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
-        keyUp.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
-        Logger.ax.debug("insertCompletion: typed \(text.count, privacy: .public) chars")
+        charDown.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
+        charUp.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
+        charDown.post(tap: .cghidEventTap)
+        charUp.post(tap: .cghidEventTap)
+        Logger.ax.debug("insertCompletion: char-synth fallback, \(text.count, privacy: .public) chars")
         return true
     }
 
