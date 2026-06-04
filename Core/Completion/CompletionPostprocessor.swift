@@ -36,6 +36,11 @@ enum CompletionPostprocessor {
             text = text.replacingOccurrences(of: "\\", with: "")
             // Stray underscores ("_", "___") are a model artifact, never wanted in prose → drop.
             text = text.replacingOccurrences(of: "_", with: "")
+            // Strip a LEADING list/enumeration marker ("1)", "2.", "- ", "• ") — the model sometimes
+            // slips into a numbered/bulleted list or internal reasoning ("1) First, …") instead of
+            // continuing the sentence. After stripping, a bare " 1)" leaves nothing → rejected below.
+            text = text.replacingOccurrences(of: "^\\s*(\\d{1,2}[.)]|[-•*])\\s*", with: "",
+                                             options: .regularExpression)
             // Only reject keywords in code-definition form (e.g. "function foo()")
             // — standalone "function" or "import" in plain English is valid text.
             if text.range(of: "[<>{}]|/>|</|=>|;\\s*$|\\bfunction\\s+\\w+\\s*\\(|\\bconst\\s+\\w+\\s*=|\\bdef\\s+\\w+\\s*\\(|\\bimport\\s+\\w+",

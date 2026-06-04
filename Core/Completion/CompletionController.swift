@@ -17,6 +17,7 @@ final class CompletionController {
     private var debounce: Task<Void, Never>?
     private var prefetchTask: Task<Void, Never>?
     private var shownAt = Date.distantPast
+    private var ignoreTextChangesUntil = Date.distantPast   // suppress the AX event our own accept-insert causes
 
     private let adaptive = AdaptiveDebounce()       // 40ms when paused → up to 200ms under fast typing
     private var lastKeystrokeAt = Date.distantPast
@@ -36,6 +37,10 @@ final class CompletionController {
     /// Called on every focused-text change (from `RealtimeMonitor`'s AX observer).
     func textChanged() {
         guard isEnabled else { return }
+        // Ignore the field change WE caused by inserting an accepted word: otherwise the AX
+        // value-changed event regenerates a fresh suggestion and clobbers the word-by-word Tab walk,
+        // so pressing Tab a few times never lets you accept just part of the SAME suggestion (#3).
+        if Date() < ignoreTextChangesUntil { return }
         // Cancel any background prefetch immediately — a live request always takes priority.
         prefetchTask?.cancel()
         // Task 7 — activation TTL: if a suggestion was shown very recently (~400ms), keep it
@@ -320,6 +325,9 @@ final class CompletionController {
     @discardableResult
     func tryAcceptFull() -> Bool {
         guard let s = current, currentPID != 0 else { return false }
+        // A FULL accept SHOULD let the next suggestion appear (served from the prefetch cache), so
+        // clear any walk-suppression window left over from partial accepts.
+        ignoreTextChangesUntil = .distantPast
         let pid = currentPID
         let text = s.text
         let kind = s.kind
@@ -359,6 +367,9 @@ final class CompletionController {
         // the new caret WITHOUT a model call; only recompute once the suggestion is exhausted.
         if hasRemaining {
             current = CompletionSuggestion(text: remaining, kind: .insert)
+            // Suppress the AX value-changed event our insert is about to cause, so textChanged() does
+            // NOT regenerate and clobber the remaining words we're walking. Each Tab re-extends it.
+            ignoreTextChangesUntil = Date().addingTimeInterval(0.6)
             // keep TabInterceptor visible flag TRUE so the next Tab is still captured
         } else {
             current = nil
