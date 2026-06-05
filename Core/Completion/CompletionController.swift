@@ -421,6 +421,11 @@ final class CompletionController {
             _ = await AccessibilityBridge.shared.insertCompletion(word, pid: pid)
             await StatsStore.shared.recordAccepted(text: word)
             if hasRemaining {
+                // insertCompletion posts keyboard events and returns before the app processes them,
+                // so an immediate AX read would return the PRE-insert text — we'd pin the wrong
+                // context and the real post-insert event would then recompute and wipe the walk.
+                // Let the app apply the keystrokes first.
+                try? await Task.sleep(for: .milliseconds(45))
                 let ax = await AccessibilityBridge.shared.completionContext(pid: pid)
                 await MainActor.run {
                     guard self.current != nil else { return }   // typing superseded us meanwhile
