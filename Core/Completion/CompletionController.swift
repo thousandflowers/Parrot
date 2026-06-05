@@ -18,9 +18,7 @@ final class CompletionController {
     private var prefetchTask: Task<Void, Never>?
     private var shownAt = Date.distantPast
     private var ignoreTextChangesUntil = Date.distantPast   // suppress the AX event our own accept-insert causes
-    private var shownForContext = ""                        // preContext the current suggestion was computed for; dedups spurious AX events
-    private var dismissedContext: String? = nil             // context the user explicitly dismissed (Esc/typing); don't re-show it
-    private var inFlightContext: String? = nil              // context a compute is currently running for; prevents spurious events superseding it
+    private var lastSeenContext: String? = nil              // preContext from the previous look; recompute only when the text actually changes (dedups spurious AX events)
 
     private let adaptive = AdaptiveDebounce()       // 40ms when paused → up to 200ms under fast typing
     private var lastKeystrokeAt = Date.distantPast
@@ -62,7 +60,7 @@ final class CompletionController {
         let gapMs = Int(Date().timeIntervalSince(lastKeystrokeAt) * 1000)
         lastKeystrokeAt = Date()
         // Keep any visible suggestion through the debounce. requestSuggestion() replaces it ONLY when
-        // the underlying text actually changed (dedup on `shownForContext`). Clearing here made the
+        // the underlying text actually changed (dedup on `lastSeenContext`). Clearing here made the
         // suggestion vanish on the repeated spurious AX events that fire without a real edit (and on
         // focus/tab re-entry), leaving it visible only on the very first appearance.
         debounce?.cancel()
@@ -79,6 +77,7 @@ final class CompletionController {
         current = nil
         currentPID = 0
         currentContextKeys = []
+        lastSeenContext = nil                           // force a fresh compute (used right after an accept)
         TabInterceptor.setSuggestionVisible(false)
         overlay.dim()
         debounce?.cancel()
@@ -169,44 +168,27 @@ final class CompletionController {
         CrashLogger.log("DIAG req: app=\(bundleID ?? "?") preLen=\(ax.preContext.count) caret=\(ax.caretRect != .zero) allowCode=\(allowCode)")
         #endif
 
-        // Dedup: the focused text is identical to what we last computed for → no real edit happened
-        // (fires on the many spurious AX value-changed events and on focus/tab re-entry). If a
-        // suggestion IS shown, keep it (don't wipe/recompute). If nothing is shown, allow a retry —
-        // the first attempt may have been superseded or returned empty — UNLESS the user explicitly
-        // dismissed this context (then stay quiet).
-        if ax.preContext == shownForContext, current != nil || dismissedContext == ax.preContext {
+        // Recompute ONLY when the focused text actually changed since the last look. The AX observer
+        // fires repeatedly WITHOUT a real edit (and on focus / tab re-entry); those ticks read the
+        // same text → return here, which keeps any visible suggestion AND, crucially, never bumps the
+        // generation, so the in-flight compute is never superseded and always lands. Dismiss (Esc)
+        // is covered for free: current stays nil and the same text won't recompute until it changes.
+        if ax.preContext == lastSeenContext {
             #if DEBUG
-            CrashLogger.log("DIAG req: context unchanged → keep (shown=\(current != nil) dismissed=\(dismissedContext == ax.preContext))")
+            CrashLogger.log("DIAG req: text unchanged since last look → keep current (shown=\(current != nil))")
             #endif
             return
         }
-        // A compute is already running for this exact context → let it finish; do NOT start another
-        // (a fresh requestSuggestion bumps gen and would supersede the in-flight one, so spurious
-        // events for the same text would prevent any result from ever landing → "nothing appears").
-        if inFlightContext == ax.preContext {
-            #if DEBUG
-            CrashLogger.log("DIAG req: compute already in-flight for this context → skip")
-            #endif
-            return
-        }
-        // Real change (or first suggestion for this context): drop the now-stale suggestion so a
-        // nil result hides it instead of leaving the old one glued at the wrong caret position.
+        lastSeenContext = ax.preContext
+        // Real change (or first time for this text): drop the now-stale suggestion so a nil result
+        // hides it instead of leaving the old one glued at the wrong caret position.
         current = nil
         currentPID = 0
         currentContextKeys = []
         TabInterceptor.setSuggestionVisible(false)
         overlay.hide()
-        shownForContext = ax.preContext
-        dismissedContext = nil                          // new context → any prior Esc no longer applies
-
-        // Only now (real change confirmed) supersede any in-flight request and dim during compute.
+        // Bump the generation only now (real change) so stale model results are discarded on show.
         let gen = { self.suggestionGen += 1; return self.suggestionGen }()
-        overlay.dim()
-        // Mark this context as computing so spurious same-context events don't restart/supersede it.
-        // Clear it on exit only if a newer request hasn't already claimed a different context.
-        inFlightContext = ax.preContext
-        let myContext = ax.preContext
-        defer { if inFlightContext == myContext { inFlightContext = nil } }
 
         // Snippet expansion: trailing token matches a saved abbreviation → Tab expands it.
         if ax.caretRect != .zero {
@@ -470,7 +452,6 @@ final class CompletionController {
             }
         }
         clearSuggestion()
-        dismissedContext = shownForContext              // user dismissed THIS context → don't re-show it on spurious events
         Task {
             await StatsStore.shared.recordDismissed()
             await CompletionEngine.shared.cancelPending()
