@@ -84,8 +84,10 @@ final class CompletionController {
     }
 
     private func requestSuggestion() async {
-        overlay.dim()                                   // dim (not hide) — prevents flicker during computation
-        let gen = { self.suggestionGen += 1; return self.suggestionGen }()
+        // NOTE: do NOT hide the overlay or bump suggestionGen here. Both happen only AFTER the dedup
+        // below confirms a real text change — otherwise spurious AX events (which call this on every
+        // tick) would hide a valid suggestion and supersede the in-flight request, so nothing ever
+        // appeared. `gen`/dim are established past the dedup gate.
         let t0 = Date()                                 // DIAG: measure where the per-keystroke latency goes
 
         // The Tab tap can only install once Accessibility is trusted. The user often grants it
@@ -183,6 +185,10 @@ final class CompletionController {
         TabInterceptor.setSuggestionVisible(false)
         overlay.hide()
         shownForContext = ax.preContext
+
+        // Only now (real change confirmed) supersede any in-flight request and dim during compute.
+        let gen = { self.suggestionGen += 1; return self.suggestionGen }()
+        overlay.dim()
 
         // Snippet expansion: trailing token matches a saved abbreviation → Tab expands it.
         if ax.caretRect != .zero {
