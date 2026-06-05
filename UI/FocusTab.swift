@@ -25,20 +25,24 @@ struct FocusTab: View {
                         Text("25 min").tag(25)
                         Text("45 min").tag(45)
                     }
-                    Picker("Background sound", selection: $prefs.focusSound) {
+                    Picker("Background sound (coming soon)", selection: $prefs.focusSound) {
                         Text("Silence").tag("silence")
                         Text("Coffee shop").tag("coffee")
                         Text("Rain").tag("rain")
                         Text("Lo-fi").tag("lofi")
                     }
+                    .disabled(true)
                 } header: {
                     Label("Session", systemImage: "clock")
                 }
 
                 Section {
-                    Toggle("Forward-only (no backspace)", isOn: $prefs.focusForwardOnly)
-                    Toggle("Blindwrite (text fades as you type)", isOn: $prefs.focusBlindwrite)
-                    Toggle("Kiosk mode (no escape)", isOn: $prefs.focusKiosk)
+                    Toggle("Forward-only (no backspace) — coming soon", isOn: $prefs.focusForwardOnly)
+                        .disabled(true)
+                    Toggle("Blindwrite (text fades as you type) — coming soon", isOn: $prefs.focusBlindwrite)
+                        .disabled(true)
+                    Toggle("Kiosk mode (no escape) — coming soon", isOn: $prefs.focusKiosk)
+                        .disabled(true)
                     Stepper("Streak freeze per week: \(prefs.focusStreakFreeze)", value: $prefs.focusStreakFreeze, in: 0...7)
                 } header: {
                     Label("Options", systemImage: "gearshape.2")
