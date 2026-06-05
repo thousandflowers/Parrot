@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AdvancedTab: View {
+    @Bindable var prefs: PreferencesStore
     @State private var hfToken: String = ""
     @State private var savedHFToken: String = ""
     @State private var tokenSaved = false
@@ -9,6 +10,18 @@ struct AdvancedTab: View {
 
     var body: some View {
         Form {
+            Section {
+                Picker("Language", selection: $prefs.language) {
+                    ForEach(supportedLanguages, id: \.code) { lang in
+                        Text(lang.name).tag(lang.code)
+                    }
+                }
+            } header: {
+                Label("Language", systemImage: "globe")
+            } footer: {
+                Text("Language used for completion, grammar, fluency, and all prompts. Defaults to your macOS locale. Change only if you write in a different language.")
+            }
+
             Section {
                 HStack {
                     SecureField("HF token (optional, for faster downloads)", text: $hfToken)
@@ -104,6 +117,30 @@ struct AdvancedTab: View {
         .onAppear { loadHFToken() }
     }
 
+    private let supportedLanguages: [(code: String, name: String)] = [
+        ("en", "English"),
+        ("it", "Italiano"),
+        ("fr", "Français"),
+        ("es", "Español"),
+        ("de", "Deutsch"),
+        ("pt", "Português"),
+        ("nl", "Nederlands"),
+        ("pl", "Polski"),
+        ("sv", "Svenska"),
+        ("da", "Dansk"),
+        ("no", "Norsk"),
+        ("fi", "Suomi"),
+        ("ru", "Русский"),
+        ("bg", "Български"),
+        ("cs", "Čeština"),
+        ("uk", "Українська"),
+        ("ja", "日本語"),
+        ("zh", "中文"),
+        ("ko", "한국어"),
+        ("ar", "العربية"),
+        ("he", "עברית"),
+    ]
+
     private func loadHFToken() {
         let token = (try? KeychainService.shared.load(for: "hftoken")) ?? ""
         hfToken = token
@@ -130,5 +167,5 @@ struct AdvancedTab: View {
 }
 
 #Preview {
-    AdvancedTab()
+    AdvancedTab(prefs: PreferencesStore.shared)
 }

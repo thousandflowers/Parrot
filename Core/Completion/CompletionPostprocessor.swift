@@ -53,8 +53,10 @@ enum CompletionPostprocessor {
         //    a small inserted leading word like "il") before the real continuation.
         text = stripRestatedOverlap(suggestion: text, preContext: preContext)
 
-        // 2. Short completions stop at the first line break — a new paragraph is not an inline hint.
-        if let nl = text.firstIndex(where: { $0 == "\n" || $0 == "\r" }) {
+        // 2. Multi-line support: keep newlines when the user is already in a multi-line context
+        // (email body, code, notes). Truncate to first line when typing single-line input.
+        let isMultiLine = preContext.contains(where: { $0.isNewline })
+        if !isMultiLine, let nl = text.firstIndex(where: { $0.isNewline }) {
             text = String(text[..<nl])
         }
 

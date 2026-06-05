@@ -133,6 +133,7 @@ struct HoverAnnotationView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(String(localized: "Accept correction"))
+            .accessibilityHint(String(localized: "Applies the suggested text change"))
         }
         .padding(.leading, 8)
         .padding(.trailing, 5)

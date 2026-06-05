@@ -12,15 +12,22 @@ enum CrashLogger {
     private static let crashLogURL = logDir.appendingPathComponent("crash.log")
     private static let debugLogURL = logDir.appendingPathComponent("debug.log")
 
+    /// Must be nonisolated(unsafe) — read by C signal handler where locks are not async-signal-safe.
+    /// Written once in install() before signal registration, never mutated after.
     nonisolated(unsafe) static var crashFD: Int32 = -1
-    nonisolated(unsafe) static var debugFD: Int32 = -1
+
+    /// Thread-safe via NSLock; only used from Swift contexts (log()).
+    private static let debugLock = NSLock()
+    private static var debugFD: Int32 = -1
 
     static func install() {
         try? FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
         NSSetUncaughtExceptionHandler(_exceptionHandler)
 
         crashFD = open(crashLogURL.path, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+        debugLock.lock()
         debugFD = open(debugLogURL.path, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+        debugLock.unlock()
 
         let fatalSignals: [Int32] = [SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGTRAP]
         for sig in fatalSignals {
@@ -35,7 +42,9 @@ enum CrashLogger {
     static func log(_ message: String, file: StaticString = #file, line: UInt = #line) {
         let entry = "[\(ISO8601DateFormatter().string(from: Date()))] \(message)  (\(file):\(line))\n"
         if let data = entry.data(using: .utf8) {
+            debugLock.lock()
             _ = data.withUnsafeBytes { write(debugFD, $0.baseAddress, $0.count) }
+            debugLock.unlock()
         }
         NSLog("[Parrot] \(message)")
     }

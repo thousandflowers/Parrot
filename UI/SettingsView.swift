@@ -172,7 +172,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .dictionary:  IgnoreListTab()
         case .shortcuts:   ShortcutsTab(prefs: prefs)
         case .presets:     PresetsTab(prefs: prefs)
-        case .advanced:    AdvancedTab()
+        case .advanced:    AdvancedTab(prefs: prefs)
         case .inlineAnnotations: InlineAnnotationsTab(prefs: prefs)
         case .completion:  CompletionTab(prefs: prefs)
         case .dashboard:   DashboardTab()

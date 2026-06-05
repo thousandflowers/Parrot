@@ -436,6 +436,7 @@ private struct ModelRow: View {
                 VStack(spacing: 2) {
                     ProgressView(value: progress)
                         .frame(width: 60)
+                        .accessibilityLabel("Downloading \(model.name): \(Int(progress * 100))%")
                     Text(status)
                         .font(.caption2)
                         .foregroundColor(.textSecondary)
@@ -465,6 +466,7 @@ private struct ModelRow: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .accessibilityLabel("Download \(model.name)")
+                    .accessibilityHint("Downloads the model file to your computer")
             }
         }
         .padding(.vertical, 4)

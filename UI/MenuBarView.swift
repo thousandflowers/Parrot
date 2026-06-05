@@ -533,6 +533,7 @@ private struct QuietDisclosureStyle: DisclosureGroupStyle {
                 configuration.label
             }
             .buttonStyle(.plain)
+            .accessibilityHint("Expand or collapse section")
 
             if configuration.isExpanded {
                 configuration.content
@@ -544,5 +545,5 @@ private struct QuietDisclosureStyle: DisclosureGroupStyle {
 
 #Preview {
     MenuBarView()
-        .frame(width: 320)
+        .frame(minWidth: 280, idealWidth: 320, maxWidth: 400)
 }

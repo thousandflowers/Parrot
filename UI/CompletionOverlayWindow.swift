@@ -41,8 +41,8 @@ final class CompletionOverlayWindow {
         let size = fontSize > 0 ? fontSize : (cachedFontSize > 0 ? cachedFontSize : readFontSize())
         let baseFont = (fontName.flatMap { NSFont(name: $0, size: size) }) ?? NSFont.systemFont(ofSize: size)
         // Light text on the dark backdrop pill → readable regardless of the app's own colors.
-        let baseColor = NSColor(calibratedWhite: 1.0, alpha: 0.72)
-        let firstWordColor = NSColor(calibratedWhite: 1.0, alpha: 0.98)
+        let baseColor = NSColor.ghostTextBase
+        let firstWordColor = NSColor.ghostTextHighlight
         attributed.addAttribute(.font, value: baseFont, range: fullRange)
         attributed.addAttribute(.foregroundColor, value: baseColor, range: fullRange)
 

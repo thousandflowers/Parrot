@@ -91,14 +91,44 @@ private func tabTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: CG
     // Feed every keydown into the typed-input buffer (local, in-memory) so AX-blind apps still get a
     // reconstructed context. Runs for ALL keydowns, before the suggestion-visible gate below.
     if type == .keyDown { feedTypedBuffer(event) }
-    guard type == .keyDown, TabInterceptor.isSuggestionVisible() else {
+    guard type == .keyDown else {
         return Unmanaged.passUnretained(event)
     }
     let keycode = event.getIntegerValueField(.keyboardEventKeycode)
     let flags = event.flags
+    let hasModifier = flags.contains(.maskCommand) || flags.contains(.maskControl) || flags.contains(.maskAlternate) || flags.contains(.maskShift)
+
+    // Rewrite inline mode takes priority: Tab=accept, ⌘+Tab=cycle, Esc=dismiss.
+    if RewriteActiveFlag.isActive {
+        if keycode == kVKEscape {
+            Task { @MainActor in RewriteController.shared.dismiss() }
+            return nil
+        }
+        if keycode == 48 && hasModifier && flags.contains(.maskCommand) {
+            // ⌘+Tab → cycle next
+            Task { @MainActor in RewriteController.shared.cycleNext() }
+            return nil
+        }
+        if keycode == 48 && hasModifier && flags == [.maskCommand, .maskShift] {
+            // ⌘+Shift+Tab → cycle prev
+            Task { @MainActor in RewriteController.shared.cyclePrev() }
+            return nil
+        }
+        if keycode == 48 && !hasModifier {
+            // Tab → accept
+            Task { @MainActor in RewriteController.shared.accept() }
+            return nil
+        }
+        // Any other key → dismiss + let through
+        Task { @MainActor in RewriteController.shared.dismiss() }
+        return Unmanaged.passUnretained(event)
+    }
+
+    guard TabInterceptor.isSuggestionVisible() else {
+        return Unmanaged.passUnretained(event)
+    }
     // Tab (no modifier) = accept the NEXT WORD (partial), then re-suggest. Whole-sentence accept is
     // on "\" below. (Per user spec: Tab = word, backslash = full.)
-    let hasModifier = flags.contains(.maskCommand) || flags.contains(.maskControl) || flags.contains(.maskAlternate) || flags.contains(.maskShift)
     // Read from UserDefaults directly (not PreferencesStore.shared) — this callback is nonisolated
     // and PreferencesStore is @MainActor-isolated via @Observable.
     let partialKey = UserDefaults.standard.integer(forKey: Constants.UserDefaultsKey.completionPartialKeyCode)

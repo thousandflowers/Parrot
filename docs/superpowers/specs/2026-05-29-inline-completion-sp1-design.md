@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-29
 **Status:** Approved design, pre-implementation
-**Author:** Eugenio + Claude
+**Author:** Eugenio
 **Part of:** Cotypist-parity initiative (SP1 → SP2 → SP3 → SP4)
 
 ## Goal

@@ -121,7 +121,7 @@ actor CorrectionCache: Sendable {
             DiskEntry(key: key, result: entry.result, timestamp: entry.timestamp, byteSize: entry.byteSize)
         }
         let url = cacheFileURL
-        Task.detached(priority: .utility) {
+        Task(priority: .utility) {
             guard let data = try? JSONEncoder().encode(entries) else { return }
             let dir = url.deletingLastPathComponent()
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
