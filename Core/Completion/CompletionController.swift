@@ -432,6 +432,7 @@ final class CompletionController {
                         // genuine new keystroke (different text) recomputes.
                         self.lastSeenContext = ax.preContext
                         self.ignoreTextChangesUntil = Date().addingTimeInterval(1.5)
+                        TabInterceptor.setSuggestionVisible(true)   // keep Tab captured for the next walk step
                         self.overlay.show(text: remaining, atCaretRect: ax.caretRect)
                     } else {
                         self.overlay.hide()
