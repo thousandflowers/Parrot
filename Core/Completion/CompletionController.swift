@@ -36,7 +36,7 @@ final class CompletionController {
 
     /// Called on every focused-text change (from `RealtimeMonitor`'s AX observer).
     func textChanged() {
-        guard isEnabled else { return }
+        guard isEnabled, !FocusMode.shared.isRawDraft else { return }
         // Ignore the field change WE caused by inserting an accepted word: otherwise the AX
         // value-changed event regenerates a fresh suggestion and clobbers the word-by-word Tab walk,
         // so pressing Tab a few times never lets you accept just part of the SAME suggestion (#3).

@@ -320,6 +320,49 @@ final class PreferencesStore {
         set { set(newValue, for: Constants.UserDefaultsKey.completionEmojiSkinTone) }
     }
 
+    // MARK: - Focus Mode
+
+    var focusModeEnabled: Bool {
+        get { bool(Constants.UserDefaultsKey.focusModeEnabled, default: false) }
+        set { set(newValue, for: Constants.UserDefaultsKey.focusModeEnabled) }
+    }
+    var focusDefaultDuration: Int {
+        get { int(Constants.UserDefaultsKey.focusDefaultDuration, fallback: 25) }
+        set { set(newValue, for: Constants.UserDefaultsKey.focusDefaultDuration) }
+    }
+    var focusForwardOnly: Bool {
+        get { bool(Constants.UserDefaultsKey.focusForwardOnly, default: false) }
+        set { set(newValue, for: Constants.UserDefaultsKey.focusForwardOnly) }
+    }
+    var focusBlindwrite: Bool {
+        get { bool(Constants.UserDefaultsKey.focusBlindwrite, default: false) }
+        set { set(newValue, for: Constants.UserDefaultsKey.focusBlindwrite) }
+    }
+    var focusKiosk: Bool {
+        get { bool(Constants.UserDefaultsKey.focusKiosk, default: false) }
+        set { set(newValue, for: Constants.UserDefaultsKey.focusKiosk) }
+    }
+    var focusStreakFreeze: Int {
+        get { int(Constants.UserDefaultsKey.focusStreakFreeze, fallback: 1) }
+        set { set(newValue, for: Constants.UserDefaultsKey.focusStreakFreeze) }
+    }
+    var focusSound: String {
+        get { string(Constants.UserDefaultsKey.focusSound, fallback: "silence") }
+        set { set(newValue, for: Constants.UserDefaultsKey.focusSound) }
+    }
+    var focusCelebrateToast: Bool {
+        get { bool(Constants.UserDefaultsKey.focusCelebrateToast, default: true) }
+        set { set(newValue, for: Constants.UserDefaultsKey.focusCelebrateToast) }
+    }
+    var focusCelebrateStreak: Bool {
+        get { bool(Constants.UserDefaultsKey.focusCelebrateStreak, default: true) }
+        set { set(newValue, for: Constants.UserDefaultsKey.focusCelebrateStreak) }
+    }
+    var focusCelebrateSound: Bool {
+        get { bool(Constants.UserDefaultsKey.focusCelebrateSound, default: false) }
+        set { set(newValue, for: Constants.UserDefaultsKey.focusCelebrateSound) }
+    }
+
     var personalizationStrength: Double {
         get { double(Constants.UserDefaultsKey.personalizationStrength, fallback: 0.5) }
         set { set(newValue, for: Constants.UserDefaultsKey.personalizationStrength) }

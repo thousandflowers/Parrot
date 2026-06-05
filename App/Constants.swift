@@ -148,5 +148,17 @@ enum Constants {
         static let completionFullKeyCode = "completionFullKeyCode"
         static let toneTuneUpCadence = "toneTuneUpCadence"
         static let toneTuneUpLastRun = "toneTuneUpLastRun"
+
+        // MARK: - Focus Mode
+        static let focusModeEnabled = "focusModeEnabled"
+        static let focusDefaultDuration = "focusDefaultDuration"
+        static let focusForwardOnly = "focusForwardOnly"
+        static let focusBlindwrite = "focusBlindwrite"
+        static let focusKiosk = "focusKiosk"
+        static let focusStreakFreeze = "focusStreakFreeze"
+        static let focusSound = "focusSound"
+        static let focusCelebrateToast = "focusCelebrateToast"
+        static let focusCelebrateStreak = "focusCelebrateStreak"
+        static let focusCelebrateSound = "focusCelebrateSound"
     }
 }
