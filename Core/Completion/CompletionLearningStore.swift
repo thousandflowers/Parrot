@@ -80,6 +80,14 @@ struct StyleProfile: Codable, Sendable {
 actor CompletionLearningStore {
     static let shared = CompletionLearningStore()
 
+    /// When `false` the instance never reads from or writes to disk — used by tests
+    /// to avoid polluting or being contaminated by the shared on-disk state.
+    private let loadsFromDisk: Bool
+
+    init(loadsFromDisk: Bool = true) {
+        self.loadsFromDisk = loadsFromDisk
+    }
+
     private struct Entry: Codable { var text: String; var accepts: Int; var shows: Int; var lastUsed: Double }
     private var map: [String: Entry] = [:]
     private var loaded = false
@@ -127,6 +135,7 @@ actor CompletionLearningStore {
     private func loadIfNeeded() {
         guard !loaded else { return }
         loaded = true
+        guard loadsFromDisk else { return }
         guard let data = try? Data(contentsOf: Self.fileURL) else { return }
         if let root = try? JSONDecoder().decode(PersistedRoot.self, from: data) {
             map = root.map
@@ -225,9 +234,20 @@ actor CompletionLearningStore {
     }
 
     private func save() {
+        guard loadsFromDisk else { return }
         let root = PersistedRoot(map: map, profile: profile)
         guard let data = try? JSONEncoder().encode(root) else { return }
         try? FileManager.default.createDirectory(at: Self.fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: Self.fileURL, options: .atomic)
+    }
+
+    /// Updates the writing-style fingerprint from a raw sample (e.g. onboarding phrase
+    /// completions or pasted text). Unlike `seed`, this feeds `StyleProfile` so
+    /// `styleDescriptor()` can populate. No-op for blank text.
+    func recordStyleSample(from text: String) {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        loadIfNeeded()
+        profile.update(from: text)
+        save()
     }
 }
