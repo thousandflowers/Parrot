@@ -68,5 +68,14 @@ struct CompletionAXContext: Sendable, Equatable {
 /// Abstraction over the inference backend so `CompletionEngine` is testable without a live server.
 protocol CompletionProviding: Sendable {
     /// Returns the raw model continuation for the given context (uncleaned), or throws on failure.
-    func complete(context: CompletionContext, maxWords: Int) async throws -> String
+    /// `allowCode`: the focused app is a code editor, so markup/code is wanted and must NOT be
+    /// suppressed. In prose contexts (false) the backend suppresses HTML/markup drift at the source.
+    func complete(context: CompletionContext, maxWords: Int, allowCode: Bool) async throws -> String
+}
+
+extension CompletionProviding {
+    /// Convenience for callers that don't distinguish code vs prose (defaults to prose: suppress markup).
+    func complete(context: CompletionContext, maxWords: Int) async throws -> String {
+        try await complete(context: context, maxWords: maxWords, allowCode: false)
+    }
 }

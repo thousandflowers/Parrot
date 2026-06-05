@@ -7,11 +7,11 @@ import OSLog
 actor OpenAICompletionClient: CompletionProviding {
     private let fallback = LlamaCompletionClient()
 
-    func complete(context: CompletionContext, maxWords: Int) async throws -> String {
+    func complete(context: CompletionContext, maxWords: Int, allowCode: Bool) async throws -> String {
         let endpoint = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.completionOpenAIEndpoint) ?? ""
         let apiKey = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.completionOpenAIKey) ?? ""
         guard !endpoint.isEmpty, let url = URL(string: endpoint) else {
-            return try await fallback.complete(context: context, maxWords: maxWords)
+            return try await fallback.complete(context: context, maxWords: maxWords, allowCode: allowCode)
         }
         let pre = String(context.preContext.suffix(Constants.completionMaxPrefixChars))
         let nPredict = max(6, maxWords * 4)

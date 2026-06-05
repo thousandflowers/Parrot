@@ -34,18 +34,18 @@ actor HelperCompletionProvider: CompletionProviding {
         if pipeWaiters.isEmpty { pipeBusy = false } else { pipeWaiters.removeFirst().resume() }
     }
 
-    private struct Req: Encodable { let prefix: String; let maxTokens: Int; let id: Int; let latinOnly: Bool; let seed: UInt32; let temperature: Double; let repeatPenalty: Double }
+    private struct Req: Encodable { let prefix: String; let maxTokens: Int; let id: Int; let latinOnly: Bool; let seed: UInt32; let temperature: Double; let repeatPenalty: Double; let suppressMarkup: Bool }
     private struct Resp: Decodable { let text: String; let id: Int }
 
-    func complete(context: CompletionContext, maxWords: Int) async throws -> String {
+    func complete(context: CompletionContext, maxWords: Int, allowCode: Bool) async throws -> String {
         guard let modelPath = await dedicatedModelPath(), ramAllows(modelPath) else {
-            return try await fallback.complete(context: context, maxWords: maxWords)
+            return try await fallback.complete(context: context, maxWords: maxWords, allowCode: allowCode)
         }
         do {
             try ensureHelper(modelPath: modelPath)
         } catch {
             Logger.infra.debug("completion helper launch failed (\(error.localizedDescription, privacy: .public)) — server fallback")
-            return try await fallback.complete(context: context, maxWords: maxWords)
+            return try await fallback.complete(context: context, maxWords: maxWords, allowCode: allowCode)
         }
 
         // Raw continuation of the user's text. This is the RIGHT approach for inline completion: a
@@ -65,9 +65,9 @@ actor HelperCompletionProvider: CompletionProviding {
         // budget-stop, so a little extra room keeps the trimmed result at the intended word count.
         let temp = Constants.completionTemperature
         let repPenalty = temp < 0.15 ? 1.0 : 1.3   // lower t = less repetition penalty (don't fight the cold)
-        guard let line = try? JSONEncoder().encode(Req(prefix: pre, maxTokens: max(12, maxWords * 3 + 4), id: reqID, latinOnly: latinOnly, seed: context.generationSeed, temperature: temp, repeatPenalty: repPenalty)),
+        guard let line = try? JSONEncoder().encode(Req(prefix: pre, maxTokens: max(12, maxWords * 3 + 4), id: reqID, latinOnly: latinOnly, seed: context.generationSeed, temperature: temp, repeatPenalty: repPenalty, suppressMarkup: !allowCode)),
               let stdin = stdinHandle else {
-            return try await fallback.complete(context: context, maxWords: maxWords)
+            return try await fallback.complete(context: context, maxWords: maxWords, allowCode: allowCode)
         }
 
         // Serialise the pipe exchange so overlapping requests never interleave on the single pipe.

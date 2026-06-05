@@ -9,7 +9,7 @@ final class RetryOnceTests: XCTestCase {
         var calls = 0
         let outputs: [String]
         init(_ o: [String]) { outputs = o }
-        func complete(context: CompletionContext, maxWords: Int) async throws -> String {
+        func complete(context: CompletionContext, maxWords: Int, allowCode: Bool) async throws -> String {
             defer { calls += 1 }
             return calls < outputs.count ? outputs[calls] : ""
         }

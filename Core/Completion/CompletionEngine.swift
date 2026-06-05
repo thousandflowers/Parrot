@@ -28,7 +28,7 @@ actor CompletionEngine {
         // another number → still rejected), which the user felt as lag. Not worth it.
         let started = CFAbsoluteTimeGetCurrent()
         let raw: String
-        do { raw = try await provider.complete(context: context, maxWords: maxWords) }
+        do { raw = try await provider.complete(context: context, maxWords: maxWords, allowCode: allowCode) }
         catch is CancellationError { return nil }
         catch {
             Logger.infra.debug("CompletionEngine: provider failed — \(error.localizedDescription, privacy: .public)")
@@ -53,7 +53,7 @@ actor CompletionEngine {
     /// Returns a cleaned suggestion for the speculative accepted-branch context, or nil.
     func suggestForPrefetch(context: CompletionContext, maxWords: Int, allowCode: Bool) async -> CompletionSuggestion? {
         guard context.isUsable else { return nil }
-        guard let raw = try? await provider.complete(context: context, maxWords: maxWords) else { return nil }
+        guard let raw = try? await provider.complete(context: context, maxWords: maxWords, allowCode: allowCode) else { return nil }
         guard let cleaned = CompletionPostprocessor.clean(raw: raw, preContext: context.preContext,
               maxWords: maxWords, allowCode: allowCode, midWord: false, postContext: context.postContext), !cleaned.isEmpty else { return nil }
         return CompletionSuggestion(text: cleaned)

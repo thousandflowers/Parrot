@@ -90,10 +90,27 @@ final class LlamaSession {
         return biases
     }()
 
+    /// Vocab-token biases that strongly downweight tokens carrying HTML/XML angle brackets. Web-
+    /// pretrained base models (gemma-3-4b-pt) constantly drift into markup ("<strong>…</strong>"),
+    /// which wastes the tiny budget and renders as corrupted/skipped suggestions. Suppressing the
+    /// bracket tokens at the source stops the drift before it starts. Built once, cached.
+    private lazy var markupBias: [llama_logit_bias] = {
+        var biases: [llama_logit_bias] = []
+        let n = llama_vocab_n_tokens(vocab)
+        for i in 0..<n {
+            let p = piece(i)
+            if p.contains("<") || p.contains(">") {
+                biases.append(llama_logit_bias(token: i, bias: -100.0))
+            }
+        }
+        return biases
+    }()
+
     /// Generates a short continuation of `prefix`. Reuses KV for the shared prefix.
     /// `shouldCancel` is polled each token so a newer request can abandon this one mid-generation.
     func complete(prefix: String, maxTokens: Int, temperature: Float = 0.3, seed: UInt32 = 0,
-                  latinOnly: Bool = false, repeatPenalty: Float = 1.0, shouldCancel: () -> Bool = { false }) -> String {
+                  latinOnly: Bool = false, repeatPenalty: Float = 1.0, suppressMarkup: Bool = true,
+                  shouldCancel: () -> Bool = { false }) -> String {
         var promptTokens = tokenize(prefix)
         guard !promptTokens.isEmpty else { return "" }
         // Keep within context: drop oldest prompt tokens if needed, leaving room for generation.
@@ -126,6 +143,12 @@ final class LlamaSession {
         llama_sampler_chain_add(smpl, llama_sampler_init_penalties(512, repeatPenalty, 0.0, 0.0))
         if latinOnly && !cjkBias.isEmpty {
             cjkBias.withUnsafeBufferPointer { buf in
+                llama_sampler_chain_add(smpl, llama_sampler_init_logit_bias(
+                    llama_vocab_n_tokens(vocab), Int32(buf.count), buf.baseAddress))
+            }
+        }
+        if suppressMarkup && !markupBias.isEmpty {
+            markupBias.withUnsafeBufferPointer { buf in
                 llama_sampler_chain_add(smpl, llama_sampler_init_logit_bias(
                     llama_vocab_n_tokens(vocab), Int32(buf.count), buf.baseAddress))
             }

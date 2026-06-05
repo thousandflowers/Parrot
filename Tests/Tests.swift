@@ -1320,7 +1320,7 @@ private final class StubCompletionProvider: CompletionProviding, @unchecked Send
     var error: Error?
     var beforeReturn: (@Sendable () async -> Void)?
     init(result: String = "", error: Error? = nil) { self.result = result; self.error = error }
-    func complete(context: CompletionContext, maxWords: Int) async throws -> String {
+    func complete(context: CompletionContext, maxWords: Int, allowCode: Bool) async throws -> String {
         if let beforeReturn { await beforeReturn() }
         if let error { throw error }
         return result

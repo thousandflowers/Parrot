@@ -87,7 +87,7 @@ struct LlamaCompletionClient: CompletionProviding {
         }
     }
 
-    func complete(context: CompletionContext, maxWords: Int) async throws -> String {
+    func complete(context: CompletionContext, maxWords: Int, allowCode: Bool) async throws -> String {
         guard let target = await resolveTarget(context: context) else { throw CorrectionError.serverNotRunning }
         let pre = String(context.preContext.suffix(Constants.completionMaxPrefixChars))
         let postText = String(context.postContext.prefix(Constants.completionMaxPrefixChars))
