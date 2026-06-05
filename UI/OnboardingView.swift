@@ -27,7 +27,7 @@ final class OnboardingController {
             backing: .buffered,
             defer: false
         )
-        w.title = "Initial Setup — Parrot"
+        w.title = "Initial Setup — \(AppMode.current.displayName)"
         w.center()
         w.isReleasedWhenClosed = false
         w.setFrameAutosaveName("OnboardingWindow")
