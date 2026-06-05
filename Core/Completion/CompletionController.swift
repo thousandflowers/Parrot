@@ -18,6 +18,7 @@ final class CompletionController {
     private var prefetchTask: Task<Void, Never>?
     private var shownAt = Date.distantPast
     private var ignoreTextChangesUntil = Date.distantPast   // suppress the AX event our own accept-insert causes
+    private var shownForContext = ""                        // preContext the current suggestion was computed for; dedups spurious AX events
 
     private let adaptive = AdaptiveDebounce()       // 40ms when paused → up to 200ms under fast typing
     private var lastKeystrokeAt = Date.distantPast
@@ -58,12 +59,10 @@ final class CompletionController {
         // rapid changes wait longer (toward 200ms) so we don't burn inference on text about to change.
         let gapMs = Int(Date().timeIntervalSince(lastKeystrokeAt) * 1000)
         lastKeystrokeAt = Date()
-        // Dim the overlay instead of clearing + hiding — prevents flicker during debounce.
-        current = nil
-        currentPID = 0
-        currentContextKeys = []
-        TabInterceptor.setSuggestionVisible(false)
-        overlay.dim()
+        // Keep any visible suggestion through the debounce. requestSuggestion() replaces it ONLY when
+        // the underlying text actually changed (dedup on `shownForContext`). Clearing here made the
+        // suggestion vanish on the repeated spurious AX events that fire without a real edit (and on
+        // focus/tab re-entry), leaving it visible only on the very first appearance.
         debounce?.cancel()
         let ms = adaptive.nextDelayMs(sinceLastKeystrokeMs: gapMs)
         debounce = Task { [weak self] in
@@ -165,6 +164,25 @@ final class CompletionController {
         #if DEBUG
         CrashLogger.log("DIAG req: app=\(bundleID ?? "?") preLen=\(ax.preContext.count) caret=\(ax.caretRect != .zero) allowCode=\(allowCode)")
         #endif
+
+        // Dedup: the focused text is identical to what we last computed for → no real edit happened
+        // (this fires on the many spurious AX value-changed events and on focus/tab re-entry). Keep
+        // the current state (a shown suggestion stays shown; "nothing" stays nothing) — do NOT wipe
+        // or recompute. Without this, every spurious event killed the visible suggestion.
+        if ax.preContext == shownForContext {
+            #if DEBUG
+            CrashLogger.log("DIAG req: context unchanged → keep current (shown=\(current != nil))")
+            #endif
+            return
+        }
+        // Real change (or first suggestion for this context): drop the now-stale suggestion so a
+        // nil result hides it instead of leaving the old one glued at the wrong caret position.
+        current = nil
+        currentPID = 0
+        currentContextKeys = []
+        TabInterceptor.setSuggestionVisible(false)
+        overlay.hide()
+        shownForContext = ax.preContext
 
         // Snippet expansion: trailing token matches a saved abbreviation → Tab expands it.
         if ax.caretRect != .zero {
