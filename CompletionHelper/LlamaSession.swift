@@ -135,10 +135,14 @@ final class LlamaSession {
         var batch = llama_batch_get_one(&newTokens, Int32(newTokens.count))
         guard llama_decode(ctx, batch) == 0 else { return "" }
 
-        // Sampler chain: top_k → top_p → temp → repeat_penalty → [logit_bias when latinOnly] → dist.
+        // Sampler chain: top_k → top_p → min_p → temp → repeat_penalty → [logit_bias] → dist.
+        // Tight pruning keeps inline completion on the most-likely path: a small top_k plus min_p
+        // drop the low-probability tail (random years/numbers/off-topic tokens) before sampling,
+        // so a base model's per-keystroke continuation stays relevant instead of wandering.
         let smpl = llama_sampler_chain_init(llama_sampler_chain_default_params())
-        llama_sampler_chain_add(smpl, llama_sampler_init_top_k(40))
+        llama_sampler_chain_add(smpl, llama_sampler_init_top_k(20))
         llama_sampler_chain_add(smpl, llama_sampler_init_top_p(0.9, 1))
+        llama_sampler_chain_add(smpl, llama_sampler_init_min_p(0.05, 1))
         llama_sampler_chain_add(smpl, llama_sampler_init_temp(temperature))
         llama_sampler_chain_add(smpl, llama_sampler_init_penalties(512, repeatPenalty, 0.0, 0.0))
         if latinOnly && !cjkBias.isEmpty {

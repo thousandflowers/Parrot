@@ -22,7 +22,11 @@ enum Constants {
         topP: 0.95, topK: 60, minP: 0.03, repeatPenalty: 1.1, seed: nil)
 
     // MARK: - Inline completion (SP1)
-    static let completionTemperature: Double = 0.3
+    // Near-greedy: inline completion wants the MOST LIKELY continuation, not a creative one.
+    // At 0.3 the stochastic sampler picked low-probability tokens (e.g. "2019…" after "penso che"),
+    // which read as random/wrong suggestions. 0.1 sharpens the distribution toward the top token —
+    // this is how small-model completion tools (Cotypist/Cotabby on 1.5B) stay on-context.
+    static let completionTemperature: Double = 0.1
     static let completionDefaultMaxWords = 2        // 1–2 words: granular, avoids over-suggesting/drift
     static let completionDefaultDebounceMs = 350    // wait for a real pause → far fewer inferences
     static let completionMinPrefixChars = 3         // don't suggest on near-empty fields
