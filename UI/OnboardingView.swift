@@ -63,16 +63,16 @@ struct ParrotOnboardingView: View {
     private let totalSteps = 8
 
     var body: some View {
-        VStack(spacing: 0) {
-            stepContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .animation(.easeInOut(duration: 0.2), value: step)
-
-            Divider()
-            bottomBar
-        }
-        .frame(width: 620, height: 520)
-        .background(Color.surfaceBackground)
+        OnboardingScaffold(
+            step: step,
+            totalSteps: totalSteps,
+            finalActionTitle: "Start using Parrot",
+            onBack: { step -= 1 },
+            onNext: { step += 1 },
+            onSkip: onComplete,
+            onFinish: onComplete,
+            content: { stepContent }
+        )
     }
 
     // MARK: - Step Content
@@ -91,57 +91,6 @@ struct ParrotOnboardingView: View {
         }
     }
 
-    // MARK: - Bottom Bar
-
-    private var bottomBar: some View {
-        HStack(spacing: 16) {
-            if step > 0 {
-                Button("Back") { step -= 1 }
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
-                    .accessibilityLabel("Back")
-            }
-
-            Spacer()
-
-            stepDots
-
-            Spacer()
-
-            Button("Skip") { onComplete() }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.textSecondary)
-                .font(.callout)
-                .accessibilityLabel("Skip")
-
-            if step < totalSteps - 1 {
-                Button("Next") { step += 1 }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.regular)
-                    .keyboardShortcut(.return, modifiers: [])
-                    .accessibilityLabel("Next")
-            } else {
-                Button("Start using Parrot") { onComplete() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.regular)
-                    .keyboardShortcut(.return, modifiers: [])
-                    .accessibilityLabel("Start using Parrot")
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 14)
-    }
-
-    private var stepDots: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<totalSteps, id: \.self) { i in
-                Circle()
-                    .fill(i == step ? Color.accentColor : Color.secondary.opacity(0.3))
-                    .frame(width: i == step ? 8 : 6, height: i == step ? 8 : 6)
-                    .animation(.spring(response: 0.3), value: step)
-            }
-        }
-    }
 }
 
 // MARK: - Step 0: Install
