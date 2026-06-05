@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct AdvancedTab: View {
     @Bindable var prefs: PreferencesStore
@@ -7,6 +8,8 @@ struct AdvancedTab: View {
     @State private var tokenSaved = false
     @State private var cacheClearedMessage = false
     @AppStorage(Constants.UserDefaultsKey.lightweightMode) private var lightweightMode = false
+    @State private var compatResult: String?
+    @State private var compatChecking = false
 
     var body: some View {
         Form {
@@ -20,6 +23,25 @@ struct AdvancedTab: View {
                 Label("Language", systemImage: "globe")
             } footer: {
                 Text("Language used for completion, grammar, fluency, and all prompts. Defaults to your macOS locale. Change only if you write in a different language.")
+            }
+
+            if AppMode.current.showsCompletion {
+                Section {
+                    Text("Focus a text field in the app you want to check, then click below. Wren reports whether it can read that field for context-aware completion.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button(compatChecking ? "Checking…" : "Check last focused app") {
+                        checkCompatibility()
+                    }
+                    .disabled(compatChecking)
+                    if let r = compatResult {
+                        Text(r)
+                            .font(.callout)
+                            .textSelection(.enabled)
+                    }
+                } header: {
+                    Label("App compatibility", systemImage: "checklist")
+                }
             }
 
             Section {
@@ -162,6 +184,31 @@ struct AdvancedTab: View {
             }
         } catch {
             // Keychain write failed — no confirmation shown
+        }
+    }
+
+    /// Probes the last-focused (non-Wren) app for inline-completion compatibility and shows the
+    /// verdict, so users can build/verify the "Works in" matrix themselves.
+    private func checkCompatibility() {
+        compatChecking = true
+        compatResult = nil
+        Task {
+            let pid = await AccessibilityBridge.shared.lastKnownFrontAppPID()
+            let appName = NSRunningApplication(processIdentifier: pid)?.localizedName ?? "the focused app"
+            let verdict: AppCompatibility
+            if pid == 0 {
+                verdict = .noFocus
+            } else {
+                verdict = await CompatibilityProbe.probe(
+                    pid: pid,
+                    contextProvider: { await AccessibilityBridge.shared.completionContext(pid: $0) },
+                    hasFocusedField: { _ in false }
+                )
+            }
+            await MainActor.run {
+                compatResult = "\(appName): \(verdict.verdict)"
+                compatChecking = false
+            }
         }
     }
 }

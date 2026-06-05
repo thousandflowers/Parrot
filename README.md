@@ -101,6 +101,31 @@ Parrot uses the macOS Accessibility API to read and write text directly in the f
 
 ---
 
+## Wren — works in (inline completion)
+
+Wren reads the focused field via the macOS Accessibility API to offer context-aware completion; where a field can't be read it falls back to a typed-input buffer (completes from what you type, but can't see pre-existing text). Verdicts below are self-verifiable: in Wren open **Settings → Advanced → App compatibility → Check last focused app** while a text field is focused in the target app.
+
+| App | Status |
+|---|---|
+| TextEdit | ✅ Full |
+| Notes | ✅ Full |
+| Pages | _to verify_ |
+| Mail | _to verify_ |
+| Safari | _to verify_ |
+| Chrome | _to verify (Chromium AX)_ |
+| Slack | _to verify (Electron AX)_ |
+| Messages | _to verify_ |
+| Telegram | _to verify_ |
+| Outlook | _to verify_ |
+| Bear | _to verify_ |
+| Notion | _to verify (Electron AX)_ |
+| VS Code | _to verify (Electron AX)_ |
+| Terminal | ⚠️ Partial (typed-only) |
+
+> Legend: **✅ Full** = context-aware (reads the field) · **⚠️ Partial** = typed-only fallback · **🔒 Secure** = password fields, never completed by design.
+
+---
+
 ## Features
 
 **Correction modes** — Grammar, Fluency, Grammar+Fluency combined, Translate, Writing coach, De-Slop (strips AI hedging and filler), AI Prompt Optimizer (reformats text into a cleaner prompt), and fully custom prompts. Bind any mode to a keyboard shortcut.
