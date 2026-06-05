@@ -137,9 +137,10 @@ struct LlamaCompletionClient: CompletionProviding {
         if !postText.isEmpty {
             userContent += "\n\n[this text comes AFTER the cursor, do NOT generate it: \(postText)]"
         }
+        let styleDescriptor = await CompletionLearningStore.shared.styleDescriptor()
         let payload: [String: Any] = [
             "model": model,
-            "messages": [["role": "system", "content": Self.systemPrompt(userPrompt: effectivePrompt)],
+            "messages": [["role": "system", "content": Self.systemPrompt(userPrompt: effectivePrompt, styleDescriptor: styleDescriptor)],
                          ["role": "user", "content": userContent]],
             "temperature": temp,
             "max_tokens": nPredict,
