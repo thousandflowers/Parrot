@@ -20,6 +20,7 @@ final class CompletionController {
     private var ignoreTextChangesUntil = Date.distantPast   // suppress the AX event our own accept-insert causes
     private var shownForContext = ""                        // preContext the current suggestion was computed for; dedups spurious AX events
     private var dismissedContext: String? = nil             // context the user explicitly dismissed (Esc/typing); don't re-show it
+    private var inFlightContext: String? = nil              // context a compute is currently running for; prevents spurious events superseding it
 
     private let adaptive = AdaptiveDebounce()       // 40ms when paused → up to 200ms under fast typing
     private var lastKeystrokeAt = Date.distantPast
@@ -179,6 +180,15 @@ final class CompletionController {
             #endif
             return
         }
+        // A compute is already running for this exact context → let it finish; do NOT start another
+        // (a fresh requestSuggestion bumps gen and would supersede the in-flight one, so spurious
+        // events for the same text would prevent any result from ever landing → "nothing appears").
+        if inFlightContext == ax.preContext {
+            #if DEBUG
+            CrashLogger.log("DIAG req: compute already in-flight for this context → skip")
+            #endif
+            return
+        }
         // Real change (or first suggestion for this context): drop the now-stale suggestion so a
         // nil result hides it instead of leaving the old one glued at the wrong caret position.
         current = nil
@@ -192,6 +202,11 @@ final class CompletionController {
         // Only now (real change confirmed) supersede any in-flight request and dim during compute.
         let gen = { self.suggestionGen += 1; return self.suggestionGen }()
         overlay.dim()
+        // Mark this context as computing so spurious same-context events don't restart/supersede it.
+        // Clear it on exit only if a newer request hasn't already claimed a different context.
+        inFlightContext = ax.preContext
+        let myContext = ax.preContext
+        defer { if inFlightContext == myContext { inFlightContext = nil } }
 
         // Snippet expansion: trailing token matches a saved abbreviation → Tab expands it.
         if ax.caretRect != .zero {
