@@ -19,6 +19,7 @@ final class CompletionController {
     private var shownAt = Date.distantPast
     private var ignoreTextChangesUntil = Date.distantPast   // suppress the AX event our own accept-insert causes
     private var shownForContext = ""                        // preContext the current suggestion was computed for; dedups spurious AX events
+    private var dismissedContext: String? = nil             // context the user explicitly dismissed (Esc/typing); don't re-show it
 
     private let adaptive = AdaptiveDebounce()       // 40ms when paused → up to 200ms under fast typing
     private var lastKeystrokeAt = Date.distantPast
@@ -168,12 +169,13 @@ final class CompletionController {
         #endif
 
         // Dedup: the focused text is identical to what we last computed for → no real edit happened
-        // (this fires on the many spurious AX value-changed events and on focus/tab re-entry). Keep
-        // the current state (a shown suggestion stays shown; "nothing" stays nothing) — do NOT wipe
-        // or recompute. Without this, every spurious event killed the visible suggestion.
-        if ax.preContext == shownForContext {
+        // (fires on the many spurious AX value-changed events and on focus/tab re-entry). If a
+        // suggestion IS shown, keep it (don't wipe/recompute). If nothing is shown, allow a retry —
+        // the first attempt may have been superseded or returned empty — UNLESS the user explicitly
+        // dismissed this context (then stay quiet).
+        if ax.preContext == shownForContext, current != nil || dismissedContext == ax.preContext {
             #if DEBUG
-            CrashLogger.log("DIAG req: context unchanged → keep current (shown=\(current != nil))")
+            CrashLogger.log("DIAG req: context unchanged → keep (shown=\(current != nil) dismissed=\(dismissedContext == ax.preContext))")
             #endif
             return
         }
@@ -185,6 +187,7 @@ final class CompletionController {
         TabInterceptor.setSuggestionVisible(false)
         overlay.hide()
         shownForContext = ax.preContext
+        dismissedContext = nil                          // new context → any prior Esc no longer applies
 
         // Only now (real change confirmed) supersede any in-flight request and dim during compute.
         let gen = { self.suggestionGen += 1; return self.suggestionGen }()
@@ -452,6 +455,7 @@ final class CompletionController {
             }
         }
         clearSuggestion()
+        dismissedContext = shownForContext              // user dismissed THIS context → don't re-show it on spurious events
         Task {
             await StatsStore.shared.recordDismissed()
             await CompletionEngine.shared.cancelPending()
@@ -461,6 +465,10 @@ final class CompletionController {
     /// Dismiss when the user keeps typing (non-Tab key). Auto-corrects typo fixes on Space.
     func dismissForTyping(keycode: Int64) {
         debounce?.cancel()
+        // A real keystroke means the user left any word-by-word Tab walk. Lift the post-accept
+        // suppression window so the next text change re-triggers completion — without this, typing
+        // right after a Tab accept stayed silenced for up to 0.6s ("stops after the first Tab").
+        ignoreTextChangesUntil = .distantPast
         let s = current
         let pid = currentPID
         // Gboard-style auto-correct: Space accepts a typo fix without explicit Tab.
