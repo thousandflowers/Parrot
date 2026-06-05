@@ -76,3 +76,37 @@ final class FocusTimerMathTests: XCTestCase {
         XCTAssertEqual(remaining, 20)
     }
 }
+
+@MainActor
+final class FocusStreakTests: XCTestCase {
+    private func key(_ daysAgo: Int, from today: Date) -> String {
+        let cal = Calendar.current
+        let date = cal.date(byAdding: .day, value: -daysAgo, to: cal.startOfDay(for: today))!
+        let df = DateFormatter(); df.calendar = cal
+        df.locale = Locale(identifier: "en_US_POSIX"); df.dateFormat = "yyyy-MM-dd"
+        return df.string(from: date)
+    }
+
+    func testStreak_consecutiveDays() {
+        let today = Date()
+        let keys: Set<String> = [key(0, from: today), key(1, from: today), key(2, from: today)]
+        XCTAssertEqual(FocusStatsStore.computeStreak(loggedKeys: keys, today: today, freezeLimit: 0), 3)
+    }
+
+    func testStreak_gapBreaksWithoutFreeze() {
+        let today = Date()
+        let keys: Set<String> = [key(0, from: today), key(2, from: today)]  // missing day 1
+        XCTAssertEqual(FocusStatsStore.computeStreak(loggedKeys: keys, today: today, freezeLimit: 0), 1)
+    }
+
+    func testStreak_oneFreezeBridgesOneGap() {
+        let today = Date()
+        let keys: Set<String> = [key(0, from: today), key(2, from: today), key(3, from: today)]
+        // day1 missing, bridged by 1 freeze → 0,(1 freeze),2,3 = streak 3
+        XCTAssertEqual(FocusStatsStore.computeStreak(loggedKeys: keys, today: today, freezeLimit: 1), 3)
+    }
+
+    func testStreak_emptyIsZero() {
+        XCTAssertEqual(FocusStatsStore.computeStreak(loggedKeys: [], today: Date(), freezeLimit: 1), 0)
+    }
+}
