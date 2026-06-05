@@ -18,8 +18,11 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                         .textCase(.none)
                 }
-                NavigationLink(value: SettingsTab.models) {
-                    Label(SettingsTab.models.label, systemImage: SettingsTab.models.icon)
+                // Wren drives completion from a single local .gguf (in-process helper);
+                // the full multi-service Models tab is Parrot-only.
+                let engineTab: SettingsTab = AppMode.current.showsCompletion ? .completionModel : .models
+                NavigationLink(value: engineTab) {
+                    Label(engineTab.label, systemImage: engineTab.icon)
                 }
 
                 Section {
@@ -100,6 +103,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case completion
     case dashboard
     case focus
+    case completionModel
 
     var id: String { rawValue }
 
@@ -124,6 +128,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .completion:   return "Completion"
         case .dashboard:    return "Dashboard"
         case .focus:        return "Focus"
+        case .completionModel: return "Model"
         }
     }
 
@@ -148,6 +153,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .completion:   return "text.append"
         case .dashboard:    return "chart.bar"
         case .focus:        return "target"
+        case .completionModel: return "cpu"
         }
     }
 
@@ -186,6 +192,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .plagiarism:  PlagiarismTab()
         case .contacts:    ContactsSettingsTab()
         case .focus:       FocusTab(prefs: prefs)
+        case .completionModel: CompletionModelTab(prefs: prefs)
         }
     }
 }

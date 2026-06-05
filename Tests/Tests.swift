@@ -1494,3 +1494,17 @@ final class ToneAdaptationBlendTests: XCTestCase {
         XCTAssertNil(DetectedTone.neutral.writingStyle)
     }
 }
+
+@MainActor
+final class CompletionModelTabTests: XCTestCase {
+    func testIsActive_matchesIgnoringGgufSuffixAndCase() {
+        XCTAssertTrue(CompletionModelTab.isActive(modelID: "gemma-3-4b-pt-Q4_K_M", selected: "gemma-3-4b-pt-Q4_K_M"))
+        XCTAssertTrue(CompletionModelTab.isActive(modelID: "gemma-3-4b-pt-Q4_K_M", selected: "gemma-3-4b-pt-Q4_K_M.gguf"))
+        XCTAssertTrue(CompletionModelTab.isActive(modelID: "Gemma-3-4B-PT-Q4_K_M", selected: "gemma-3-4b-pt-q4_k_m"))
+    }
+
+    func testIsActive_rejectsDifferentModelAndEmpty() {
+        XCTAssertFalse(CompletionModelTab.isActive(modelID: "gemma-3-4b", selected: "qwen2.5-0.5b"))
+        XCTAssertFalse(CompletionModelTab.isActive(modelID: "gemma-3-4b", selected: ""))
+    }
+}

@@ -103,20 +103,23 @@ struct AdvancedTab: View {
                 Toggle("Lightweight mode (fewer threads, lower CPU usage)", isOn: $lightweightMode)
                     .accessibilityLabel("Lightweight mode")
 
-                Button("Clear response cache") {
-                    Task {
-                        await CorrectionCache.shared.invalidateAll()
-                        cacheClearedMessage = true
-                        try? await Task.sleep(for: .seconds(3))
-                        guard !Task.isCancelled else { return }
-                        cacheClearedMessage = false
+                // The response cache is the correction (Parrot) cache; not used by completion.
+                if !AppMode.current.showsCompletion {
+                    Button("Clear response cache") {
+                        Task {
+                            await CorrectionCache.shared.invalidateAll()
+                            cacheClearedMessage = true
+                            try? await Task.sleep(for: .seconds(3))
+                            guard !Task.isCancelled else { return }
+                            cacheClearedMessage = false
+                        }
                     }
-                }
 
-                if cacheClearedMessage {
-                    Label("Cache cleared", systemImage: "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(Color.statusOk)
+                    if cacheClearedMessage {
+                        Label("Cache cleared", systemImage: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(Color.statusOk)
+                    }
                 }
 
                 Button("Show initial setup…") {
@@ -140,6 +143,9 @@ struct AdvancedTab: View {
                 Label("Diagnostics", systemImage: "wrench.and.screwdriver")
             }
 
+            // Privacy section is about the cloud correction services (OpenAI/OpenRouter);
+            // Wren completion is fully on-device, so this is Parrot-only.
+            if !AppMode.current.showsCompletion {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("What data leaves your device?")
@@ -167,6 +173,7 @@ struct AdvancedTab: View {
                 .padding(.vertical, 4)
             } header: {
                 Label("Privacy & Data", systemImage: "hand.raised")
+            }
             }
         }
         .formStyle(.grouped)
