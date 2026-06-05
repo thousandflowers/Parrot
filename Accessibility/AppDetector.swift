@@ -75,7 +75,7 @@ actor AppDetector {
         return appName
     }
 
-    private let browserBundleIDs: Set<String> = [
+    private static let browserBundleIDs: Set<String> = [
         "com.apple.Safari",
         "com.apple.SafariTechnologyPreview",
         "com.google.Chrome",
@@ -91,7 +91,7 @@ actor AppDetector {
 
     func isBrowser(bundleID: String?) -> Bool {
         guard let bundleID else { return false }
-        return browserBundleIDs.contains(bundleID)
+        return Self.browserBundleIDs.contains(bundleID)
     }
 
     /// Extract current URL from a browser's focused window via AX API.
@@ -160,13 +160,40 @@ actor AppDetector {
 
     /// Code editors / IDEs / terminals — where a completion containing code/markup is desired, so
     /// the plain-text guard in CompletionPostprocessor must NOT reject `{ } < >`.
-    func isCodeEditor(bundleID: String?) -> Bool {
-        guard let bundleID else { return false }
-        return codeEditorBundleIDs.contains(bundleID)
-            || codeEditorPrefixes.contains { bundleID.hasPrefix($0) }
+    static func isCode(_ bundleID: String) -> Bool {
+        codeEditorBundleIDs.contains(bundleID) || codeEditorPrefixes.contains { bundleID.hasPrefix($0) }
     }
 
-    private let codeEditorBundleIDs: Set<String> = [
+    static func isTerminal(_ bundleID: String) -> Bool {
+        terminalBundleIDs.contains(bundleID) || terminalPrefixes.contains { bundleID.hasPrefix($0) }
+    }
+
+    static func isBrowser(_ bundleID: String) -> Bool {
+        browserBundleIDs.contains(bundleID)
+    }
+
+    static func isEmail(_ bundleID: String) -> Bool {
+        emailBundleIDs.contains(bundleID)
+    }
+
+    static func isChat(_ bundleID: String) -> Bool {
+        chatBundleIDs.contains(bundleID) || chatPrefixes.contains { bundleID.hasPrefix($0) }
+    }
+
+    static func isNotes(_ bundleID: String) -> Bool {
+        notesBundleIDs.contains(bundleID)
+    }
+
+    static func isSocial(_ bundleID: String) -> Bool {
+        socialBundleIDs.contains(bundleID)
+    }
+
+    func isCodeEditor(bundleID: String?) -> Bool {
+        guard let bundleID else { return false }
+        return Self.isCode(bundleID)
+    }
+
+    private static let codeEditorBundleIDs: Set<String> = [
         "com.microsoft.VSCode",
         "com.microsoft.VSCodeInsiders",
         "com.apple.dt.Xcode",
@@ -174,12 +201,47 @@ actor AppDetector {
         "com.jetbrains.intellij", "com.jetbrains.pycharm", "com.jetbrains.WebStorm",
         "com.jetbrains.CLion", "com.jetbrains.goland", "com.jetbrains.rubymine",
         "dev.zed.Zed", "com.todesktop.230313mzl4w4u92", // Cursor
-        "com.googlecode.iterm2", "com.apple.Terminal", "net.kovidgoyal.kitty",
-        "io.alacritty", "com.github.wez.wezterm", "dev.warp.Warp-Stable",
+        "com.github.copilot",
     ]
-
-    private let codeEditorPrefixes: [String] = [
+    private static let codeEditorPrefixes: [String] = [
         "com.jetbrains.",
         "com.microsoft.VSCode",
+    ]
+
+    private static let terminalBundleIDs: Set<String> = [
+        "com.googlecode.iterm2", "com.apple.Terminal", "net.kovidgoyal.kitty",
+        "io.alacritty", "com.github.wez.wezterm", "dev.warp.Warp-Stable",
+        "com.mitchellh.ghostty", "org.tabby",
+    ]
+    private static let terminalPrefixes: [String] = [
+        "com.googlecode.iterm2",
+    ]
+
+    private static let emailBundleIDs: Set<String> = [
+        "com.apple.mail", "com.microsoft.Outlook", "com.google.Chrome.app.gmail",
+        "com.airmailapp.airmail", "com.readdle.smartmail", "com.spark.macos",
+    ]
+
+    private static let chatBundleIDs: Set<String> = [
+        "com.tinyspeck.slackmac", "com.apple.iChat", "com.apple.MobileSMS",
+        "com.tencent.xinWeChat", "com.tencent.qq", "org.telegram.desktop",
+        "com.tdesktop.Telegram", "com.discord", "com.whatapps.mac",
+        "com.signal", "com.rocket.chat", "com.zoom.us",
+    ]
+    private static let chatPrefixes: [String] = [
+        "com.tinyspeck.", "com.discord.",
+    ]
+
+    private static let notesBundleIDs: Set<String> = [
+        "com.apple.Notes", "com.bear.app", "com.obsidian.md",
+        "com.notion.id", "com.notion.Notion", "com.logseq.mac",
+        "com.ia.writer", "com.ulysses.mac", "org.todoist.mac",
+        "com.culturedcode.ThingsMac", "com.apple.reminders",
+    ]
+
+    private static let socialBundleIDs: Set<String> = [
+        "com.apple.twitter", "com.atebits.Tweetie2", // Twitter/X
+        "com.burbn.instagram", "com.tinyspeck.slackmac", "com.linkedin.app",
+        "com.reddit.mac", "com.pinterest", "com.tiktok.mac",
     ]
 }

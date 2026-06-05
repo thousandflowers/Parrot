@@ -48,7 +48,7 @@ extension NSColor {
         dark: NSColor(displayP3Red: 0.32, green: 0.32, blue: 0.34, alpha: 1)
     )
 
-    private static func appearanceColor(light: NSColor, dark: NSColor) -> NSColor {
+    static func appearanceColor(light: NSColor, dark: NSColor) -> NSColor {
         NSColor(name: nil) { appearance in
             let isDark = appearance.name == .darkAqua || appearance.name == .vibrantDark
             return isDark ? dark : light
@@ -69,7 +69,10 @@ extension Color {
 
     static let accentBrand = Color.accentColor
     static let accentGreen = Color(nsColor: .statusOk)
-    static let accentPurple = Color(nsColor: .systemPurple)
+    static let accentPurple = Color(nsColor: NSColor.appearanceColor(
+        light: NSColor(displayP3Red: 0.55, green: 0.30, blue: 0.52, alpha: 1),
+        dark: NSColor(displayP3Red: 0.78, green: 0.52, blue: 0.72, alpha: 1)
+    ))
     static let textPrimary = Color.primary
     static let textSecondary = Color.secondary
 }
@@ -97,6 +100,10 @@ extension NSColor {
         light: NSColor(displayP3Red: 0.90, green: 0.55, blue: 0.05, alpha: 0.12),
         dark: NSColor(displayP3Red: 1.0, green: 0.68, blue: 0.15, alpha: 0.18)
     )
+
+    /// Ghost completion text — dimmed base, highlighted first word (partial-accept target)
+    static let ghostTextBase = NSColor(calibratedWhite: 1.0, alpha: 0.72)
+    static let ghostTextHighlight = NSColor(calibratedWhite: 1.0, alpha: 0.98)
 }
 
 extension Color {

@@ -319,6 +319,71 @@ struct MenuBarView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
             }
+
+            // Focus Mode section
+            Divider()
+                .padding(.leading, 16)
+
+            HStack {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Raw draft mode")
+                        .font(.callout)
+                    Text("No suggestions · no corrections")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { FocusMode.shared.isRawDraft },
+                    set: { newValue in
+                        if newValue {
+                            FocusMode.shared.enterRawDraft()
+                            if prefs.realtimeEnabled { Task { await RealtimeMonitor.shared.suspend() } }
+                        } else {
+                            FocusMode.shared.exitRawDraft()
+                            if prefs.realtimeEnabled { Task { await RealtimeMonitor.shared.resume() } }
+                        }
+                    }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .labelsHidden()
+                .accessibilityLabel("Raw draft mode")
+                .accessibilityHint("Disables suggestions and corrections so you can write freely.")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+
+            // Start session
+            Button {
+                FocusSessionPanel.shared.show()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "timer")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16, alignment: .center)
+                    Text("Start focus session")
+                        .font(.callout)
+                    Spacer()
+                    if FocusStatsStore.shared.currentStreak > 0 {
+                        HStack(spacing: 3) {
+                            Image(systemName: "flame.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.orange)
+                            Text("\(FocusStatsStore.shared.currentStreak)")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.orange.opacity(0.12), in: Capsule())
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 7)
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -533,6 +598,7 @@ private struct QuietDisclosureStyle: DisclosureGroupStyle {
                 configuration.label
             }
             .buttonStyle(.plain)
+            .accessibilityHint("Expand or collapse section")
 
             if configuration.isExpanded {
                 configuration.content
@@ -544,5 +610,5 @@ private struct QuietDisclosureStyle: DisclosureGroupStyle {
 
 #Preview {
     MenuBarView()
-        .frame(width: 320)
+        .frame(minWidth: 280, idealWidth: 320, maxWidth: 400)
 }

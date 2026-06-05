@@ -99,6 +99,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case contacts
     case completion
     case dashboard
+    case focus
 
     var id: String { rawValue }
 
@@ -122,6 +123,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .contacts:     return "Contacts"
         case .completion:   return "Completion"
         case .dashboard:    return "Dashboard"
+        case .focus:        return "Focus"
         }
     }
 
@@ -145,14 +147,15 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .contacts:     return "person.2"
         case .completion:   return "text.append"
         case .dashboard:    return "chart.bar"
+        case .focus:        return "target"
         }
     }
 
     // Tabs are mode-specific: Canary shows completion + shared settings; Parrot shows correction.
     static var behaviorTabs: [SettingsTab] {
         AppMode.current.showsCompletion
-            ? [.completion, .exclusions, .shortcuts, .dashboard]
-            : [.prompt, .appRules, .customRules, .exclusions, .inlineAnnotations, .dictionary, .shortcuts, .presets]
+            ? [.completion, .exclusions, .shortcuts, .focus, .dashboard]
+            : [.prompt, .appRules, .customRules, .exclusions, .inlineAnnotations, .dictionary, .shortcuts, .presets, .focus]
     }
     static var dataTabs: [SettingsTab] {
         AppMode.current.showsCompletion ? [.exportImport] : [.history, .exportImport, .iCloud, .knowledge, .contacts]
@@ -172,7 +175,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .dictionary:  IgnoreListTab()
         case .shortcuts:   ShortcutsTab(prefs: prefs)
         case .presets:     PresetsTab(prefs: prefs)
-        case .advanced:    AdvancedTab()
+        case .advanced:    AdvancedTab(prefs: prefs)
         case .inlineAnnotations: InlineAnnotationsTab(prefs: prefs)
         case .completion:  CompletionTab(prefs: prefs)
         case .dashboard:   DashboardTab()
@@ -182,6 +185,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .knowledge:   KnowledgeBaseTab()
         case .plagiarism:  PlagiarismTab()
         case .contacts:    ContactsSettingsTab()
+        case .focus:       FocusTab(prefs: prefs)
         }
     }
 }

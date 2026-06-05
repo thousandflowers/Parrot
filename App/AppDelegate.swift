@@ -40,14 +40,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             warmupNeeded = false
         }
         if warmupNeeded {
-            Task.detached(priority: .userInitiated) {
+            Task(priority: .userInitiated) {
                 await MainActor.run { MenuBarParrot.shared.setState(.sleeping) }
                 await LocalLLMService.shared.warmup()
                 await MainActor.run { MenuBarParrot.shared.setState(.idle) }
             }
         } else if serviceType == .appleIntelligence {
             if #available(macOS 26.0, *) {
-                Task.detached {
+                Task {
                     if !AppleIntelligenceService.shared.isAvailable {
                         os.Logger.infra.info("Apple Intelligence not available: \(AppleIntelligenceService.shared.availabilityDescription)")
                     }
@@ -58,7 +58,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Wren needs an on-device model to generate suggestions. We warm up above, but if NO model is
         // installed completion can never produce anything — surface that once (with a path to fix it)
         // instead of failing silently, which reads as "the app is broken".
-        if mode.showsCompletion && PreferencesStore.shared.inlineCompletionEnabled {
+        // Gate to AFTER onboarding completes: the Wren onboarding now runs the model download in
+        // the background, so this fallback alert should only fire for users who skipped onboarding.
+        if mode.showsCompletion && PreferencesStore.shared.inlineCompletionEnabled
+           && UserDefaults.standard.bool(forKey: OnboardingController.completionKey(for: .wren)) {
             Task {
                 guard (await ModelManager.shared.localModels()).isEmpty else { return }
                 await MainActor.run {
@@ -102,6 +105,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         CrashLogger.log("launch: observers set")
 
         OnboardingController.shared.showIfNeeded()
+        ToneTuneUpPresenter.presentIfDue()
         CrashLogger.log("launch: onboarding checked")
 
         // Load correction cache persisted from previous session
@@ -116,7 +120,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             TabInterceptor.shared.start()
             // Warm the completion model into RAM now so the first keystroke doesn't trigger a
             // multi-second cold load (during which fast typing supersedes every request → nothing).
-            Task.detached(priority: .utility) { await CompletionEngine.shared.warmup() }
+            Task(priority: .utility) { await CompletionEngine.shared.warmup() }
             // Screen context (optional): prompt once for Screen Recording so Wren can read the
             // conversation above the caret. No-ops / degrades to text-field-only if denied.
             if PreferencesStore.shared.completionScreenContextEnabled, !ScreenContextProvider.hasPermission {
@@ -137,8 +141,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem?.button else { return }
         button.action = #selector(togglePopover)
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        button.setAccessibilityLabel("Parrot menu")
-        button.setAccessibilityHelp("Open the Parrot correction menu")
+        let appName = AppMode.current.displayName
+        button.setAccessibilityLabel("\(appName) menu")
+        button.setAccessibilityHelp(AppMode.current.showsCompletion
+            ? "Open the \(appName) completion menu"
+            : "Open the \(appName) correction menu")
         MenuBarParrot.shared.attach(to: button, statusItem: statusItem!)
     }
 

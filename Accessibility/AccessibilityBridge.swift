@@ -151,6 +151,24 @@ actor AccessibilityBridge: AXBridgeProtocol {
         return try await extractText(from: element)
     }
 
+    /// Full plain text of the focused element of `pid` (its kAXValueAttribute),
+    /// or nil if unavailable. Used by Focus Mode's word counter — does not throw,
+    /// does not prefer selected text.
+    func focusedPlainText(pid: pid_t) async -> String? {
+        guard AXIsProcessTrusted() else { return nil }
+        let appAX = AXUIElementCreateApplication(pid)
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+                appAX, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
+              let focused = focusedRef,
+              let element = Self.asElement(focused) else { return nil }
+        var valueRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+                element, kAXValueAttribute as CFString, &valueRef) == .success,
+              let value = valueRef as? String else { return nil }
+        return value
+    }
+
     func fetchSelectedText() async throws -> String {
         guard AXIsProcessTrusted() else {
             throw CorrectionError.accessibilityPermissionDenied

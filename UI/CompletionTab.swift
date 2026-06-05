@@ -102,6 +102,15 @@ struct CompletionTab: View {
                     }
                 ))
                 Toggle("Use clipboard context", isOn: $prefs.completionUseClipboardContext)
+                Picker("Tone tune-up", selection: Binding(
+                    get: { prefs.toneTuneUpCadence },
+                    set: { prefs.toneTuneUpCadence = $0 }
+                )) {
+                    Text("Off").tag(ToneTuneUpCadence.off)
+                    Text("Daily").tag(ToneTuneUpCadence.daily)
+                    Text("Weekly").tag(ToneTuneUpCadence.weekly)
+                }
+                .help("Occasionally finish a few phrases so Wren keeps learning your tone.")
             } header: {
                 Label("Context", systemImage: "rectangle.dashed.and.paperclip")
             } footer: {

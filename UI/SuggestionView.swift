@@ -124,6 +124,7 @@ struct SuggestionView: View {
             .buttonStyle(.plain)
             .onHover { closeHovered = $0 }
             .accessibilityLabel("Close")
+            .accessibilityHint("Closes the suggestion panel")
             .frame(minWidth: 44, minHeight: 44)
         }
         .padding(.horizontal, 12)
@@ -331,6 +332,7 @@ struct SuggestionView: View {
                 }
                 .controlSize(.small)
                 .accessibilityLabel("Open Settings")
+                .accessibilityHint("Opens the app settings window")
             }
             .frame(minHeight: 60)
             .frame(maxWidth: .infinity)
@@ -354,6 +356,7 @@ struct SuggestionView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .accessibilityLabel("Ignore")
+                        .accessibilityHint("Ignores the first suggested change")
 
                 Spacer()
 
@@ -368,6 +371,7 @@ struct SuggestionView: View {
                 .buttonStyle(.plain)
                 .help(showSideBySideDiff ? "Showing side-by-side — click for inline diff" : "Showing inline diff — click for side-by-side")
                 .accessibilityLabel(showSideBySideDiff ? "Side-by-side view" : "Inline diff view")
+                .accessibilityHint("Toggles between inline and side-by-side diff display")
 
                 Menu {
                     menuListenAction(r)
@@ -396,6 +400,7 @@ struct SuggestionView: View {
                 .menuStyle(.button)
                 .buttonStyle(.plain)
                 .accessibilityLabel("More options")
+                .accessibilityHint("Opens a menu with additional actions")
 
                 Button(String(localized: "panel.apply")) { onApply() }
                     .keyboardShortcut(.defaultAction)

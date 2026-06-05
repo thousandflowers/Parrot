@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-29
 **Status:** Approved design, pre-implementation
-**Author:** Eugenio + Claude
+**Author:** Eugenio
 
 ## Goal
 

@@ -150,7 +150,7 @@ final class DirectApplyToast {
             let btn = NSButton(title: "Undo", target: nil, action: nil)
             btn.bezelStyle = .regularSquare
             btn.isBordered = false
-            btn.contentTintColor = NSColor.systemBlue
+            btn.contentTintColor = NSColor.controlAccentColor
             btn.font = .systemFont(ofSize: 13, weight: .medium)
             btn.translatesAutoresizingMaskIntoConstraints = false
             containerView.addSubview(btn)

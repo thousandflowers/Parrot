@@ -57,10 +57,15 @@ enum ModelCatalog {
     }
 
     static func recommended(ramGB: Int, language: String) -> ModelRecommendation {
-        let fallback = all.first ?? {
+        let fallback: ModelRecommendation = {
             let urlString = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
             guard let url = URL(string: urlString) else {
-                fatalError("Invalid model URL: \(urlString)")
+                assertionFailure("Invalid model URL: \(urlString)")
+                return all.first(where: { _ in true }) ?? ModelRecommendation(
+                    id: "fallback", name: "Fallback",
+                    reason: "", sizeLabel: "0 GB", ramRequired: 0,
+                    url: URL(string: "about:blank")!, expectedSHA256: nil, isOnboardingCandidate: false
+                )
             }
             return ModelRecommendation(
                 id: "qwen2.5-1.5b-instruct-q4_k_m", name: "Qwen 2.5 1.5B",

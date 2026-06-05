@@ -42,7 +42,7 @@ struct StoryAnalysisSheet: View {
             }
         }
         .padding()
-        .frame(width: 480, height: 400)
+        .frame(minWidth: 440, idealWidth: 500, maxWidth: .infinity, minHeight: 380, idealHeight: 420, maxHeight: .infinity)
     }
 }
 

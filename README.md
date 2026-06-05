@@ -62,6 +62,11 @@ Or install via Homebrew:
 brew install --cask thousandflowers/parrot/parrot
 ```
 
+Prefer inline completion instead of grammar correction? Install **Wren** (the on-device autocomplete sibling, ships from the same releases):
+```bash
+brew install --cask thousandflowers/parrot/wren
+```
+
 ---
 
 ## How it works
@@ -93,6 +98,53 @@ Parrot uses the macOS Accessibility API to read and write text directly in the f
 | No account, no subscription, no extension | ✅ | ❌ | partial |
 | Per-app rules (different prompt for each app) | ✅ | ❌ | ❌ |
 | Open source | ✅ | ❌ | ✅ |
+
+---
+
+## Wren — works in (inline completion)
+
+Wren reads the focused field via the macOS Accessibility API to offer context-aware completion; where a field can't be read it falls back to a typed-input buffer (completes from what you type, but can't see pre-existing text). Verdicts below are self-verifiable: in Wren open **Settings → Advanced → App compatibility → Check last focused app** while a text field is focused in the target app.
+
+| App | Status |
+|---|---|
+| TextEdit | ✅ Full |
+| Notes | ✅ Full |
+| Pages | _to verify_ |
+| Mail | _to verify_ |
+| Safari | _to verify_ |
+| Chrome | _to verify (Chromium AX)_ |
+| Slack | _to verify (Electron AX)_ |
+| Messages | _to verify_ |
+| Telegram | _to verify_ |
+| Outlook | _to verify_ |
+| Bear | _to verify_ |
+| Notion | _to verify (Electron AX)_ |
+| VS Code | _to verify (Electron AX)_ |
+| Terminal | ⚠️ Partial (typed-only) |
+
+> Legend: **✅ Full** = context-aware (reads the field) · **⚠️ Partial** = typed-only fallback · **🔒 Secure** = password fields, never completed by design.
+
+---
+
+## Performance
+
+Wren runs inference in a **separate subprocess** (`ParrotCompletionHelper`), so a model load or CPU spike never freezes the UI — unlike in-process competitors. Numbers below are collected on-device: in Wren open **Settings → Advanced → Performance → Refresh metrics** after typing for a bit, and paste the table here.
+
+**Inference latency** (warm, per request):
+
+| Stage | p50 | p95 | p99 | n |
+|---|---|---|---|---|
+| model | _measure_ | _measure_ | _measure_ | _measure_ |
+| total | _measure_ | _measure_ | _measure_ | _measure_ |
+
+**Memory** (Activity Monitor or the in-app readout):
+
+| Process | Idle | Active |
+|---|---|---|
+| Wren app | _measure_ | _measure_ |
+| ParrotCompletionHelper (model) | _measure_ | _measure_ |
+
+> Methodology: latency is the inference round-trip recorded by `LatencyTracer`; app memory is `phys_footprint`. The helper process holds the model weights, so total RAM = app + helper. Measured on _your Mac model / model file_ — fill in before publishing.
 
 ---
 

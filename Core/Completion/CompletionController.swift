@@ -36,7 +36,7 @@ final class CompletionController {
 
     /// Called on every focused-text change (from `RealtimeMonitor`'s AX observer).
     func textChanged() {
-        guard isEnabled else { return }
+        guard isEnabled, !FocusMode.shared.isRawDraft else { return }
         // Ignore the field change WE caused by inserting an accepted word: otherwise the AX
         // value-changed event regenerates a fresh suggestion and clobbers the word-by-word Tab walk,
         // so pressing Tab a few times never lets you accept just part of the SAME suggestion (#3).
@@ -108,6 +108,15 @@ final class CompletionController {
         let bundleID = await AppDetector.shared.frontAppBundleID(forPID: pid)
         if let id = bundleID, PreferencesStore.shared.isExcluded(bundleID: id) { return }
         let allowCode = await AppDetector.shared.isCodeEditor(bundleID: bundleID)
+
+        // Per-app effective profile: resolves category defaults → rule overrides → global.
+        let effectiveProfile: AppProfile = {
+            guard let bundleID else { return .default }
+            return PreferencesStore.shared.effectiveProfile(for: bundleID)
+        }()
+        let perAppMaxLength = effectiveProfile.maxCompletionLength
+        let perAppScreenCtx = effectiveProfile.screenContextEnabled
+        let perAppStyleInstructions = effectiveProfile.styleInstructions
 
         // Per-app completion rule: if an AppRule matches this bundleID and has a promptID,
         // use that custom prompt's template as the user prompt override.
@@ -217,7 +226,7 @@ final class CompletionController {
         let contextKeys = CompletionLearningStore.keys(forContext: ax.preContext)
         if !contextKeys.isEmpty,
            let learned = await CompletionLearningStore.shared.learnedSuggestion(keys: contextKeys),
-           let cleaned = CompletionPostprocessor.clean(raw: learned.text, preContext: ax.preContext, maxWords: PreferencesStore.shared.maxCompletionLength * 3, allowCode: allowCode) {
+           let cleaned = CompletionPostprocessor.clean(raw: learned.text, preContext: ax.preContext, maxWords: (perAppMaxLength ?? PreferencesStore.shared.maxCompletionLength) * 3, allowCode: allowCode) {
             current = CompletionSuggestion(text: cleaned, kind: .insert)
             currentPID = pid
             currentContextKeys = contextKeys
@@ -255,22 +264,32 @@ final class CompletionController {
         // prompt ONLY (the cache key, learned keys, and typo-fix above all use the raw typed text).
         // Crop-above-caret excludes the input field, so the model never re-reads its own output.
         var modelPre = preContext
+        let screenCtxEnabled = perAppScreenCtx ?? PreferencesStore.shared.completionScreenContextEnabled
         if !allowCode, ax.caretRect != .zero,
-           PreferencesStore.shared.completionScreenContextEnabled, ScreenContextProvider.hasPermission {
+           screenCtxEnabled, ScreenContextProvider.hasPermission {
             let screenH = NSScreen.main?.frame.height ?? 0
             let screen = await ScreenContextProvider.shared.currentContext(pid: pid, caretRect: ax.caretRect, screenHeight: screenH)
             if !screen.isEmpty { modelPre = screen + "\n" + preContext }
         }
 
+        // Merge per-app style instructions into the global personalization instructions.
+        let globalInstructions = PreferencesStore.shared.personalizationInstructions
+        let mergedInstructions: String = {
+            if let perApp = perAppStyleInstructions, !perApp.isEmpty {
+                if !globalInstructions.isEmpty { return globalInstructions + "\n\n" + perApp }
+                return perApp
+            }
+            return globalInstructions
+        }()
         let context = CompletionContext(preContext: modelPre, postContext: ax.postContext,
                                         language: PreferencesStore.shared.language,
                                         userPromptOverride: appRulePrompt,
-                                        personalizationInstructions: PreferencesStore.shared.personalizationInstructions,
+                                        personalizationInstructions: mergedInstructions,
                                         personalizationStrength: PreferencesStore.shared.personalizationStrength,
                                         completionModelID: PreferencesStore.shared.completionModelID,
                                         selectedModelID: PreferencesStore.shared.selectedModelID)
         Logger.infra.debug("completion: preContext tail=…\(String(ax.preContext.suffix(40)), privacy: .public)")
-        let maxWords = PreferencesStore.shared.maxCompletionLength
+        let maxWords = perAppMaxLength ?? PreferencesStore.shared.maxCompletionLength
         // Use the accurate (spell-check) mid-word detector here: a finished word like "ciao" (last
         // char a letter) must NOT be treated as mid-word, or it gets a phrase glued without a space.
         // The cheap isMidWordFast over-triggers on finished words; isMidWord disambiguates.

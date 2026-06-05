@@ -64,8 +64,75 @@ struct AppRulesTab: View {
                             }
                             .pickerStyle(.menu)
                             .frame(maxWidth: 140)
+
+                            Text(rule.category.rawValue.capitalized)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(.quaternary.opacity(0.5), in: Capsule())
                         }
                         .font(.caption)
+
+                        if AppMode.current.showsCompletion {
+                            DisclosureGroup("Completion Settings") {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text("Max words").font(.caption)
+                                        TextField("Auto", value: Binding(
+                                            get: { rule.profile.maxCompletionLength },
+                                            set: { newValue in
+                                                var updated = rule
+                                                updated.profile.maxCompletionLength = newValue
+                                                prefs.updateAppRule(updated)
+                                            }
+                                        ), format: .number).textFieldStyle(.roundedBorder).frame(width: 60)
+                                    }
+                                    HStack {
+                                        Text("Debounce (ms)").font(.caption)
+                                        TextField("Auto", value: Binding(
+                                            get: { rule.profile.completionDebounceMs },
+                                            set: { newValue in
+                                                var updated = rule
+                                                updated.profile.completionDebounceMs = newValue
+                                                prefs.updateAppRule(updated)
+                                            }
+                                        ), format: .number).textFieldStyle(.roundedBorder).frame(width: 60)
+                                    }
+                                    Toggle("Grammar check", isOn: Binding(
+                                        get: { rule.profile.grammarEnabled ?? false },
+                                        set: { newValue in
+                                            var updated = rule
+                                            updated.profile.grammarEnabled = newValue
+                                            prefs.updateAppRule(updated)
+                                        }
+                                    ))
+                                    .font(.caption)
+                                    Toggle("Screen context", isOn: Binding(
+                                        get: { rule.profile.screenContextEnabled ?? false },
+                                        set: { newValue in
+                                            var updated = rule
+                                            updated.profile.screenContextEnabled = newValue
+                                            prefs.updateAppRule(updated)
+                                        }
+                                    ))
+                                    .font(.caption)
+                                    TextField("Style instructions", text: Binding(
+                                        get: { rule.profile.styleInstructions ?? "" },
+                                        set: { newValue in
+                                            var updated = rule
+                                            updated.profile.styleInstructions = newValue.isEmpty ? nil : newValue
+                                            prefs.updateAppRule(updated)
+                                        }
+                                    ))
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.caption)
+                                }
+                                .padding(.leading, 8)
+                                .padding(.bottom, 4)
+                            }
+                            .font(.caption)
+                        }
                     }
                     .padding(.vertical, 4)
                 }
@@ -104,7 +171,8 @@ struct AppRulesTab: View {
                            bundleID != Bundle.main.bundleIdentifier,
                            !prefs.appRules.contains(where: { $0.bundleID == bundleID }) {
                             let appName = NSWorkspace.shared.frontmostApplication?.localizedName ?? bundleID
-                            prefs.addAppRule(AppRule(bundleID: bundleID, displayName: appName))
+                            let cat = AppCategory.detect(bundleID: bundleID)
+                            prefs.addAppRule(AppRule(bundleID: bundleID, displayName: appName, category: cat))
                         }
                     }
                 }

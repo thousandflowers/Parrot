@@ -8,10 +8,14 @@ final class OnboardingController {
     static let shared = OnboardingController()
 
     private var window: NSWindow?
-    private static let completedKey = "hasCompletedOnboarding_v2"
+
+    nonisolated static func completionKey(for mode: AppMode) -> String {
+        mode == .wren ? "hasCompletedOnboarding_wren_v1" : "hasCompletedOnboarding_v2"
+    }
 
     func showIfNeeded() {
-        guard !UserDefaults.standard.bool(forKey: Self.completedKey) else { return }
+        let key = Self.completionKey(for: .current)
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
         show()
     }
 
@@ -27,16 +31,20 @@ final class OnboardingController {
             backing: .buffered,
             defer: false
         )
-        w.title = "Initial Setup — Parrot"
+        w.title = "Initial Setup — \(AppMode.current.displayName)"
         w.center()
         w.isReleasedWhenClosed = false
         w.setFrameAutosaveName("OnboardingWindow")
 
-        w.contentView = NSHostingView(rootView: OnboardingView(onComplete: { [weak self] in
-            UserDefaults.standard.set(true, forKey: Self.completedKey)
+        let onComplete: () -> Void = { [weak self] in
+            UserDefaults.standard.set(true, forKey: Self.completionKey(for: .current))
             self?.window?.close()
             self?.window = nil
-        }))
+        }
+        let root: AnyView = AppMode.current.showsCompletion
+            ? AnyView(WrenOnboardingView(onComplete: onComplete))
+            : AnyView(ParrotOnboardingView(onComplete: onComplete))
+        w.contentView = NSHostingView(rootView: root)
 
         window = w
         w.makeKeyAndOrderFront(nil)
@@ -46,7 +54,7 @@ final class OnboardingController {
 
 // MARK: - Root View
 
-struct OnboardingView: View {
+struct ParrotOnboardingView: View {
     let onComplete: () -> Void
 
     @State private var step = 0
@@ -55,16 +63,16 @@ struct OnboardingView: View {
     private let totalSteps = 8
 
     var body: some View {
-        VStack(spacing: 0) {
-            stepContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .animation(.easeInOut(duration: 0.2), value: step)
-
-            Divider()
-            bottomBar
-        }
-        .frame(width: 620, height: 520)
-        .background(Color.surfaceBackground)
+        OnboardingScaffold(
+            step: step,
+            totalSteps: totalSteps,
+            finalActionTitle: "Start using Parrot",
+            onBack: { step -= 1 },
+            onNext: { step += 1 },
+            onSkip: onComplete,
+            onFinish: onComplete,
+            content: { stepContent }
+        )
     }
 
     // MARK: - Step Content
@@ -83,57 +91,6 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Bottom Bar
-
-    private var bottomBar: some View {
-        HStack(spacing: 16) {
-            if step > 0 {
-                Button("Back") { step -= 1 }
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
-                    .accessibilityLabel("Back")
-            }
-
-            Spacer()
-
-            stepDots
-
-            Spacer()
-
-            Button("Skip") { onComplete() }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.textSecondary)
-                .font(.callout)
-                .accessibilityLabel("Skip")
-
-            if step < totalSteps - 1 {
-                Button("Next") { step += 1 }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.regular)
-                    .keyboardShortcut(.return, modifiers: [])
-                    .accessibilityLabel("Next")
-            } else {
-                Button("Start using Parrot") { onComplete() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.regular)
-                    .keyboardShortcut(.return, modifiers: [])
-                    .accessibilityLabel("Start using Parrot")
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 14)
-    }
-
-    private var stepDots: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<totalSteps, id: \.self) { i in
-                Circle()
-                    .fill(i == step ? Color.accentColor : Color.secondary.opacity(0.3))
-                    .frame(width: i == step ? 8 : 6, height: i == step ? 8 : 6)
-                    .animation(.spring(response: 0.3), value: step)
-            }
-        }
-    }
 }
 
 // MARK: - Step 0: Install
@@ -728,5 +685,5 @@ private struct ReadyCheckRow: View {
 }
 
 #Preview {
-    OnboardingView(onComplete: {})
+    ParrotOnboardingView(onComplete: {})
 }

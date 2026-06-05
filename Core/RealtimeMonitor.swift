@@ -27,7 +27,21 @@ actor RealtimeMonitor {
         lastTextHash = nil
     }
 
-    func frontAppChanged() {
+    func suspend() {
+        isEnabled = false
+        Task { await detachObserver() }
+        debounceTask?.cancel()
+        correctionTask?.cancel()
+    }
+
+    func resume() {
+        isEnabled = true
+        Task { await attachToFocusedApp() }
+    }
+
+    func frontAppChanged() async {
+        let isRawDraft = await MainActor.run { FocusMode.shared.isRawDraft }
+        guard !isRawDraft else { return }
         lastTextHash = nil
         Task { await RealtimeIndicatorController.shared.hide() }
         Task { await attachToFocusedApp() }
@@ -109,6 +123,7 @@ actor RealtimeMonitor {
 
     private func onAccessibilityEvent() async {
         guard isEnabled else { return }
+        guard !(await MainActor.run { FocusMode.shared.isRawDraft }) else { return }
         guard UserDefaults.standard.bool(forKey: Constants.UserDefaultsKey.realtimeEnabled) else { return }
 
         let pid = await AccessibilityBridge.shared.lastKnownFrontAppPID()

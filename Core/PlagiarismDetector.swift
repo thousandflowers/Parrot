@@ -84,7 +84,9 @@ actor PlagiarismDetector {
                     url: nil
                 )]
             }
-        } catch {}
+        } catch {
+            CrashLogger.log("LLM analysis failed: \(error.localizedDescription)")
+        }
 
         return []
     }
