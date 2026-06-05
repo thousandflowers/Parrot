@@ -12,17 +12,19 @@ struct SettingsView: View {
                 // P2.3: Keyboard focus — the sidebar uses NavigationLink which gets
                 // natural focus order via the List. Section headers are non-interactive
                 // so tab skips to the first NavigationLink automatically.
-                Section {
-                    Label("Engine", systemImage: "cpu")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .textCase(.none)
-                }
-                // Wren drives completion from a single local .gguf (in-process helper);
-                // the full multi-service Models tab is Parrot-only.
-                let engineTab: SettingsTab = AppMode.current.showsCompletion ? .completionModel : .models
-                NavigationLink(value: engineTab) {
-                    Label(engineTab.label, systemImage: engineTab.icon)
+                // The multi-service Models tab is Parrot-only. In Wren the completion
+                // model lives in the Completion tab ("Completion model" picker), so the
+                // Engine section is hidden to avoid a redundant/confusing entry.
+                if !AppMode.current.showsCompletion {
+                    Section {
+                        Label("Engine", systemImage: "cpu")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(.none)
+                    }
+                    NavigationLink(value: SettingsTab.models) {
+                        Label(SettingsTab.models.label, systemImage: SettingsTab.models.icon)
+                    }
                 }
 
                 Section {
@@ -103,7 +105,6 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case completion
     case dashboard
     case focus
-    case completionModel
 
     var id: String { rawValue }
 
@@ -128,7 +129,6 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .completion:   return "Completion"
         case .dashboard:    return "Dashboard"
         case .focus:        return "Focus"
-        case .completionModel: return "Model"
         }
     }
 
@@ -153,7 +153,6 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .completion:   return "text.append"
         case .dashboard:    return "chart.bar"
         case .focus:        return "target"
-        case .completionModel: return "cpu"
         }
     }
 
@@ -192,7 +191,6 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .plagiarism:  PlagiarismTab()
         case .contacts:    ContactsSettingsTab()
         case .focus:       FocusTab(prefs: prefs)
-        case .completionModel: CompletionModelTab(prefs: prefs)
         }
     }
 }
