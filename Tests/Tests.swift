@@ -1217,6 +1217,23 @@ final class CompletionPostprocessorTests: XCTestCase {
         XCTAssertNil(CompletionPostprocessor.clean(raw: "{ return a; }", preContext: "Ciao ", maxWords: 4))
     }
 
+    func testClean_stripsTruncatedTrailingTag() {
+        // The word budget cuts mid-tag ("…scrivere</st"); the leftover partial tag must be
+        // stripped to clean prose, not rejected as code (which showed as a skipped suggestion).
+        let r = CompletionPostprocessor.clean(raw: "scrivere</st", preContext: "come si fa a ", maxWords: 3)
+        XCTAssertEqual(r, "scrivere")
+    }
+
+    func testClean_stripsStrayAngleBrackets() {
+        let r = CompletionPostprocessor.clean(raw: "di 30 anni> possa", preContext: "una persona ", maxWords: 5)
+        XCTAssertEqual(r, "di 30 anni possa")
+    }
+
+    func testClean_stillRejectsRealCode() {
+        // Stripping HTML must not let actual code through.
+        XCTAssertNil(CompletionPostprocessor.clean(raw: "function foo() { return 1 }", preContext: "Ciao ", maxWords: 6))
+    }
+
     func testClean_allowsCodeInCodeEditor() {
         // In a code editor allowCode=true: code must NOT be rejected.
         let r = CompletionPostprocessor.clean(raw: "return a + b;", preContext: "int sum() { ", maxWords: 6, allowCode: true)

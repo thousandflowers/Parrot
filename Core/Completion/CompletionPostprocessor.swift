@@ -30,6 +30,12 @@ enum CompletionPostprocessor {
 
         if !allowCode {
             text = text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            // A web base model (gemma-3-4b-pt) emits HTML constantly; the word budget often cuts
+            // mid-tag, leaving a TRUNCATED trailing tag ("…scrivere</st") with no closing '>'. Strip
+            // that dangling fragment, then any stray angle bracket, so a markup remnant becomes clean
+            // prose instead of tripping the code-rejection below (which surfaced as skipped suggestions).
+            text = text.replacingOccurrences(of: "<[^>]*$", with: "", options: .regularExpression)
+            text = text.replacingOccurrences(of: "[<>]", with: "", options: .regularExpression)
             text = text.replacingOccurrences(of: "`", with: "")
             // Web-pretrained base models emit escaped sequences (\" \\ ) from JSON/code training data,
             // showing as "2018\\ \", ma una". Backslashes are virtually never wanted in prose → drop.
