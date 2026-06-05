@@ -85,15 +85,18 @@ struct AdvancedTab: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section {
-                Toggle("Auto tone adaptation", isOn: $autoToneAdaptation)
-                    .accessibilityLabel("Auto tone adaptation")
-                    .accessibilityHint("Mirrors the conversation partner's formality, read from the on-screen thread.")
-            } header: {
-                Label("Writing", systemImage: "wand.and.stars")
-            } footer: {
-                Text("Matches your correction tone to how the other person writes (formal, casual, technical), detected from the visible conversation. Uses screen context; fully on-device.")
-                    .foregroundStyle(.secondary)
+            // Tone adaptation only affects the correction path (Parrot mode); hide it in Wren.
+            if !AppMode.current.showsCompletion {
+                Section {
+                    Toggle("Auto tone adaptation", isOn: $autoToneAdaptation)
+                        .accessibilityLabel("Auto tone adaptation")
+                        .accessibilityHint("Mirrors the conversation partner's formality, read from the on-screen thread.")
+                } header: {
+                    Label("Writing", systemImage: "wand.and.stars")
+                } footer: {
+                    Text("Matches your correction tone to how the other person writes (formal, casual, technical), detected from the visible conversation. Uses screen context; fully on-device.")
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section {
