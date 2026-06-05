@@ -353,6 +353,12 @@ final class CompletionController {
                 _ = await AccessibilityBridge.shared.replaceLastWord(wrong: wrong, with: text, pid: pid)
                 await StatsStore.shared.recordAccepted(text: text)
             }
+            // Proactively re-arm completion after the accept. We must NOT rely solely on the
+            // AX value-changed event our insert causes: clipboard-paste insertion does not always
+            // emit a value-changed notification the observer catches, which left completion dead
+            // after the first accept until the user changed text manually. Mirror the partial-accept
+            // exhausted path, which already re-requests via requestImmediately().
+            await MainActor.run { self.requestImmediately() }
         }
         return true
     }
