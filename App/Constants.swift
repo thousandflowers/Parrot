@@ -103,6 +103,7 @@ enum Constants {
         static let ollamaModel = "ollamaModel"
         static let openRouterModel = "openRouterModel"
         static let realtimeEnabled = "realtimeEnabled"
+        static let autoToneAdaptation = "autoToneAdaptation"
         static let hfToken = "hfToken"
         static let externalModelPaths = "externalModelPaths"
         static let lightweightMode = "lightweightMode"

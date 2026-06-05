@@ -6,6 +6,18 @@ enum DetectedTone: String, Sendable, CaseIterable {
     case neutral
     case academic
     case technical
+
+    /// Maps a detected tone to a writing style for context blending.
+    /// `.neutral` carries no usable signal, so it maps to nil.
+    var writingStyle: WritingStyle? {
+        switch self {
+        case .formal:    return .formal
+        case .informal:  return .informal
+        case .academic:  return .academic
+        case .technical: return .technical
+        case .neutral:   return nil
+        }
+    }
 }
 
 actor ToneDetector {

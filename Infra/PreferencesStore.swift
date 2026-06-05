@@ -26,6 +26,11 @@ final class PreferencesStore {
     var serviceType: ServiceType { get { service(Constants.UserDefaultsKey.serviceType) } set { set(newValue, for: Constants.UserDefaultsKey.serviceType) } }
 
     var autoCheckEnabled: Bool { get { bool(Constants.UserDefaultsKey.autoCheckEnabled) } set { set(newValue, for: Constants.UserDefaultsKey.autoCheckEnabled) } }
+    var autoToneAdaptation: Bool {
+        get { bool(Constants.UserDefaultsKey.autoToneAdaptation, default: false) }
+        set { set(newValue, for: Constants.UserDefaultsKey.autoToneAdaptation) }
+    }
+
     var realtimeEnabled: Bool {
         get { bool(Constants.UserDefaultsKey.realtimeEnabled) }
         set {

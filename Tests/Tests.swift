@@ -1456,3 +1456,41 @@ final class CompletionPreferencesTests: XCTestCase {
         XCTAssertEqual(PreferencesStore.shared.maxCompletionLength, Constants.completionDefaultMaxWords)
     }
 }
+
+final class ToneAdaptationBlendTests: XCTestCase {
+    private let neutralBase = "The cat sat on the mat."
+
+    func testRecipientNil_behaviorUnchanged() {
+        let withNil = ContextAnalyzer.analyze(surroundingText: neutralBase, appBundleID: nil, language: "en", recipientStyle: nil)
+        let base = ContextAnalyzer.analyze(surroundingText: neutralBase, appBundleID: nil, language: "en")
+        XCTAssertEqual(withNil.style, base.style)
+        XCTAssertEqual(withNil.confidence, base.confidence, accuracy: 0.0001)
+    }
+
+    func testRecipientFormal_pushesNeutralBaseToFormal() {
+        let ctx = ContextAnalyzer.analyze(surroundingText: neutralBase, appBundleID: nil, language: "en", recipientStyle: .formal)
+        XCTAssertEqual(ctx.style, .formal)
+        XCTAssertGreaterThanOrEqual(ctx.confidence, 0.70)
+    }
+
+    func testRecipientAgreesWithBase_boostsConfidence() {
+        let base = ContextAnalyzer.analyze(surroundingText: neutralBase, appBundleID: nil, language: "en")
+        let ctx = ContextAnalyzer.analyze(surroundingText: neutralBase, appBundleID: nil, language: "en", recipientStyle: base.style)
+        XCTAssertEqual(ctx.style, base.style)
+        XCTAssertGreaterThan(ctx.confidence, base.confidence)
+    }
+
+    func testHighConfidenceAppSignal_winsOverRecipient() {
+        // Slack bundle → informal 0.92 (>= 0.80). Recipient formal must NOT override.
+        let ctx = ContextAnalyzer.analyze(surroundingText: neutralBase, appBundleID: "com.tinyspeck.slackmacgap", language: "en", recipientStyle: .formal)
+        XCTAssertEqual(ctx.style, .informal)
+    }
+
+    func testDetectedToneMapping_toWritingStyle() {
+        XCTAssertEqual(DetectedTone.formal.writingStyle, .formal)
+        XCTAssertEqual(DetectedTone.informal.writingStyle, .informal)
+        XCTAssertEqual(DetectedTone.academic.writingStyle, .academic)
+        XCTAssertEqual(DetectedTone.technical.writingStyle, .technical)
+        XCTAssertNil(DetectedTone.neutral.writingStyle)
+    }
+}

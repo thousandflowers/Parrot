@@ -34,7 +34,35 @@ actor ContextStorage {
 
 struct ContextAnalyzer {
 
-    static func analyze(surroundingText: String, appBundleID: String?, language: String) -> DocumentContext {
+    /// Analyze writing context. `recipientStyle`, when provided, is the register
+    /// detected from the conversation partner (e.g. via screen context) — Wren
+    /// mirrors it unless a stronger signal (high-confidence app/user text) wins.
+    static func analyze(surroundingText: String, appBundleID: String?, language: String,
+                        recipientStyle: WritingStyle? = nil) -> DocumentContext {
+        let base = analyzeBase(surroundingText: surroundingText, appBundleID: appBundleID, language: language)
+        return blend(base: base, recipientStyle: recipientStyle)
+    }
+
+    /// Folds a recipient register into the base context.
+    /// - agree → boost confidence (capped at 1.0)
+    /// - disagree but base is not already high-confidence (< 0.80) → mirror the recipient
+    /// - disagree and base is high-confidence → keep base (strong signal wins)
+    static func blend(base: DocumentContext, recipientStyle: WritingStyle?) -> DocumentContext {
+        guard let recipient = recipientStyle else { return base }
+        if recipient == base.style {
+            return DocumentContext(style: base.style,
+                                   confidence: min(1.0, base.confidence + 0.2),
+                                   appBundleID: base.appBundleID)
+        }
+        if base.confidence < 0.80 {
+            return DocumentContext(style: recipient,
+                                   confidence: max(base.confidence, 0.70),
+                                   appBundleID: base.appBundleID)
+        }
+        return base
+    }
+
+    private static func analyzeBase(surroundingText: String, appBundleID: String?, language: String) -> DocumentContext {
         let appSignal = styleFromBundleID(appBundleID)
 
         // App bundle ID with high confidence always wins — it's the strongest signal.

@@ -231,10 +231,23 @@ struct TextCheckCoordinator: Sendable {
         let surroundingText = await AccessibilityBridge.shared.fetchSurroundingText(
             pid: contextPID, selectionRange: capturedRange
         )
+
+        // Recipient-aware tone: when enabled, mirror the conversation partner's register
+        // read from the on-screen thread (OCR), not just the user's own text.
+        let autoTone = await MainActor.run { PreferencesStore.shared.autoToneAdaptation }
+        var recipientStyle: WritingStyle? = nil
+        if autoTone {
+            let screen = await ScreenContextProvider.shared.currentContext(pid: contextPID)
+            if !screen.isEmpty {
+                recipientStyle = await ToneDetector.shared.detect(text: screen, language: language).writingStyle
+            }
+        }
+
         let docContext = ContextAnalyzer.analyze(
             surroundingText: surroundingText.isEmpty ? text : surroundingText,
             appBundleID: bundleID,
-            language: language
+            language: language,
+            recipientStyle: recipientStyle
         )
         async let storeContext: Void = ContextStorage.shared.store(docContext)
         let prefsSnapshot = await MainActor.run { PreferencesStore.shared.snapshot() }

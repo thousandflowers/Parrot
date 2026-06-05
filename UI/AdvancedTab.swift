@@ -8,6 +8,7 @@ struct AdvancedTab: View {
     @State private var tokenSaved = false
     @State private var cacheClearedMessage = false
     @AppStorage(Constants.UserDefaultsKey.lightweightMode) private var lightweightMode = false
+    @AppStorage(Constants.UserDefaultsKey.autoToneAdaptation) private var autoToneAdaptation = false
     @State private var compatResult: String?
     @State private var compatChecking = false
     @State private var perfReport: String?
@@ -81,6 +82,17 @@ struct AdvancedTab: View {
                 Label("HuggingFace", systemImage: "arrow.down.circle")
             } footer: {
                 Text("Without token: ~500 KB/s · With token: up to 50 MB/s. Create a token at huggingface.co/settings/tokens (type: Read).")
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Auto tone adaptation", isOn: $autoToneAdaptation)
+                    .accessibilityLabel("Auto tone adaptation")
+                    .accessibilityHint("Mirrors the conversation partner's formality, read from the on-screen thread.")
+            } header: {
+                Label("Writing", systemImage: "wand.and.stars")
+            } footer: {
+                Text("Matches your correction tone to how the other person writes (formal, casual, technical), detected from the visible conversation. Uses screen context; fully on-device.")
                     .foregroundStyle(.secondary)
             }
 
