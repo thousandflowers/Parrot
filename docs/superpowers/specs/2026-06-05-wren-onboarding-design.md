@@ -68,7 +68,11 @@ OnboardingController                    (exists) → mode-gating: picks root vie
  ├─ ParrotOnboardingView      (= current OnboardingView, renamed, unchanged behavior)
  └─ WrenOnboardingView        (NEW)  composes Scaffold + Wren steps
       ├─ ModelDownloadCoordinator (NEW, @Observable) — shared download state across steps
+      ├─ TonePracticeView         (NEW) reusable: finish-phrases / paste / upload → seed pipeline.
+      │                                  Used by step 2 AND by the recurring tune-up from the menu bar.
       └─ steps: Welcome / Permission / Tone / ScreenContext? / Ready
+
+ToneTuneUpScheduler             (NEW) cadence Off/Daily/Weekly → surfaces TonePracticeView over time
 ```
 
 Decisions:
@@ -99,14 +103,22 @@ Decisions:
 
 ## Tone capture (step 2) — detail
 
-Two modes in one step, examples as default:
+**Fully optional.** All three inputs (finish-the-phrases, paste text, upload document) are
+independent and skippable; none blocks onboarding completion. A user can do one, all, or none.
 
-**Examples mode (default, visible):**
-- 2–3 sentence openers shown in editable fields; the user finishes each in their own voice.
-  E.g. a field pre-filled with an opener, cursor at the end, user continues.
-- **No hardcoded lists** ([[feedback_no_hardcoded_lists]]): NOT a per-app/per-language matrix of
-  phrases. Instead a small set of neutral openers via `String(localized:)` (translation files, not
-  `if/else` in code). Language comes from the system locale (no typed text exists yet at onboarding).
+Three inputs in one step, finish-the-phrases as the default visible mode:
+
+**Phrases mode (default, visible):**
+- A small **curated set of specific, case-spanning phrases** shown in editable fields; the user
+  finishes each in their own voice (cursor at the end of each opener).
+- The phrases are deliberately specific (not neutral fillers) so each one probes a distinct register
+  the model needs to learn — e.g. formal email, casual message, work/technical, narrative, polite
+  request. This breadth lets the app understand the user's tone per context, not as one average.
+- **Design note on [[feedback_no_hardcoded_lists]]:** that preference (avoid hardcoded example
+  lists/long if/else as logic) is here **explicitly overridden by Eugenio**: he wants specific,
+  hand-picked phrases covering each case. To stay disciplined: the set is a single small curated
+  list as localized strings (`String(localized:)` / translation files), NOT branching logic and NOT
+  a per-app matrix. Localized per system locale (no typed text exists yet at onboarding).
 - On completion, the full sentence (opener + continuation) is passed to `CorpusLearner.learn(from:)`
   (extracts context→continuation pairs + seeds) and updates `StyleProfile`.
 
@@ -114,12 +126,34 @@ Two modes in one step, examples as default:
 - `TextEditor`; on confirm → `CorpusLearner.learn(from: pasted)`. Richer signal (many pairs + full
   fingerprint).
 
-**Output (both modes):**
+**Upload mode (expandable "or upload a document"):**
+- File picker (`.txt`/`.md`/folder) → `CorpusLearner.learn(fromFiles:)` (already exists). Richest
+  signal.
+
+**Output (all modes):**
 - `CompletionLearningStore.seed(entries)` → instant day-1 completions.
 - `StyleProfile` updated → `descriptor` injected into the model prompt.
 - Honest UI feedback: "Learned N patterns from your style" where N is the return of `seed`/`learn`.
   If N=0: "I'll use this as a hint" with no number (no false claims).
 - Step has a Skip — tone capture is a bonus, never blocks.
+
+## Recurring tone tune-up (ongoing personalization)
+
+Beyond onboarding: an **optional** recurring practice so the style keeps improving over time. Eugenio
+asked to "complete a few phrases every day/week" to refine constantly.
+
+- **Setting** (Settings → Completion): cadence = Off (default) / Daily / Weekly. Stored in
+  `PreferencesStore`.
+- **Mechanism:** a lightweight scheduler checks "is a tune-up due?" (last-run timestamp + cadence) on
+  launch / front-app-idle; when due and enabled, surfaces a gentle, non-intrusive prompt — a menu-bar
+  badge + an optional local notification — never a modal that interrupts typing.
+- **Content:** reuses the same curated case-spanning phrases (rotating subset each time so it stays
+  fresh and covers more registers over weeks). User finishes 2–3 phrases → same
+  `CorpusLearner.learn`/`StyleProfile` pipeline.
+- **Reuse:** the phrases UI is the same component as step 2 (a `TonePracticeView`), shown either in
+  onboarding or on its own from the menu bar — one unit, two entry points.
+- **Honest + skippable:** dismissible every time; cadence fully user-controlled; default Off so it is
+  opt-in, not nagging.
 
 ## Backend wiring
 
@@ -170,6 +204,8 @@ Two modes in one step, examples as default:
   `completedKey`.
 - StyleProfile → prompt injection (C2): test the prompt builder includes `styleDescriptor()` when
   non-empty.
+- `ToneTuneUpScheduler` (pure): given last-run timestamp + cadence + now → due / not due; Off never
+  due; respects per-cadence interval. Injectable clock.
 - Views: smoke only (not logic) — no fragile snapshots.
 
 ## Out of scope / follow-ups (from the wider audit)
