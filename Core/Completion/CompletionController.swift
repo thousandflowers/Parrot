@@ -425,6 +425,13 @@ final class CompletionController {
                 await MainActor.run {
                     guard self.current != nil else { return }   // typing superseded us meanwhile
                     if let ax, ax.caretRect != .zero {
+                        // Pin lastSeenContext to the post-insert text so the AX events that follow
+                        // our own insertion DON'T look like a "real change" and recompute — that
+                        // recompute was clobbering the word-by-word Tab walk before the user could
+                        // press Tab again (and breaking the 2nd accept). Keep the walk alive; only a
+                        // genuine new keystroke (different text) recomputes.
+                        self.lastSeenContext = ax.preContext
+                        self.ignoreTextChangesUntil = Date().addingTimeInterval(1.5)
                         self.overlay.show(text: remaining, atCaretRect: ax.caretRect)
                     } else {
                         self.overlay.hide()
