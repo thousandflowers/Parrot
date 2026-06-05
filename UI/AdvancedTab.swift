@@ -10,6 +10,7 @@ struct AdvancedTab: View {
     @AppStorage(Constants.UserDefaultsKey.lightweightMode) private var lightweightMode = false
     @State private var compatResult: String?
     @State private var compatChecking = false
+    @State private var perfReport: String?
 
     var body: some View {
         Form {
@@ -41,6 +42,24 @@ struct AdvancedTab: View {
                     }
                 } header: {
                     Label("App compatibility", systemImage: "checklist")
+                }
+
+                Section {
+                    Text("Completion latency (inference) collected this session. Type in any app with completion on, then refresh.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Refresh metrics") {
+                        let mem = ResourceSampler.appMemoryMB()
+                        perfReport = LatencyTracer.shared.report()
+                            + String(format: "\n\nApp memory: %.0f MB (model RAM is in ParrotCompletionHelper — see Activity Monitor)", mem)
+                    }
+                    if let r = perfReport {
+                        Text(r)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                    }
+                } header: {
+                    Label("Performance", systemImage: "gauge.with.dots.needle.67percent")
                 }
             }
 

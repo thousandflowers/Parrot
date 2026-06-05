@@ -126,6 +126,28 @@ Wren reads the focused field via the macOS Accessibility API to offer context-aw
 
 ---
 
+## Performance
+
+Wren runs inference in a **separate subprocess** (`ParrotCompletionHelper`), so a model load or CPU spike never freezes the UI — unlike in-process competitors. Numbers below are collected on-device: in Wren open **Settings → Advanced → Performance → Refresh metrics** after typing for a bit, and paste the table here.
+
+**Inference latency** (warm, per request):
+
+| Stage | p50 | p95 | p99 | n |
+|---|---|---|---|---|
+| model | _measure_ | _measure_ | _measure_ | _measure_ |
+| total | _measure_ | _measure_ | _measure_ | _measure_ |
+
+**Memory** (Activity Monitor or the in-app readout):
+
+| Process | Idle | Active |
+|---|---|---|
+| Wren app | _measure_ | _measure_ |
+| ParrotCompletionHelper (model) | _measure_ | _measure_ |
+
+> Methodology: latency is the inference round-trip recorded by `LatencyTracer`; app memory is `phys_footprint`. The helper process holds the model weights, so total RAM = app + helper. Measured on _your Mac model / model file_ — fill in before publishing.
+
+---
+
 ## Features
 
 **Correction modes** — Grammar, Fluency, Grammar+Fluency combined, Translate, Writing coach, De-Slop (strips AI hedging and filler), AI Prompt Optimizer (reformats text into a cleaner prompt), and fully custom prompts. Bind any mode to a keyboard shortcut.

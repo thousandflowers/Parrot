@@ -26,6 +26,7 @@ actor CompletionEngine {
         // Single attempt — the retry (a 2nd inference with a different seed) DOUBLED latency on
         // every rejected output (e.g. the model suggesting a bare year "2016" → rejected → retry →
         // another number → still rejected), which the user felt as lag. Not worth it.
+        let started = CFAbsoluteTimeGetCurrent()
         let raw: String
         do { raw = try await provider.complete(context: context, maxWords: maxWords) }
         catch is CancellationError { return nil }
@@ -33,6 +34,10 @@ actor CompletionEngine {
             Logger.infra.debug("CompletionEngine: provider failed — \(error.localizedDescription, privacy: .public)")
             return nil
         }
+        // Record inference latency (the dominant cost) for the diagnostics panel / README metrics.
+        let modelMs = (CFAbsoluteTimeGetCurrent() - started) * 1000
+        LatencyTracer.shared.record(stage: .model, milliseconds: modelMs)
+        LatencyTracer.shared.record(stage: .total, milliseconds: modelMs)
         #if DEBUG
         CrashLogger.log("DIAG engine: raw='\(raw.replacingOccurrences(of: "\n", with: "\\n").prefix(50))' len=\(raw.count) superseded=\(mine != generation)")
         #endif
