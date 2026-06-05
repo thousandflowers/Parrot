@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import IOKit.hid
 
 struct WrenOnboardingView: View {
@@ -172,5 +173,39 @@ private struct WrenReadyStep: View {
             }
             Spacer()
         }.padding()
+    }
+}
+
+// MARK: - Tone Tune-Up Presenter
+
+/// Opens the tone practice as a standalone window for the recurring tune-up.
+@MainActor
+enum ToneTuneUpPresenter {
+    private static var window: NSWindow?
+
+    static func presentIfDue() {
+        guard AppMode.current.showsCompletion else { return }
+        let prefs = PreferencesStore.shared
+        guard ToneTuneUpScheduler.isDue(cadence: prefs.toneTuneUpCadence,
+                                        lastRun: prefs.toneTuneUpLastRun) else { return }
+        present()
+    }
+
+    static func present() {
+        if let w = window { w.makeKeyAndOrderFront(nil); return }
+        let seed = Int(Date().timeIntervalSince1970 / 86400)
+        let phrases = TonePhrases.rotating(count: 3, seed: seed)
+        let root = TonePracticeView(phrases: phrases, onLearned: { _ in
+            PreferencesStore.shared.toneTuneUpLastRun = Date()
+            window?.close(); window = nil
+        })
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 420),
+                         styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        w.title = "Tone tune-up — Wren"
+        w.center(); w.isReleasedWhenClosed = false
+        w.contentView = NSHostingView(rootView: AnyView(root.frame(width: 560, height: 420)))
+        window = w
+        w.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }

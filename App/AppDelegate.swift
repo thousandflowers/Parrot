@@ -102,6 +102,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         CrashLogger.log("launch: observers set")
 
         OnboardingController.shared.showIfNeeded()
+        ToneTuneUpPresenter.presentIfDue()
         CrashLogger.log("launch: onboarding checked")
 
         // Load correction cache persisted from previous session
