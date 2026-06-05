@@ -1,5 +1,6 @@
 import SwiftUI
 import Cocoa
+import OSLog
 
 enum SuggestionState: Sendable {
     case loading
@@ -235,6 +236,9 @@ final class SuggestionPanelController {
     }
 
     private func createPanel(with view: SuggestionView) -> NSPanel {
+        // P2.7: Dynamic sizing — use min/max instead of fixed 340×280.
+        // macOS 26 re-entrant constraint crash is prevented by FixedSizeHostingView,
+        // so we can safely allow the panel to grow to fit content.
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 340, height: 280),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -251,12 +255,8 @@ final class SuggestionPanelController {
         panel.setAccessibilityElement(true)
         panel.setAccessibilityRole(.group)
         panel.setAccessibilityLabel("Correction suggestion")
-        // Clamp size: prevents NSHostingView.updateAnimatedWindowSize from calling setFrame
-        // with a different value during windowDidLayout, which triggers re-entrant constraint
-        // updates and crash on macOS 26. sizingOptions=[] alone is insufficient on macOS 26.
-        let fixedSize = NSSize(width: 340, height: 280)
-        panel.minSize = fixedSize
-        panel.maxSize = fixedSize
+        panel.minSize = NSSize(width: 300, height: 240)
+        panel.maxSize = NSSize(width: 520, height: 520)
 
         let hv = FixedSizeHostingView(rootView: view)
         hv.sizingOptions = []
@@ -267,7 +267,14 @@ final class SuggestionPanelController {
     }
 
     private func applyCorrection() {
-        guard let result = currentResult else { return }
+        guard let result = currentResult else {
+            Logger.ui.debug("SuggestionPanel: applyCorrection called with no currentResult")
+            return
+        }
+        guard !result.correctedText.isEmpty else {
+            Logger.ui.debug("SuggestionPanel: applyCorrection called with empty correctedText")
+            return
+        }
         Task { [weak self] in
             guard let self else { return }
             do {
@@ -281,6 +288,7 @@ final class SuggestionPanelController {
                     await MainActor.run { self?.close() }
                 }
             } catch {
+                Logger.ui.error("SuggestionPanel: applyCorrection failed: \(error.localizedDescription)")
                 self.showError(error as? CorrectionError ?? .textExtractionFailed(appName: "unknown"))
             }
         }
@@ -543,7 +551,12 @@ final class SuggestionPanelController {
         }
         closeSpanPanel()
         MenuBarParrot.shared.setState(.idle)
-        guard let panel = panel else { return }
+        guard let panel = panel else {
+            // Already closed — no-op to prevent redundant close cascade.
+            self.hostingView = nil
+            self.currentState = nil
+            return
+        }
         self.panel = nil
         self.hostingView = nil
         self.currentState = nil

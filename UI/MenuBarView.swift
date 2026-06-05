@@ -83,7 +83,7 @@ struct MenuBarView: View {
             Circle()
                 .fill(serverStatusColor)
                 .frame(width: 8, height: 8)
-                .shadow(color: serverStatusColor.opacity(0.4), radius: 2, x: 0, y: 0)
+                .shadow(color: serverStatusColor.opacity(0.35), radius: 1.5, x: 0, y: 0)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
@@ -256,6 +256,7 @@ struct MenuBarView: View {
                         .controlSize(.mini)
                         .labelsHidden()
                         .accessibilityLabel("Automatic check")
+                        .accessibilityHint("When enabled, checks text every time you activate a text field")
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 9)
@@ -277,6 +278,7 @@ struct MenuBarView: View {
                         .controlSize(.mini)
                         .labelsHidden()
                         .accessibilityLabel("Real time")
+                        .accessibilityHint("When enabled, analyzes text while you type")
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 9)
@@ -312,6 +314,7 @@ struct MenuBarView: View {
                 .controlSize(.mini)
                 .labelsHidden()
                 .accessibilityLabel("Inline completion")
+                .accessibilityHint("When enabled, shows ghost text suggestions while typing. Press Tab to accept.")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
@@ -415,7 +418,7 @@ struct MenuBarView: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary.opacity(0.6))
                 .rotationEffect(isExpanded ? .degrees(0) : .degrees(-90))
-                .animation(.spring(response: 0.3, dampingFraction: 0.70), value: isExpanded)
+                .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isExpanded)
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)

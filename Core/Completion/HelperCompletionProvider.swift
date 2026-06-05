@@ -34,7 +34,7 @@ actor HelperCompletionProvider: CompletionProviding {
         if pipeWaiters.isEmpty { pipeBusy = false } else { pipeWaiters.removeFirst().resume() }
     }
 
-    private struct Req: Encodable { let prefix: String; let maxTokens: Int; let id: Int; let latinOnly: Bool; let seed: UInt32 }
+    private struct Req: Encodable { let prefix: String; let maxTokens: Int; let id: Int; let latinOnly: Bool; let seed: UInt32; let temperature: Double; let repeatPenalty: Double }
     private struct Resp: Decodable { let text: String; let id: Int }
 
     func complete(context: CompletionContext, maxWords: Int) async throws -> String {
@@ -63,7 +63,9 @@ actor HelperCompletionProvider: CompletionProviding {
         }
         // +4 token slack over the word budget: the helper trims a trailing word FRAGMENT on a
         // budget-stop, so a little extra room keeps the trimmed result at the intended word count.
-        guard let line = try? JSONEncoder().encode(Req(prefix: pre, maxTokens: max(12, maxWords * 3 + 4), id: reqID, latinOnly: latinOnly, seed: context.generationSeed)),
+        let temp = Constants.completionTemperature
+        let repPenalty = temp < 0.15 ? 1.0 : 1.3   // lower t = less repetition penalty (don't fight the cold)
+        guard let line = try? JSONEncoder().encode(Req(prefix: pre, maxTokens: max(12, maxWords * 3 + 4), id: reqID, latinOnly: latinOnly, seed: context.generationSeed, temperature: temp, repeatPenalty: repPenalty)),
               let stdin = stdinHandle else {
             return try await fallback.complete(context: context, maxWords: maxWords)
         }

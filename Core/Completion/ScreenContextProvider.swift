@@ -110,7 +110,7 @@ actor ScreenContextProvider {
                 cont.resume(returning: lines.joined(separator: "\n"))
             }
             request.recognitionLevel = .fast      // speed over accuracy — context, not transcription
-            request.usesLanguageCorrection = false
+            request.usesLanguageCorrection = true
             let handler = VNImageRequestHandler(cgImage: image, options: [:])
             do { try handler.perform([request]) }
             catch {

@@ -9,7 +9,7 @@ enum CompletionPostprocessor {
     /// - `midWord`: the caret sits inside a partial word (e.g. "rece"). The suggestion then CONTINUES
     ///   that word with no boundary space ("ption" → "reception"). When false, a word boundary is
     ///   assumed and exactly one space separates the prior word from the suggestion.
-    static func clean(raw: String, preContext: String, maxWords: Int, allowCode: Bool = false, midWord: Bool = false) -> String? {
+    static func clean(raw: String, preContext: String, maxWords: Int, allowCode: Bool = false, midWord: Bool = false, postContext: String = "") -> String? {
         var text = raw
 
         // 0a. Reject LEADING AI preamble / instruction-leak only. Anchored to the start: a substring
@@ -113,6 +113,43 @@ enum CompletionPostprocessor {
         //    digit/punctuation runs (especially for non-English input); a letter-less run is never a
         //    useful word completion.
         if !text.contains(where: { $0.isLetter }) { return nil }
+
+        // 8. Post-context overlap (screen OCR garbage rejection): if the suggestion contains any
+        //    word present in postContext (screen text near the input), it might be quoting a stale
+        //    overlay / error dialog rather than continuing the user's sentence → reject.
+        if !postContext.isEmpty {
+            let sugWords = Set(text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init))
+            let postWords = Set(postContext.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init))
+            let overlap = sugWords.intersection(postWords)
+            // At least 2 content words overlapping with screen text → likely quoting garbage.
+            if overlap.count >= 2 { return nil }
+        }
+
+        // 9. Topic-drift guard: reject when the model drifts to a completely unrelated topic
+        //    (hallucination). Only applies when BOTH the context and suggestion have ≥3 content
+        //    (non-stop) words, preventing false positives for short suggestions, names, and
+        //    first-word-from-empty-context cases.
+        let stopWords: Set<String> = Constants.contentStopWords
+        let contextContentWords = (preContext + " " + postContext).lowercased()
+            .split(whereSeparator: { !$0.isLetter }).map(String.init)
+            .filter { !stopWords.contains($0) }
+        if contextContentWords.count >= 3 {
+            let sugContentWords = text.lowercased()
+                .split(whereSeparator: { !$0.isLetter }).map(String.init)
+                .filter { !stopWords.contains($0) }
+            if sugContentWords.count >= 3 {
+                let contextText = (preContext + " " + postContext).lowercased()
+                let hasOverlap = sugContentWords.contains { contextText.contains($0) }
+                if !hasOverlap { return nil }
+            }
+        }
+
+        // 10. Path/URL guard: small models sometimes emit bare file paths ("/Users/name/…") or
+        //     URLs ("https://…") instead of a sentence continuation. These are never a useful
+        //     inline suggestion in a prose context.
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("/") || trimmed.hasPrefix("~/") { return nil }
+        if trimmed.lowercased().hasPrefix("https://") || trimmed.lowercased().hasPrefix("http://") { return nil }
 
         return text
     }

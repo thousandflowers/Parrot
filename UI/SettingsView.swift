@@ -9,6 +9,9 @@ struct SettingsView: View {
     var body: some View {
         HStack(spacing: 0) {
             List(selection: $selectedTab) {
+                // P2.3: Keyboard focus — the sidebar uses NavigationLink which gets
+                // natural focus order via the List. Section headers are non-interactive
+                // so tab skips to the first NavigationLink automatically.
                 Section {
                     Label("Engine", systemImage: "cpu")
                         .font(.caption.weight(.semibold))

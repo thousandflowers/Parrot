@@ -12,10 +12,11 @@ import OSLog
 struct LlamaCompletionClient: CompletionProviding {
     var session: URLSession = .shared
 
-    static func systemPrompt(userPrompt: String) -> String {
+    static func systemPrompt(userPrompt: String, styleDescriptor: String = "") -> String {
         var s = "Continue the user's text naturally in the SAME language. Output ONLY the few words that directly follow — no restating, no explanation, no quotes."
         let trimmed = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { s += "\nWriting style to match: \(trimmed)" }
+        if !styleDescriptor.isEmpty { s += "\n" + styleDescriptor }
         return s
     }
 

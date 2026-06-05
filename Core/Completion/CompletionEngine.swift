@@ -38,7 +38,8 @@ actor CompletionEngine {
         #endif
         guard mine == generation else { return nil }
         guard let cleaned = CompletionPostprocessor.clean(raw: raw, preContext: context.preContext,
-                                                          maxWords: maxWords, allowCode: allowCode, midWord: midWord),
+                                                          maxWords: maxWords, allowCode: allowCode, midWord: midWord,
+                                                          postContext: context.postContext),
               !cleaned.isEmpty else { return nil }
         return CompletionSuggestion(text: cleaned)
     }
@@ -49,7 +50,7 @@ actor CompletionEngine {
         guard context.isUsable else { return nil }
         guard let raw = try? await provider.complete(context: context, maxWords: maxWords) else { return nil }
         guard let cleaned = CompletionPostprocessor.clean(raw: raw, preContext: context.preContext,
-              maxWords: maxWords, allowCode: allowCode, midWord: false), !cleaned.isEmpty else { return nil }
+              maxWords: maxWords, allowCode: allowCode, midWord: false, postContext: context.postContext), !cleaned.isEmpty else { return nil }
         return CompletionSuggestion(text: cleaned)
     }
 

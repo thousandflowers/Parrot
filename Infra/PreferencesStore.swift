@@ -334,6 +334,29 @@ final class PreferencesStore {
         set { set(newValue, for: Constants.UserDefaultsKey.completionOverlayFontSize) }
     }
 
+    // MARK: - OpenAI-compatible API
+
+    var completionOpenAIEndpoint: String {
+        get { string(Constants.UserDefaultsKey.completionOpenAIEndpoint, fallback: "") }
+        set { set(newValue, for: Constants.UserDefaultsKey.completionOpenAIEndpoint) }
+    }
+    var completionOpenAIKey: String {
+        get { string(Constants.UserDefaultsKey.completionOpenAIKey, fallback: "") }
+        set { set(newValue, for: Constants.UserDefaultsKey.completionOpenAIKey) }
+    }
+
+    // MARK: - Accept keys
+    /// Keycode for partial accept (default: Tab = 48).
+    var completionPartialKeyCode: Int {
+        get { int(Constants.UserDefaultsKey.completionPartialKeyCode, fallback: 48) }
+        set { set(newValue, for: Constants.UserDefaultsKey.completionPartialKeyCode) }
+    }
+    /// Keycode for full accept (default: \ = 42).
+    var completionFullKeyCode: Int {
+        get { int(Constants.UserDefaultsKey.completionFullKeyCode, fallback: 42) }
+        set { set(newValue, for: Constants.UserDefaultsKey.completionFullKeyCode) }
+    }
+
     // MARK: - Snippets
 
     var snippets: [Snippet] {

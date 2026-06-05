@@ -33,7 +33,7 @@ final class CompletionOverlayWindow {
     }
 
     func show(text: String, atCaretRect rect: CGRect, fontName: String? = nil, fontSize: CGFloat = 0) {
-        guard !text.isEmpty, rect != .zero else { hide(); return }
+        guard !text.isEmpty, rect != .zero, !rect.isInfinite, !rect.isNull else { hide(); return }
         let panel = ensurePanel()
         // Attributed string: first word bold + brighter (partial-accept target), rest dimmed.
         let attributed = NSMutableAttributedString(string: text)
@@ -77,6 +77,12 @@ final class CompletionOverlayWindow {
         panel.setFrame(CGRect(origin: origin, size: CGSize(width: panelW, height: panelH)), display: true)
         label.frame = CGRect(x: padX, y: (panelH - labelSize.height) / 2, width: labelSize.width, height: labelSize.height)
 
+        // Update AX label so VoiceOver can read the completion aloud.
+        let axLabel = "Completion suggestion: \(text.prefix(120))"
+        panel.setAccessibilityLabel(axLabel)
+        // Post notification for screen readers.
+        NSAccessibility.post(element: panel, notification: .announcementRequested)
+
         // Show crisply at full alpha — no fade. Combined with hide()-while-computing this gives a
         // single clean appear per pause instead of the old fade/dim flashing ("disturbato").
         panel.alphaValue = 1.0
@@ -103,7 +109,11 @@ final class CompletionOverlayWindow {
         p.hasShadow = false
         p.ignoresMouseEvents = true
         p.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        p.setAccessibilityElement(false)
+        // AX: make the panel a container so VoiceOver can reach the completion text.
+        // The old setAccessibilityElement(false) hid completions from blind users entirely.
+        p.setAccessibilityElement(true)
+        p.setAccessibilityRole(.staticText)
+        // AX label is updated in show() to match the current completion text.
         // Native blur backdrop: readable on any app background, matches system HUD style.
         let blur = NSVisualEffectView()
         blur.material = .hudWindow
@@ -113,6 +123,7 @@ final class CompletionOverlayWindow {
         blur.layer?.cornerRadius = 5
         blur.layer?.masksToBounds = true
         blur.addSubview(label)
+        // Keep label itself non-interactive but let the panel's AX tree expose it.
         label.setAccessibilityElement(false)
         p.contentView = blur
         panel = p

@@ -1,6 +1,73 @@
 import Foundation
 import OSLog
 
+/// Fingerprint of the user's writing style, built from accepted completions.
+/// Used to steer the model toward the user's natural voice via prompt injection.
+struct StyleProfile: Codable, Sendable {
+    var totalSentences: Int = 0
+    var totalWords: Int = 0
+    var totalChars: Int = 0
+    var contractions: Int = 0        // "don't", "it's", "I'm" etc.
+    var uniqueWords: Set<String> = []
+
+    /// Average words per sentence (or 0 if no data).
+    var avgSentenceLength: Double {
+        guard totalSentences > 0 else { return 0 }
+        return Double(totalWords) / Double(totalSentences)
+    }
+
+    /// Unique / total word ratio — higher = richer vocabulary.
+    var vocabDiversity: Double {
+        guard totalWords > 0 else { return 0 }
+        return Double(uniqueWords.count) / Double(totalWords)
+    }
+
+    /// How often the user contracts (0…1). Lower = more formal.
+    var contractionRate: Double {
+        guard totalWords > 0 else { return 0 }
+        return Double(contractions) / Double(totalWords)
+    }
+
+    /// Human-readable descriptor injected into the model prompt.
+    /// Stays ~2 lines so it's a lightweight hint, not a dominating instruction.
+    var descriptor: String {
+        guard totalSentences >= 3 else { return "" }
+        let formality: String
+        if contractionRate > 0.08 { formality = "casual, conversational" }
+        else if contractionRate > 0.03 { formality = "neutral" }
+        else { formality = "formal, polished" }
+        let vocab: String
+        if vocabDiversity > 0.6 { vocab = "rich, varied vocabulary" }
+        else if vocabDiversity > 0.35 { vocab = "balanced vocabulary" }
+        else { vocab = "concise, direct" }
+        let sentence: String
+        if avgSentenceLength > 20 { sentence = "long, detailed sentences" }
+        else if avgSentenceLength > 12 { sentence = "moderate-length sentences" }
+        else { sentence = "short, punchy sentences" }
+        return "User tends to write in a \(formality) style with \(vocab) and \(sentence)."
+    }
+
+    mutating func update(from text: String) {
+        let words = text.split(separator: " ").map(String.init)
+        totalWords += words.count
+        totalChars += text.count
+        for w in words { uniqueWords.insert(w.lowercased()) }
+        // Sentence count via sentence terminators
+        totalSentences += text.filter { $0 == "." || $0 == "!" || $0 == "?" }.count
+        if totalSentences == 0, !text.isEmpty { totalSentences = 1 }
+        // Contraction detection
+        let lower = text.lowercased()
+        let contractionPatterns = ["'t ", "'s ", "'m ", "'re ", "'ve ", "'ll ", "'d ", "n't "]
+        for pat in contractionPatterns {
+            var search = lower.startIndex
+            while let r = lower[search...].range(of: pat) {
+                contractions += 1
+                search = r.upperBound
+            }
+        }
+    }
+}
+
 /// On-device learning for completion — inspired by (and going beyond) Cotypist's core. Records what
 /// you accept and serves it INSTANTLY on a matching context (no model call). Improvements over a
 /// plain exact-key store:
@@ -8,6 +75,7 @@ import OSLog
 ///    still fires after "caro luca, ti scrivo per" via the shorter key — far more instant hits.
 ///  - **Acceptance-rate suppression**: a learned suggestion shown often but rarely accepted is
 ///    dropped, so the model isn't nagged with stale guesses.
+///  - **StyleProfile**: builds a writing fingerprint from accepted completions.
 /// Persisted as small JSON in the shared Application Support dir; cheap in RAM.
 actor CompletionLearningStore {
     static let shared = CompletionLearningStore()
@@ -18,6 +86,9 @@ actor CompletionLearningStore {
     private let maxEntries = 4000
     private let minAccepts = 2          // confidence threshold to suggest
     private let suppressShows = 6       // after this many shows, require ≥20% acceptance to keep suggesting
+
+    /// Accumulated writing fingerprint from accepted completions.
+    private var profile = StyleProfile()
 
     private static var fileURL: URL {
         let dir = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -43,12 +114,26 @@ actor CompletionLearningStore {
         return result   // longest → shortest
     }
 
+    /// Return the accumulated writing fingerprint as a prompt fragment, or empty if insufficient data.
+    func styleDescriptor() -> String {
+        profile.descriptor
+    }
+
+    private struct PersistedRoot: Codable {
+        var map: [String: Entry]
+        var profile: StyleProfile
+    }
+
     private func loadIfNeeded() {
         guard !loaded else { return }
         loaded = true
-        guard let data = try? Data(contentsOf: Self.fileURL),
-              let decoded = try? JSONDecoder().decode([String: Entry].self, from: data) else { return }
-        map = decoded
+        guard let data = try? Data(contentsOf: Self.fileURL) else { return }
+        if let root = try? JSONDecoder().decode(PersistedRoot.self, from: data) {
+            map = root.map
+            profile = root.profile
+        } else if let legacy = try? JSONDecoder().decode([String: Entry].self, from: data) {
+            map = legacy
+        }
     }
 
     /// Records an accepted completion under every order key so varied future contexts match.
@@ -77,6 +162,7 @@ actor CompletionLearningStore {
                 map[k] = Entry(text: text, accepts: 1, shows: 0, lastUsed: now)
             }
         }
+        profile.update(from: accepted)
         if map.count > maxEntries { evictOldest() }
         save()
     }
@@ -139,7 +225,8 @@ actor CompletionLearningStore {
     }
 
     private func save() {
-        guard let data = try? JSONEncoder().encode(map) else { return }
+        let root = PersistedRoot(map: map, profile: profile)
+        guard let data = try? JSONEncoder().encode(root) else { return }
         try? FileManager.default.createDirectory(at: Self.fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: Self.fileURL, options: .atomic)
     }

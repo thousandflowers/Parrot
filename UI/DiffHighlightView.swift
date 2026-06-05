@@ -1,17 +1,60 @@
 import SwiftUI
+import os
 
-struct DiffHighlightView: View, Equatable {
+// P2.1 + P2.2: Colorblind-safe diff with offloaded LCS computation.
+// Colors: blue=deletion (was red), orange=insertion (was green).
+// Patterns: strikethrough=deletion, underline=insertion (works without color).
+
+private let log = Logger(subsystem: "com.thousandflowers.parrot", category: "diff")
+
+private struct DiffResult: Sendable {
+    let attributedData: Data  // NSArchived AttributedString
+    let hasChanges: Bool
+}
+
+struct DiffHighlightView: View {
     let original: String
     let corrected: String
 
+    @State private var displayAttributed: AttributedString = AttributedString()
+    @State private var hasChanges: Bool = false
+    @State private var isComputing: Bool = true
+
     var body: some View {
-        let diff = computeDiff()
         HStack(spacing: 0) {
-            Text(diff.attributed)
+            if isComputing {
+                ProgressView()
+                    .scaleEffect(0.5)
+                    .frame(width: 12, height: 12)
+            } else {
+                Text(displayAttributed)
+            }
+        }
+        .task(priority: .userInitiated) {
+            await computeDiffAsync()
         }
     }
 
-    private func computeDiff() -> (attributed: AttributedString, hasChanges: Bool) {
+    private func computeDiffAsync() async {
+        // Offload O(n²) LCS computation to a background thread.
+        let result = await Task.detached(priority: .userInitiated) {
+            let diff = Self.computeDiff(original: original, corrected: corrected)
+            // Serialize AttributedString which is Sendable via Data archiving.
+            let encoder = JSONEncoder()
+            let data = try? encoder.encode(diff.attributed)
+            return DiffResult(attributedData: data ?? Data(), hasChanges: diff.hasChanges)
+        }.value
+
+        let decoder = JSONDecoder()
+        let attr = (try? decoder.decode(AttributedString.self, from: result.attributedData)) ?? AttributedString()
+        await MainActor.run {
+            self.displayAttributed = attr
+            self.hasChanges = result.hasChanges
+            self.isComputing = false
+        }
+    }
+
+    private static func computeDiff(original: String, corrected: String) -> (attributed: AttributedString, hasChanges: Bool) {
         let maxWords = 300
         let origWords = original.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
         let corrWords = corrected.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
@@ -40,9 +83,10 @@ struct DiffHighlightView: View, Equatable {
                 while oi < truncatedOrig.count && li < lcs.count && truncatedOrig[oi] != lcs[li] {
                     let rem = truncatedOrig[oi]
                     var attr = AttributedString(rem + " ")
-                    attr.foregroundColor = NSColor.systemRed
+                    // P2.2: Colorblind-safe — blue instead of red, strikethrough provides non-color cue.
+                    attr.foregroundColor = NSColor.diffDeletion
                     attr.strikethroughStyle = .single
-                    attr.strikethroughColor = NSColor.systemRed
+                    attr.strikethroughColor = NSColor.diffDeletion
                     result.append(attr)
                     oi += 1
                     hasChanges = true
@@ -50,8 +94,11 @@ struct DiffHighlightView: View, Equatable {
                 while ci < truncatedCorr.count && li < lcs.count && truncatedCorr[ci] != lcs[li] {
                     let add = truncatedCorr[ci]
                     var attr = AttributedString(add + " ")
-                    attr.foregroundColor = NSColor.systemGreen
-                    attr.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.15)
+                    // P2.2: Orange instead of green, underline for non-color cue.
+                    attr.foregroundColor = NSColor.diffInsertion
+                    attr.underlineStyle = .single
+                    attr.underlineColor = NSColor.diffInsertion
+                    attr.backgroundColor = NSColor.diffInsertionBackground
                     result.append(attr)
                     ci += 1
                     hasChanges = true
@@ -67,17 +114,19 @@ struct DiffHighlightView: View, Equatable {
             } else {
                 while oi < truncatedOrig.count {
                     var attr = AttributedString(truncatedOrig[oi] + " ")
-                    attr.foregroundColor = NSColor.systemRed
+                    attr.foregroundColor = NSColor.diffDeletion
                     attr.strikethroughStyle = .single
-                    attr.strikethroughColor = NSColor.systemRed
+                    attr.strikethroughColor = NSColor.diffDeletion
                     result.append(attr)
                     oi += 1
                     hasChanges = true
                 }
                 while ci < truncatedCorr.count {
                     var attr = AttributedString(truncatedCorr[ci] + " ")
-                    attr.foregroundColor = NSColor.systemGreen
-                    attr.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.15)
+                    attr.foregroundColor = NSColor.diffInsertion
+                    attr.underlineStyle = .single
+                    attr.underlineColor = NSColor.diffInsertion
+                    attr.backgroundColor = NSColor.diffInsertionBackground
                     result.append(attr)
                     ci += 1
                     hasChanges = true
@@ -94,7 +143,7 @@ struct DiffHighlightView: View, Equatable {
         return (result, hasChanges)
     }
 
-    private func longestCommonSubsequence(_ a: [String], _ b: [String]) -> [String] {
+    private static func longestCommonSubsequence(_ a: [String], _ b: [String]) -> [String] {
         let m = a.count, n = b.count
         guard m > 0, n > 0 else { return [] }
         var dp = [[Int]](repeating: [Int](repeating: 0, count: n + 1), count: m + 1)

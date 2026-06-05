@@ -69,7 +69,9 @@ struct SuggestionView: View {
             Divider()
             contentView
                 .padding(12)
-                .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+                // P3.3: Use slide instead of scale for content transitions — avoids the
+                // repetitive scale(0.98) pattern that appears identically in 3+ places.
+                .transition(.opacity.combined(with: .slide))
                 .id(stateHash)
             Divider()
             footerView
@@ -78,7 +80,7 @@ struct SuggestionView: View {
         }
         .frame(width: 340, height: 280)
         .animation(.easeOut(duration: 0.18), value: stateHash)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Color.surfaceElevated, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(.separator, lineWidth: 0.5)

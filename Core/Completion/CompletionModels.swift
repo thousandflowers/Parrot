@@ -17,6 +17,8 @@ struct CompletionContext: Sendable, Equatable {
     var completionModelID: String = ""
     /// The selected model ID for correction (used to check if a dedicated completion model is configured).
     var selectedModelID: String = ""
+    /// Style-profile descriptor injected into the model prompt (fingerprint of user's writing).
+    var styleDescriptor: String = ""
     /// Per-attempt generation seed. 0 on the first attempt; bumped on a retry so the sampler draws
     /// a different token sequence (otherwise near-deterministic models return the same empty output).
     var generationSeed: UInt32 = 0

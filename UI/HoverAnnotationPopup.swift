@@ -132,13 +132,15 @@ struct HoverAnnotationView: View {
                     .background(Color.statusOk, in: .circle)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Applica")
+            .accessibilityLabel(String(localized: "Accept correction"))
         }
         .padding(.leading, 8)
         .padding(.trailing, 5)
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.regularMaterial, in: .rect(cornerRadius: 7))
+        // P2.9: Use surfaceElevated instead of regularMaterial so users with
+        // "Reduce Transparency" enabled see a solid background instead of a harsh solid gray.
+        .background(Color.surfaceElevated, in: .rect(cornerRadius: 7))
         .drawingGroup()
         .overlay(
             RoundedRectangle(cornerRadius: 7)

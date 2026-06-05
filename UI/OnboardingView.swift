@@ -240,7 +240,7 @@ private struct InstallStep: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(12)
-            .background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+            .background(Color.statusWarning.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
             .padding(.horizontal, 32)
 
             Spacer()

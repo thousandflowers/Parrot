@@ -92,8 +92,8 @@ final class LlamaSession {
 
     /// Generates a short continuation of `prefix`. Reuses KV for the shared prefix.
     /// `shouldCancel` is polled each token so a newer request can abandon this one mid-generation.
-    func complete(prefix: String, maxTokens: Int, temperature: Float = 0.15, seed: UInt32 = 0,
-                  latinOnly: Bool = false, shouldCancel: () -> Bool = { false }) -> String {
+    func complete(prefix: String, maxTokens: Int, temperature: Float = 0.3, seed: UInt32 = 0,
+                  latinOnly: Bool = false, repeatPenalty: Float = 1.0, shouldCancel: () -> Bool = { false }) -> String {
         var promptTokens = tokenize(prefix)
         guard !promptTokens.isEmpty else { return "" }
         // Keep within context: drop oldest prompt tokens if needed, leaving room for generation.
@@ -118,11 +118,12 @@ final class LlamaSession {
         var batch = llama_batch_get_one(&newTokens, Int32(newTokens.count))
         guard llama_decode(ctx, batch) == 0 else { return "" }
 
-        // Sampler chain: top_k → top_p → temp → [logit_bias when latinOnly] → dist.
+        // Sampler chain: top_k → top_p → temp → repeat_penalty → [logit_bias when latinOnly] → dist.
         let smpl = llama_sampler_chain_init(llama_sampler_chain_default_params())
         llama_sampler_chain_add(smpl, llama_sampler_init_top_k(40))
         llama_sampler_chain_add(smpl, llama_sampler_init_top_p(0.9, 1))
         llama_sampler_chain_add(smpl, llama_sampler_init_temp(temperature))
+        llama_sampler_chain_add(smpl, llama_sampler_init_penalties(512, repeatPenalty, 0.0, 0.0))
         if latinOnly && !cjkBias.isEmpty {
             cjkBias.withUnsafeBufferPointer { buf in
                 llama_sampler_chain_add(smpl, llama_sampler_init_logit_bias(

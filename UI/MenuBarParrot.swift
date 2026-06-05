@@ -29,7 +29,8 @@ final class MenuBarParrot {
     }
 
     func setState(_ newState: ParrotState) {
-        guard state != newState else { return }
+        let oldState = state
+        guard oldState != newState else { return }
         prevParams  = parrotView?.params ?? ParrotView.Params()
         blendFactor = 0.0
         state       = newState
@@ -45,6 +46,7 @@ final class MenuBarParrot {
             measureTrackWidth()
         default: break
         }
+        adjustFramerateForState(oldState: oldState, newState: newState)
         scheduleAutoReset()
     }
 
@@ -137,16 +139,42 @@ final class MenuBarParrot {
         return max(44, min(800, win.frame.origin.x - 220))
     }
 
-    // MARK: - Animation timer (60 fps)
+    // MARK: - Animation timer (adaptive framerate)
+    // P2.8: Drop to 12fps when idle (breathing only), keep 60fps for active states.
+    // This reduces CPU usage from continuous 60fps redraws when the parrot is just breathing.
+
+    private var animFrameRate: TimeInterval {
+        if state == .idle || state == .sleeping { return 1.0 / 12.0 }
+        return 1.0 / 60.0
+    }
 
     private func startAnimating() {
         animTimer?.invalidate()
         lastTick = .now
-        let t = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.tick() }
+        scheduleNextAnimTick()
+    }
+
+    private func scheduleNextAnimTick() {
+        let interval = animFrameRate
+        let t = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.tick()
+                if let self, self.animTimer != nil {
+                    self.scheduleNextAnimTick()
+                }
+            }
         }
         RunLoop.main.add(t, forMode: .common)
         animTimer = t
+    }
+
+    // Re-schedule at the right framerate when state changes between idle and active.
+    private func adjustFramerateForState(oldState: ParrotState, newState: ParrotState) {
+        let wasIdle = (oldState == .idle || oldState == .sleeping)
+        let nowIdle = (newState == .idle || newState == .sleeping)
+        guard wasIdle != nowIdle, animTimer != nil else { return }
+        animTimer?.invalidate()
+        scheduleNextAnimTick()
     }
 
     private func tick() {

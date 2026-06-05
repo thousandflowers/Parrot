@@ -16,6 +16,13 @@ struct SeedDataProvider {
         if UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.language) == nil {
             UserDefaults.standard.set("it", forKey: Constants.UserDefaultsKey.language)
         }
+        // Inline-completion accept key defaults (read from nonisolated C callback, so write them explicitly).
+        if UserDefaults.standard.object(forKey: Constants.UserDefaultsKey.completionPartialKeyCode) == nil {
+            UserDefaults.standard.set(48, forKey: Constants.UserDefaultsKey.completionPartialKeyCode)
+        }
+        if UserDefaults.standard.object(forKey: Constants.UserDefaultsKey.completionFullKeyCode) == nil {
+            UserDefaults.standard.set(42, forKey: Constants.UserDefaultsKey.completionFullKeyCode)
+        }
         seedPromptPresets(preferences: preferences)
     }
 

@@ -60,10 +60,18 @@ struct CompletionTab: View {
                         Text(model.name).tag(model.id)
                     }
                 }
+                Divider()
+                TextField("OpenAI-compatible endpoint", text: $prefs.completionOpenAIEndpoint, axis: .vertical)
+                    .lineLimit(1)
+                    .textContentType(.URL)
+                    .autocorrectionDisabled()
+                SecureField("API key (optional)", text: $prefs.completionOpenAIKey)
+                    .lineLimit(1)
+                    .autocorrectionDisabled()
             } header: {
                 Label("Model", systemImage: "cpu")
             } footer: {
-                Text("Use the main model, or pick a dedicated model for completion. A small base model gives faster, more on-topic suggestions; a different model runs on its own background server (more RAM).")
+                Text("Use the main model, or pick a dedicated model for completion. Set an OpenAI-compatible endpoint (e.g. https://api.openai.com/v1) to use cloud models instead of local. Leave blank to use local models only.")
                     .foregroundStyle(.secondary)
             }
 
@@ -98,6 +106,27 @@ struct CompletionTab: View {
                 Label("Context", systemImage: "rectangle.dashed.and.paperclip")
             } footer: {
                 Text("Screen context reads on-screen text (the conversation/email you're replying to) via on-device OCR (throttled, needs Screen Recording). Clipboard context adds your copied text. Both ground suggestions so they fit.")
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Picker("Partial accept", selection: $prefs.completionPartialKeyCode) {
+                    Text("Tab ↹").tag(48)
+                    Text("Space").tag(49)
+                    Text("Return ↵").tag(36)
+                    Text("Right Arrow →").tag(124)
+                }
+                Picker("Full accept", selection: $prefs.completionFullKeyCode) {
+                    Text("Backslash \\").tag(42)
+                    Text("Tab ↹").tag(48)
+                    Text("Space").tag(49)
+                    Text("Return ↵").tag(36)
+                    Text("Right Arrow →").tag(124)
+                }
+            } header: {
+                Label("Accept keys", systemImage: "keyboard")
+            } footer: {
+                Text("Partial accept inserts the next word and re-suggests. Full accept inserts the entire suggestion. Set both to the same key to disable full accept via keyboard (\\ still works).")
                     .foregroundStyle(.secondary)
             }
 

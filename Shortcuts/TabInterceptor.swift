@@ -99,27 +99,31 @@ private func tabTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: CG
     // Tab (no modifier) = accept the NEXT WORD (partial), then re-suggest. Whole-sentence accept is
     // on "\" below. (Per user spec: Tab = word, backslash = full.)
     let hasModifier = flags.contains(.maskCommand) || flags.contains(.maskControl) || flags.contains(.maskAlternate) || flags.contains(.maskShift)
-    if keycode == kVKTab && !hasModifier {
-        Logger.infra.debug("TabInterceptor: Tab partial (word) accept")
+    // Read from UserDefaults directly (not PreferencesStore.shared) — this callback is nonisolated
+    // and PreferencesStore is @MainActor-isolated via @Observable.
+    let partialKey = UserDefaults.standard.integer(forKey: Constants.UserDefaultsKey.completionPartialKeyCode)
+    let fullKey = UserDefaults.standard.integer(forKey: Constants.UserDefaultsKey.completionFullKeyCode)
+    if keycode == partialKey && !hasModifier {
+        Logger.infra.debug("TabInterceptor: partial accept (keycode \(partialKey))")
         Task { @MainActor in
             if !CompletionController.shared.tryAcceptPartial() {
-                // Suggestion was already cleared → let a real Tab through instead of eating it.
+                // Suggestion was already cleared → let the real key through instead of eating it.
                 let src = CGEventSource(stateID: .hidSystemState)
-                if let td = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(kVKTab), keyDown: true),
-                   let tu = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(kVKTab), keyDown: false) {
-                    td.post(tap: .cghidEventTap)
-                    tu.post(tap: .cghidEventTap)
+                if let kd = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(partialKey), keyDown: true),
+                   let ku = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(partialKey), keyDown: false) {
+                    kd.post(tap: .cghidEventTap)
+                    ku.post(tap: .cghidEventTap)
                 }
             }
         }
-        return nil   // swallow the Tab
+        return nil   // swallow the key
     }
     // "\" = accept the FULL suggestion. Detected by the produced CHARACTER, not keycode 42 — on the
     // Italian layout "\" is Option+Shift+/ (different keycode + modifiers), so a keycode check missed
     // it entirely. Only reached while a suggestion is visible (gate above). If the accept loses a
     // race (no current suggestion), re-post the SAME key event so the user's "\" is not eaten.
-    if event.typedCharacter() == "\\" {
-        Logger.infra.debug("TabInterceptor: backslash full accept")
+    if event.typedCharacter() == "\\" || (!hasModifier && keycode == fullKey && fullKey != partialKey) {
+        Logger.infra.debug("TabInterceptor: full accept (keycode \(fullKey))")
         let kc = CGKeyCode(keycode)
         let fl = flags
         Task { @MainActor in
@@ -133,7 +137,7 @@ private func tabTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: CG
                 }
             }
         }
-        return nil   // swallow the backslash
+        return nil   // swallow the key
     }
     // ⌘→ accepts a single word (partial accept), then re-suggests.
     if keycode == 124 && flags.contains(.maskCommand) {   // kVKRightArrow

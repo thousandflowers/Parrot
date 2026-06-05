@@ -73,6 +73,10 @@ final class InlineHighlightController {
     /// per non invalidare gli offset delle annotazioni precedenti.
     func applyAllAnnotations() {
         let pid = trackedPID
+        guard pid > 0 else {
+            Logger.ui.debug("InlineHighlightController: applyAllAnnotations with no tracked PID")
+            return
+        }
         let toApply = annotationRects
             .map { $0.annotation }
             .filter { !$0.suggestedFix.isEmpty }
@@ -106,9 +110,14 @@ final class InlineHighlightController {
     }
 
     private func setupOverlay(_ annotations: [ErrorAnnotation], pid: pid_t) async {
+        guard pid > 0 else {
+            Logger.ui.debug("InlineHighlightController: setupOverlay with invalid pid=\(pid, privacy: .public)")
+            return
+        }
         var rects: [(CGRect, ErrorAnnotation)] = []
         for ann in annotations {
             if let r = await AccessibilityBridge.shared.boundsForRange(ann.charRange, pid: pid) {
+                guard !r.isInfinite, !r.isNull else { continue }
                 rects.append((r, ann))
             }
         }
@@ -117,11 +126,15 @@ final class InlineHighlightController {
 
         annotationRects = rects
 
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
-        let screenFrame = screen.frame
+        // P2.4: Size underlay to the union of annotation rects + margin instead of full screen.
+        let margin: CGFloat = 40
+        let unionRect = rects.map(\.0).reduce(CGRect.null) { $0.union($1) }
+        let underlayFrame = unionRect == .null
+            ? (NSScreen.main?.frame ?? .zero)
+            : unionRect.insetBy(dx: -margin, dy: -margin)
 
         let underlay = NSWindow(
-            contentRect: screenFrame,
+            contentRect: underlayFrame,
             styleMask: .borderless,
             backing: .buffered,
             defer: false
@@ -133,7 +146,7 @@ final class InlineHighlightController {
         underlay.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
         let view = UnderlineOverlayView(
-            frame: NSRect(origin: .zero, size: screenFrame.size),
+            frame: NSRect(origin: .zero, size: underlayFrame.size),
             items: rects.map { ($0.0, $0.1.severity) }
         )
         overlayView = view
@@ -146,14 +159,23 @@ final class InlineHighlightController {
 
     // MARK: - Mouse tracking
 
+    // P1.4: Throttle mouse-move to ~15 Hz (was per-frame, triggering full AX calls).
+    // P2.4: Underlay window is now sized to the target app window, not the full screen.
+    private var lastMouseMoveTime: Date = .distantPast
+    private let mouseMoveThrottleInterval: TimeInterval = 1.0 / 15.0
+
     private func startMouseTracking() {
         stopMouseTracking()
+        lastMouseMoveTime = .distantPast
         mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown]) { [weak self] event in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if event.type == .leftMouseDown {
                     self.handleMouseDown(at: NSEvent.mouseLocation)
                 } else {
+                    let now = Date()
+                    guard now.timeIntervalSince(self.lastMouseMoveTime) >= self.mouseMoveThrottleInterval else { return }
+                    self.lastMouseMoveTime = now
                     self.handleMouseMoved(at: NSEvent.mouseLocation)
                 }
             }
@@ -168,6 +190,7 @@ final class InlineHighlightController {
     }
 
     private func handleMouseMoved(at location: NSPoint) {
+        guard !location.x.isNaN, !location.y.isNaN, !location.x.isInfinite, !location.y.isInfinite else { return }
         if hoverOnlyMode {
             handleHoverOnlyMouseMoved(at: location)
             return
@@ -182,6 +205,7 @@ final class InlineHighlightController {
 
         // Check annotation rects
         for (rect, annotation) in annotationRects {
+            guard !rect.isInfinite, !rect.isNull else { continue }
             if rect.contains(location) {
                 hideTask?.cancel()
                 HoverAnnotationPopup.shared.show(annotation: annotation, pid: trackedPID, near: rect)
@@ -218,11 +242,15 @@ final class InlineHighlightController {
         guard !rects.isEmpty else { return }
         annotationRects = rects.map { ($0.0, $0.1) }
 
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
-        let screenFrame = screen.frame
+        // P2.4: Size to annotation union, not full screen.
+        let margin: CGFloat = 40
+        let unionRect = rects.map(\.0).reduce(CGRect.null) { $0.union($1) }
+        let underlayFrame = unionRect == .null
+            ? (NSScreen.main?.frame ?? .zero)
+            : unionRect.insetBy(dx: -margin, dy: -margin)
 
         let underlay = NSWindow(
-            contentRect: screenFrame,
+            contentRect: underlayFrame,
             styleMask: .borderless,
             backing: .buffered,
             defer: false
@@ -234,7 +262,7 @@ final class InlineHighlightController {
         underlay.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
         let view = UnderlineOverlayView(
-            frame: NSRect(origin: .zero, size: screenFrame.size),
+            frame: NSRect(origin: .zero, size: underlayFrame.size),
             items: rects.map { ($0.0, $0.1.severity) }
         )
         overlayView = view
@@ -298,7 +326,7 @@ final class UnderlineOverlayView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let winOrigin = window?.frame.origin ?? .zero
+        guard let winOrigin = window?.frame.origin else { return }
         for (rect, severity) in items {
             let viewRect = CGRect(
                 x: rect.origin.x - winOrigin.x,
@@ -306,6 +334,22 @@ final class UnderlineOverlayView: NSView {
                 width: rect.width, height: rect.height
             )
             drawWavy(in: viewRect, color: severity.nsColor)
+        }
+    }
+
+    // P1.2: Expose error annotations via accessibility so screen readers
+    // can announce inline errors even though they're rendered as visual underlines.
+    override func accessibilityChildren() -> [Any]? {
+        // Return annotation descriptions as AX elements.
+        // Each annotation becomes an AX element positioned at the error rect.
+        items.map { (rect, severity) in
+            let axEl = NSAccessibilityElement()
+            axEl.setAccessibilityParent(self)
+            axEl.setAccessibilityFrame(rect)
+            axEl.setAccessibilityRole(.staticText)
+            axEl.setAccessibilityLabel(severity == .error ? "Error: grammar issue" : "Warning: potential issue")
+            axEl.setAccessibilityHelp("Grammar issue detected at this location")
+            return axEl
         }
     }
 

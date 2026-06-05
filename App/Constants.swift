@@ -28,9 +28,33 @@ enum Constants {
     static let completionMinPrefixChars = 3         // don't suggest on near-empty fields
     // Preceding text sent to the model. Longer = more relevant ("not pulled from a hat"); KV-cache
     // reuse makes the extra context cheap after the first decode.
-    static let completionMaxPrefixChars = 800
-    static let completionScreenContextMaxChars = 280   // recent on-screen text near the input (tail)
-    static let completionScreenContextTTL: TimeInterval = 3   // re-OCR at most this often (anti-stutter)
+    static let completionMaxPrefixChars = 1200
+    static let completionScreenContextMaxChars = 600   // recent on-screen text near the input (tail)
+    static let completionScreenContextTTL: TimeInterval = 8   // re-OCR at most this often (anti-stutter)
+
+    // Topic-drift guard: Italian + English function words that must NOT count as "topic overlap".
+    // A suggestion consisting entirely of these words is too generic to check; a suggestion with
+    // ≥2 content words ALL absent from the recent context is rejected as a hallucination.
+    static let contentStopWords: Set<String> = [
+        "il", "lo", "la", "gli", "le", "un", "uno", "una", "del", "della", "dei", "degli", "delle",
+        "al", "alla", "ai", "agli", "alle", "dal", "dalla", "dai", "dagli", "dalle",
+        "nel", "nella", "nei", "negli", "nelle", "sul", "sulla", "sui", "sugli", "sulle",
+        "con", "per", "tra", "fra", "in", "a", "da", "di", "che", "chi", "cui",
+        "e", "ed", "o", "ma", "anche", "come", "se", "non", "ci", "si", "vi", "mi", "ti",
+        "è", "sono", "ha", "ho", "hai", "hanno", "era", "ero", "erano",
+        "più", "meno", "molto", "troppo", "tutto", "tanto",
+        "cosa", "quando", "dove", "perché", "quale", "quanto",
+        "questo", "questa", "questi", "queste", "quello", "quella", "quelli", "quelle",
+        "mio", "mia", "tuo", "tua", "suo", "sua", "nostro", "nostra", "loro",
+        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with",
+        "by", "from", "is", "are", "was", "were", "be", "been", "being",
+        "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "may", "might",
+        "it", "its", "this", "that", "these", "those", "there",
+        "i", "you", "he", "she", "we", "they", "me", "him", "her", "us", "them", "my", "your",
+        "not", "no", "so", "if", "when", "where", "what", "which", "who", "why", "how",
+        "all", "each", "every", "both", "some", "any", "more", "most", "much", "many",
+        "can", "just", "very", "too", "also", "only", "here", "well", "now", "then", "about"
+    ]
 
     /// Self-consistency passes for local grammar checks. Small models are noisy: running
     /// the deterministic grammar task a few times and taking the agreed / most conservative
@@ -118,5 +142,9 @@ enum Constants {
         static let snippets = "snippets"
         static let completionOverlayFontSize = "completionOverlayFontSize"
         static let completionEmojiSkinTone = "completionEmojiSkinTone"   // 0=none, 1..5 Fitzpatrick
+        static let completionOpenAIEndpoint = "completionOpenAIEndpoint"
+        static let completionOpenAIKey = "completionOpenAIKey"
+        static let completionPartialKeyCode = "completionPartialKeyCode"
+        static let completionFullKeyCode = "completionFullKeyCode"
     }
 }

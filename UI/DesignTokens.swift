@@ -74,9 +74,60 @@ extension Color {
     static let textSecondary = Color.secondary
 }
 
+// MARK: - Colorblind-safe diff colors
+// Uses blue/orange instead of red/green so the ~8% of users with colorblindness
+// can distinguish insertions from deletions. Patterns (strikethrough/underline)
+// provide an additional differentiation channel.
+extension NSColor {
+    /// Deletion (was red): now blue with strikethrough for colorblind safety.
+    static let diffDeletion = appearanceColor(
+        light: NSColor(displayP3Red: 0.20, green: 0.45, blue: 1.0, alpha: 1),
+        dark: NSColor(displayP3Red: 0.35, green: 0.55, blue: 1.0, alpha: 1)
+    )
+    static let diffDeletionBackground = appearanceColor(
+        light: NSColor(displayP3Red: 0.20, green: 0.45, blue: 1.0, alpha: 0.12),
+        dark: NSColor(displayP3Red: 0.35, green: 0.55, blue: 1.0, alpha: 0.18)
+    )
+    /// Insertion (was green): now orange with underline for colorblind safety.
+    static let diffInsertion = appearanceColor(
+        light: NSColor(displayP3Red: 0.90, green: 0.55, blue: 0.05, alpha: 1),
+        dark: NSColor(displayP3Red: 1.0, green: 0.68, blue: 0.15, alpha: 1)
+    )
+    static let diffInsertionBackground = appearanceColor(
+        light: NSColor(displayP3Red: 0.90, green: 0.55, blue: 0.05, alpha: 0.12),
+        dark: NSColor(displayP3Red: 1.0, green: 0.68, blue: 0.15, alpha: 0.18)
+    )
+}
+
+extension Color {
+    static let diffDeletion = Color(nsColor: .diffDeletion)
+    static let diffDeletionBackground = Color(nsColor: .diffDeletionBackground)
+    static let diffInsertion = Color(nsColor: .diffInsertion)
+    static let diffInsertionBackground = Color(nsColor: .diffInsertionBackground)
+}
+
+// MARK: - Card style modifier (replaces 15+ copies of RoundedRectangle + overlay)
+struct CardStyle: ViewModifier {
+    let radius: CGFloat
+    let borderOpacity: CGFloat
+
+    init(radius: CGFloat = 10, borderOpacity: CGFloat = 0.5) {
+        self.radius = radius
+        self.borderOpacity = borderOpacity
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(.separator.opacity(borderOpacity), lineWidth: 0.5)
+            )
+    }
+}
+
 extension View {
-    func cleanAccessibilityTree() -> some View {
-        self.accessibilityElement(children: .contain)
-            .accessibilityHidden(false)
+    func cardStyle(radius: CGFloat = 10, borderOpacity: CGFloat = 0.5) -> some View {
+        modifier(CardStyle(radius: radius, borderOpacity: borderOpacity))
     }
 }
