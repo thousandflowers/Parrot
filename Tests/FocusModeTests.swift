@@ -62,3 +62,17 @@ final class FocusWordCountTests: XCTestCase {
         XCTAssertEqual(c.wordsWritten, 12)
     }
 }
+
+@MainActor
+final class FocusTimerMathTests: XCTestCase {
+    func testResumeStart_preservesElapsed() {
+        // Paused after 40s of a 60s session: 20s remain.
+        // Resuming "now" must place startTime 40s in the past so the
+        // countdown continues from 20s, not restart at 60s.
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let start = FocusTimer.resumeStartTime(elapsed: 40, now: now)
+        let durationSeconds = 60
+        let remaining = max(0, durationSeconds - Int(now.timeIntervalSince(start)))
+        XCTAssertEqual(remaining, 20)
+    }
+}
