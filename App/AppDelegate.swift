@@ -58,7 +58,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Wren needs an on-device model to generate suggestions. We warm up above, but if NO model is
         // installed completion can never produce anything — surface that once (with a path to fix it)
         // instead of failing silently, which reads as "the app is broken".
-        if mode.showsCompletion && PreferencesStore.shared.inlineCompletionEnabled {
+        // Gate to AFTER onboarding completes: the Wren onboarding now runs the model download in
+        // the background, so this fallback alert should only fire for users who skipped onboarding.
+        if mode.showsCompletion && PreferencesStore.shared.inlineCompletionEnabled
+           && UserDefaults.standard.bool(forKey: OnboardingController.completionKey(for: .wren)) {
             Task {
                 guard (await ModelManager.shared.localModels()).isEmpty else { return }
                 await MainActor.run {
