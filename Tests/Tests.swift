@@ -1201,6 +1201,18 @@ final class CompletionPostprocessorTests: XCTestCase {
         XCTAssertEqual("sono andato al mercato " + (r ?? ""), "sono andato al mercato comprare il pesce")
     }
 
+    func testClean_midWordContinuationFormsValidWord_noSpace() {
+        // "se" + "ccavo" = "seccavo" (valid Italian) → continue the token, no boundary space.
+        let r = CompletionPostprocessor.clean(raw: "ccavo, ma mi", preContext: "Io non mi se", maxWords: 3)
+        XCTAssertEqual("Io non mi se" + (r ?? ""), "Io non mi seccavo, ma mi")
+    }
+
+    func testClean_modelLeadingSpaceForcesNewWord() {
+        // Model emitted a leading space → it intends a new word even at a letter boundary.
+        let r = CompletionPostprocessor.clean(raw: " bene grazie", preContext: "sto", maxWords: 3)
+        XCTAssertEqual(r, " bene grazie")
+    }
+
     func testClean_emptyPrefix_noLeadingSpace() {
         let r = CompletionPostprocessor.clean(raw: "Hello world", preContext: "", maxWords: 8)
         XCTAssertEqual(r, "Hello world")

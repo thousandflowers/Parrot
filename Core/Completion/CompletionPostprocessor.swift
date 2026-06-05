@@ -11,6 +11,10 @@ enum CompletionPostprocessor {
     ///   assumed and exactly one space separates the prior word from the suggestion.
     static func clean(raw: String, preContext: String, maxWords: Int, allowCode: Bool = false, midWord: Bool = false, postContext: String = "") -> String? {
         var text = raw
+        // The model's own leading space is its boundary signal: a leading space means it intends a
+        // NEW word; no leading space means it is continuing the current token. We honor this at a
+        // letter boundary below (combined with a validity check, since base models are imperfect).
+        let modelLeadingSpace = raw.first.map { $0 == " " || $0 == "\t" } ?? false
 
         // 0a. Reject LEADING AI preamble / instruction-leak only. Anchored to the start: a substring
         //     match was rejecting valid completions ("...let me know", "...here's the plan"). Real
@@ -100,7 +104,19 @@ enum CompletionPostprocessor {
         if midWord {
             capped = lead                                       // continue the token, no space ("rece"+" ption"→"ption")
         } else if let last = preContext.last, !last.isWhitespace {
-            capped = " " + lead                                 // boundary after a word → exactly one space
+            // Letter boundary. The spell-check midWord above says the trailing word is complete, but a
+            // word can be a prefix of a longer one being typed ("se" → "seccavo"). Disambiguate:
+            //  - model emitted a leading space → it intends a NEW word → one space.
+            //  - model omitted the space AND trailingWord+continuation is a valid word → continue (no space).
+            //  - otherwise → NEW word, insert the boundary space the model unreliably omitted ("perchiedere"→"per chiedere").
+            let trailingWord = String(preContext.reversed().prefix { $0.isLetter }.reversed())
+            let firstToken = String(lead.prefix { $0.isLetter })
+            if !modelLeadingSpace,
+               WordBoundary.continuationFormsWord(trailingWord: trailingWord, continuation: firstToken) {
+                capped = lead                                   // "se" + "ccavo" → "seccavo"
+            } else {
+                capped = " " + lead                             // new word → exactly one space
+            }
         } else {
             capped = lead                                       // empty preContext, or already ends with space → none
         }

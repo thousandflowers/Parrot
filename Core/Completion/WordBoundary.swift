@@ -26,4 +26,20 @@ enum WordBoundary {
         guard let last = preContext.last else { return false }
         return last.isLetter
     }
+
+    /// True when gluing `continuation` directly onto `trailingWord` (no space) forms a single valid
+    /// word. Disambiguates the letter-boundary spacing the model omits:
+    ///   "se" + "ccavo" = "seccavo" (valid)   → continue the token, no space
+    ///   "per" + "chiedere" = "perchiedere" (invalid) → new word, insert a space
+    /// nonisolated so the pure postprocessor can call it; NSSpellChecker is safe off the main thread.
+    nonisolated static func continuationFormsWord(trailingWord: String, continuation: String) -> Bool {
+        let combined = trailingWord + continuation
+        guard combined.count >= 3, trailingWord.count >= 1, continuation.count >= 1 else { return false }
+        let checker = NSSpellChecker.shared
+        let lang = NSLinguisticTagger.dominantLanguage(for: combined)
+            .flatMap { checker.availableLanguages.contains($0) ? $0 : nil } ?? "en"
+        let r = checker.checkSpelling(of: combined, startingAt: 0, language: lang,
+                                      wrap: false, inSpellDocumentWithTag: 0, wordCount: nil)
+        return r.location == NSNotFound   // not flagged → a real word → it was mid-token
+    }
 }
