@@ -115,6 +115,28 @@ jobs:
           NOTARIZE_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: ./build-app.sh release
 
+      # ── Wren standalone .app + DMG (bundles a model) ───────────────────────
+      # Wren is the inline-completion sibling app. build-wren.sh bundles a small GGUF so the
+      # app runs offline out of the box; CI must fetch that model first.
+      - name: Ensure llama.cpp dylibs (for Wren bundle)
+        run: brew install llama.cpp ggml 2>/dev/null || brew upgrade llama.cpp ggml 2>/dev/null || true
+
+      - name: Fetch bundled model for Wren
+        run: |
+          mkdir -p /tmp/wren-model
+          curl -fL --retry 3 -o /tmp/wren-model/qwen2.5-0.5b-instruct-q4_k_m.gguf \
+            "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+
+      - name: Build Wren .app + DMG
+        env:
+          WREN_DMG: "1"
+          MODEL_PATH: /tmp/wren-model/qwen2.5-0.5b-instruct-q4_k_m.gguf
+          SIGNING_IDENTITY: ${{ steps.identity.outputs.value }}
+          NOTARIZE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NOTARIZE_APPLE_ID: ${{ secrets.APPLE_ID }}
+          NOTARIZE_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: ./build-wren.sh release
+
       # ── ZIP for Sparkle autoupdate ─────────────────────────────────────────
       - name: Create Sparkle ZIP
         run: |
@@ -186,12 +208,24 @@ jobs:
             Casks/parrot.rb
           echo "[✓] Casks/parrot.rb updated to ${VERSION_NUM} / ${SHA:0:16}..."
 
+      - name: Update Wren Homebrew cask
+        if: hashFiles('Wren.dmg') != ''
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION_NUM="${VERSION#v}"
+          SHA=$(shasum -a 256 Wren.dmg | awk '{print $1}')
+          sed -i '' \
+            -e "s/version \"[^\"]*\"/version \"${VERSION_NUM}\"/" \
+            -e "s/sha256 [^$]*/sha256 \"${SHA}\"/" \
+            Casks/wren.rb
+          echo "[✓] Casks/wren.rb updated to ${VERSION_NUM} / ${SHA:0:16}..."
+
       # ── Commit generated artefacts back to main ────────────────────────────
       - name: Commit appcast + cask to main
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add appcast.xml Casks/parrot.rb 2>/dev/null || true
+          git add appcast.xml Casks/parrot.rb Casks/wren.rb 2>/dev/null || true
           git diff --staged --quiet && echo "[i] Nothing to commit" && exit 0
           git commit -m "chore: release ${{ github.ref_name }} — appcast + cask"
           git push origin HEAD:main
@@ -206,6 +240,7 @@ jobs:
           files: |
             Parrot.dmg
             Parrot_${{ github.ref_name }}.zip
+            Wren.dmg
             appcast.xml
 
       # ── Cleanup ────────────────────────────────────────────────────────────

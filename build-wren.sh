@@ -132,3 +132,49 @@ codesign --sign "${SIGNING_IDENTITY}" --entitlements "${ENTITLEMENTS}" ${SIGN_OP
 echo ""
 echo "[✓] ${APP_DIR} ready — $(du -sh "${APP_DIR}" | awk '{print $1}') total."
 [ "${SIGNING_IDENTITY}" = "-" ] && echo "    First launch: right-click Wren.app → Open."
+
+# --- Optional: notarize + DMG packaging (set WREN_DMG=1; CI/release path) ---
+# Local debug builds skip this. A real `brew install --cask wren` needs Wren.dmg uploaded
+# to GitHub Releases — that is what this produces.
+if [ "${WREN_DMG:-0}" = "1" ]; then
+    ZIP_NAME="Wren.zip"
+
+    # Notarize (Developer ID + NOTARIZE_* required; ad-hoc builds skip this).
+    if [ "${SIGNING_IDENTITY}" != "-" ] && \
+       [ -n "${NOTARIZE_TEAM_ID:-}" ] && \
+       [ -n "${NOTARIZE_APPLE_ID:-}" ] && \
+       [ -n "${NOTARIZE_PASSWORD:-}" ]; then
+        echo "[*] Notarizing ${APP_DIR}..."
+        rm -f "${ZIP_NAME}"
+        ditto -c -k --keepParent "${APP_DIR}" "${ZIP_NAME}"
+        xcrun notarytool submit "${ZIP_NAME}" \
+            --team-id "${NOTARIZE_TEAM_ID}" \
+            --apple-id "${NOTARIZE_APPLE_ID}" \
+            --password "${NOTARIZE_PASSWORD}" \
+            --wait
+        xcrun stapler staple "${APP_DIR}"
+        rm -f "${ZIP_NAME}"
+        echo "[✓] Notarized + stapled."
+    else
+        echo "[i] NOTARIZE_* not set (or ad-hoc) — DMG will be unnotarized; users right-click → Open."
+    fi
+
+    DMG_NAME="Wren.dmg"
+    DMG_TMP="Wren-rw.dmg"
+    DMG_VOL="Wren"
+    APP_MB=$(du -sm "${APP_DIR}" | awk '{print $1}')
+    DMG_MB=$((APP_MB + 30))
+
+    echo "[*] Creating ${DMG_NAME} (drag-to-Applications)..."
+    hdiutil detach "/Volumes/${DMG_VOL}" -quiet 2>/dev/null || true
+    rm -f "${DMG_TMP}" "${DMG_NAME}"
+    hdiutil create -size "${DMG_MB}m" -volname "${DMG_VOL}" -fs HFS+ "${DMG_TMP}" > /dev/null
+    hdiutil attach -readwrite -noverify -noautoopen -mountpoint "/Volumes/${DMG_VOL}" "${DMG_TMP}" > /dev/null
+    cp -R "${APP_DIR}" "/Volumes/${DMG_VOL}/"
+    ln -s /Applications "/Volumes/${DMG_VOL}/Applications"
+    hdiutil detach "/Volumes/${DMG_VOL}" -quiet
+    hdiutil convert "${DMG_TMP}" -format UDZO -imagekey zlib-level=9 -o "${DMG_NAME}" > /dev/null
+    rm -f "${DMG_TMP}"
+    [ "${SIGNING_IDENTITY}" != "-" ] && codesign --sign "${SIGNING_IDENTITY}" ${SIGN_OPTS} "${DMG_NAME}" || true
+    echo "[✓] ${DMG_NAME} ready — $(du -h "${DMG_NAME}" | awk '{print $1}')."
+fi

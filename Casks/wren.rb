@@ -2,10 +2,12 @@ cask "wren" do
   version "0.9.1"
   sha256 :no_check
 
-  url "https://github.com/thousandflowers/Wren/releases/latest/download/Wren.dmg"
+  # Wren ships from the Parrot repo's releases (one codebase, two apps). The release workflow
+  # uploads Wren.dmg there, so the cask points at that repo — not a separate Wren repo.
+  url "https://github.com/thousandflowers/Parrot/releases/latest/download/Wren.dmg"
   name "Wren"
   desc "On-device inline completion for every app on your Mac — offline, instant, no subscription"
-  homepage "https://github.com/thousandflowers/Wren"
+  homepage "https://github.com/thousandflowers/Parrot"
 
   livecheck do
     url :homepage

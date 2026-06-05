@@ -62,6 +62,11 @@ Or install via Homebrew:
 brew install --cask thousandflowers/parrot/parrot
 ```
 
+Prefer inline completion instead of grammar correction? Install **Wren** (the on-device autocomplete sibling, ships from the same releases):
+```bash
+brew install --cask thousandflowers/parrot/wren
+```
+
 ---
 
 ## How it works
