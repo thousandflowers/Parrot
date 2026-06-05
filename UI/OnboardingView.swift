@@ -8,10 +8,14 @@ final class OnboardingController {
     static let shared = OnboardingController()
 
     private var window: NSWindow?
-    private static let completedKey = "hasCompletedOnboarding_v2"
+
+    nonisolated static func completionKey(for mode: AppMode) -> String {
+        mode == .wren ? "hasCompletedOnboarding_wren_v1" : "hasCompletedOnboarding_v2"
+    }
 
     func showIfNeeded() {
-        guard !UserDefaults.standard.bool(forKey: Self.completedKey) else { return }
+        let key = Self.completionKey(for: .current)
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
         show()
     }
 
@@ -32,11 +36,15 @@ final class OnboardingController {
         w.isReleasedWhenClosed = false
         w.setFrameAutosaveName("OnboardingWindow")
 
-        w.contentView = NSHostingView(rootView: OnboardingView(onComplete: { [weak self] in
-            UserDefaults.standard.set(true, forKey: Self.completedKey)
+        let onComplete: () -> Void = { [weak self] in
+            UserDefaults.standard.set(true, forKey: Self.completionKey(for: .current))
             self?.window?.close()
             self?.window = nil
-        }))
+        }
+        let root: AnyView = AppMode.current.showsCompletion
+            ? AnyView(WrenOnboardingView(onComplete: onComplete))
+            : AnyView(ParrotOnboardingView(onComplete: onComplete))
+        w.contentView = NSHostingView(rootView: root)
 
         window = w
         w.makeKeyAndOrderFront(nil)
@@ -46,7 +54,7 @@ final class OnboardingController {
 
 // MARK: - Root View
 
-struct OnboardingView: View {
+struct ParrotOnboardingView: View {
     let onComplete: () -> Void
 
     @State private var step = 0
@@ -728,5 +736,5 @@ private struct ReadyCheckRow: View {
 }
 
 #Preview {
-    OnboardingView(onComplete: {})
+    ParrotOnboardingView(onComplete: {})
 }
