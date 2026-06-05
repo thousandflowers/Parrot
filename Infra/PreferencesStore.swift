@@ -357,6 +357,20 @@ final class PreferencesStore {
         set { set(newValue, for: Constants.UserDefaultsKey.completionFullKeyCode) }
     }
 
+    // MARK: - Tone Tune-Up
+
+    var toneTuneUpCadence: ToneTuneUpCadence {
+        get { ToneTuneUpCadence(rawValue: string(Constants.UserDefaultsKey.toneTuneUpCadence, fallback: "off")) ?? .off }
+        set { set(newValue.rawValue, for: Constants.UserDefaultsKey.toneTuneUpCadence) }
+    }
+    var toneTuneUpLastRun: Date? {
+        get {
+            let t = UserDefaults.standard.double(forKey: Constants.UserDefaultsKey.toneTuneUpLastRun)
+            return t > 0 ? Date(timeIntervalSince1970: t) : nil
+        }
+        set { UserDefaults.standard.set(newValue?.timeIntervalSince1970 ?? 0, forKey: Constants.UserDefaultsKey.toneTuneUpLastRun) }
+    }
+
     // MARK: - Snippets
 
     var snippets: [Snippet] {

@@ -146,5 +146,7 @@ enum Constants {
         static let completionOpenAIKey = "completionOpenAIKey"
         static let completionPartialKeyCode = "completionPartialKeyCode"
         static let completionFullKeyCode = "completionFullKeyCode"
+        static let toneTuneUpCadence = "toneTuneUpCadence"
+        static let toneTuneUpLastRun = "toneTuneUpLastRun"
     }
 }
