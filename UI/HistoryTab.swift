@@ -11,7 +11,6 @@ struct HistoryTab: View {
                         Image(systemName: "clock.badge.checkmark")
                             .font(.system(size: 32))
                             .foregroundStyle(Color.accentColor.opacity(0.5))
-                            .accessibilityHidden(true)
                         Text("No corrections yet")
                             .font(.headline)
                         Text("Select text anywhere and press a shortcut.\nYour corrections will appear here.")

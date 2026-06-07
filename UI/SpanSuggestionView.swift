@@ -6,6 +6,7 @@ struct SpanSuggestionView: View {
     @State var spans: [CorrectionSpan]
     let onApply: ([CorrectionSpan]) -> Void
     let onDismiss: () -> Void
+    @ScaledMetric(relativeTo: .body) private var panelWidth: CGFloat = 420
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -19,7 +20,7 @@ struct SpanSuggestionView: View {
             Divider()
             footer
         }
-        .frame(width: 420)
+        .frame(width: panelWidth)
         .background(Color.surfaceBackground)
     }
 

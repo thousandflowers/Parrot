@@ -78,7 +78,7 @@ private struct WrenWelcomeStep: View {
                     .font(.caption).foregroundStyle(Color.textSecondary)
             }
             Spacer()
-        }.padding()
+        }.padding(.horizontal)
     }
 }
 
@@ -107,7 +107,7 @@ private struct InputMonitoringStep: View {
             }
             Spacer()
         }
-        .padding()
+        .padding(.horizontal)
         .task {
             while !Task.isCancelled, !granted {
                 try? await Task.sleep(for: .milliseconds(600))
@@ -137,7 +137,7 @@ private struct WrenScreenContextStep: View {
                 Label("Enabled", systemImage: "checkmark.circle.fill").foregroundStyle(Color.statusOk)
             }
             Spacer()
-        }.padding()
+        }.padding(.horizontal)
     }
 }
 
@@ -172,7 +172,7 @@ private struct WrenReadyStep: View {
                     .multilineTextAlignment(.center).padding(.horizontal, 40)
             }
             Spacer()
-        }.padding()
+        }.padding(.horizontal)
     }
 }
 
@@ -199,11 +199,13 @@ enum ToneTuneUpPresenter {
             PreferencesStore.shared.toneTuneUpLastRun = Date()
             window?.close(); window = nil
         })
-        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 420),
+        let scale = NSFont.systemFontSize / NSFont.systemFontSize(for: .regular)
+        let sw = round(560 * scale), sh = round(420 * scale)
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: sw, height: sh),
                          styleMask: [.titled, .closable], backing: .buffered, defer: false)
         w.title = "Tone tune-up — Wren"
         w.center(); w.isReleasedWhenClosed = false
-        w.contentView = NSHostingView(rootView: AnyView(root.frame(width: 560, height: 420)))
+        w.contentView = NSHostingView(rootView: AnyView(root.frame(width: sw, height: sh)))
         window = w
         w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

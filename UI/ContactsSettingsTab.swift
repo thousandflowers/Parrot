@@ -118,7 +118,7 @@ private struct ContactDetailView: View {
             }
         }
         .formStyle(.grouped)
-        .padding()
+        .padding(.horizontal)
         .onChange(of: draft) { _, new in onSave(new) }
     }
 }
@@ -127,12 +127,14 @@ private struct ContactEditSheet: View {
     @State var contact: ContactProfile
     var onSave: (ContactProfile) -> Void
     var onCancel: () -> Void
+    @ScaledMetric(relativeTo: .body) private var sheetWidth: CGFloat = 380
+    @ScaledMetric(relativeTo: .body) private var sheetHeight: CGFloat = 380
 
     var body: some View {
         VStack(spacing: 0) {
             Text("Nuovo contatto")
                 .font(.headline)
-                .padding()
+                .padding(.horizontal)
             Divider()
             Form {
                 TextField("Nome *", text: $contact.name)
@@ -160,8 +162,9 @@ private struct ContactEditSheet: View {
                     .keyboardShortcut(.return)
                     .accessibilityLabel("Save")
             }
-            .padding()
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
-        .frame(width: 380, height: 380)
+        .frame(width: sheetWidth, height: sheetHeight)
     }
 }

@@ -106,6 +106,23 @@ final class LlamaSession {
         return biases
     }()
 
+    /// Vocab-token biases for literal TAB / C0 control characters — a base model (gemma-3-4b-pt)
+    /// emits them wedged between words ("\triesco \ta \trisolvere"), which are never wanted in prose
+    /// → hard-suppress (-100). Newline is intentionally NOT biased (it is the natural completion stop,
+    /// handled below). Applied only in prose mode (`suppressMarkup`); code editors want tabs verbatim.
+    private lazy var noiseBias: [llama_logit_bias] = {
+        var biases: [llama_logit_bias] = []
+        let n = llama_vocab_n_tokens(vocab)
+        for i in 0..<n {
+            let p = piece(i)
+            guard !p.isEmpty else { continue }
+            if p.unicodeScalars.contains(where: { $0.value == 0x09 || ($0.value < 0x20 && $0.value != 0x0A) }) {
+                biases.append(llama_logit_bias(token: i, bias: -100.0))
+            }
+        }
+        return biases
+    }()
+
     /// Generates a short continuation of `prefix`. Reuses KV for the shared prefix.
     /// `shouldCancel` is polled each token so a newer request can abandon this one mid-generation.
     func complete(prefix: String, maxTokens: Int, temperature: Float = 0.3, seed: UInt32 = 0,
@@ -153,6 +170,12 @@ final class LlamaSession {
         }
         if suppressMarkup && !markupBias.isEmpty {
             markupBias.withUnsafeBufferPointer { buf in
+                llama_sampler_chain_add(smpl, llama_sampler_init_logit_bias(
+                    llama_vocab_n_tokens(vocab), Int32(buf.count), buf.baseAddress))
+            }
+        }
+        if suppressMarkup && !noiseBias.isEmpty {
+            noiseBias.withUnsafeBufferPointer { buf in
                 llama_sampler_chain_add(smpl, llama_sampler_init_logit_bias(
                     llama_vocab_n_tokens(vocab), Int32(buf.count), buf.baseAddress))
             }

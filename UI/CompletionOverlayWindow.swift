@@ -23,7 +23,9 @@ final class CompletionOverlayWindow {
         fontSizeObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            self?.cachedFontSize = self?.readFontSize() ?? 0
+            Task { @MainActor in
+                self?.cachedFontSize = self?.readFontSize() ?? 0
+            }
         }
     }
 
@@ -87,16 +89,26 @@ final class CompletionOverlayWindow {
         // single clean appear per pause instead of the old fade/dim flashing ("disturbato").
         panel.alphaValue = 1.0
         panel.orderFrontRegardless()
+        CrashLogger.log("DIAG overlay: SHOW '\(text.prefix(40))' at \(Int(rect.minX)),\(Int(rect.minY))")
     }
 
     func hide() {
+        let wasVisible = panel?.isVisible ?? false
         panel?.orderOut(nil)
         panel?.alphaValue = 1.0
+        if wasVisible { CrashLogger.log("DIAG overlay: HIDE") }
     }
 
     /// Called while a new suggestion is being computed. Hide the now-stale overlay cleanly rather
     /// than leaving a dimmed half-visible ghost — that partial-alpha flash was the "disturbo".
-    func dim() { hide() }
+    /// Dim the overlay during computation instead of hiding completely. Keeps the panel visible
+    /// at low opacity so the caret area never goes blank (flicker fix). A new suggestion replaces
+    /// it fully when `show()` is called; a nil result calls `hide()` to clean up.
+    func dim() {
+        guard let panel, panel.isVisible else { return }
+        panel.alphaValue = 0.25
+        CrashLogger.log("DIAG overlay: DIM alpha=0.25")
+    }
 
     private func ensurePanel() -> NSPanel {
         if let panel { return panel }
@@ -116,7 +128,7 @@ final class CompletionOverlayWindow {
         // AX label is updated in show() to match the current completion text.
         // Native blur backdrop: readable on any app background, matches system HUD style.
         let blur = NSVisualEffectView()
-        blur.material = .hudWindow
+        blur.material = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency ? .underPageBackground : .hudWindow
         blur.state = .active
         blur.blendingMode = .behindWindow
         blur.wantsLayer = true
@@ -125,6 +137,7 @@ final class CompletionOverlayWindow {
         blur.addSubview(label)
         // Keep label itself non-interactive but let the panel's AX tree expose it.
         label.setAccessibilityElement(false)
+        p.maxSize = NSSize(width: 800, height: 120)
         p.contentView = blur
         panel = p
         return p

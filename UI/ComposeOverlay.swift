@@ -13,11 +13,16 @@ final class ComposeController {
 
     private init() {}
 
+    private var overlayScale: CGFloat {
+        NSFont.systemFontSize / NSFont.systemFontSize(for: .regular)
+    }
+
     func show(pid: pid_t = 0, caretRect: CGRect = .zero) {
         if panel != nil { return }
 
+        let s = round(300 * overlayScale), sh = round(200 * overlayScale)
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 300, height: 200),
+            contentRect: NSRect(x: 0, y: 0, width: s, height: sh),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -101,6 +106,8 @@ private struct ComposeView: View {
     let onSubmit: (String) -> Void
     let onDismiss: () -> Void
     @State private var text = ""
+    @ScaledMetric(relativeTo: .body) private var contentWidth: CGFloat = 300
+    @ScaledMetric(relativeTo: .body) private var contentHeight: CGFloat = 200
 
     var body: some View {
         VStack(spacing: 12) {
@@ -146,7 +153,7 @@ private struct ComposeView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
         }
-        .frame(width: 300, height: 200)
+        .frame(width: contentWidth, height: contentHeight)
         .background(Color.surfaceBackground)
     }
 }

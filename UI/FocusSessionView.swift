@@ -10,6 +10,7 @@ struct FocusSessionView: View {
     @State private var selectedMinutes: Int = 25
     @State private var selectedMood: String? = nil
     @State private var showRecap = false
+    @ScaledMetric(relativeTo: .body) private var sWidth: CGFloat = 320
 
     private let durations = [5, 10, 15, 25, 45]
     private let moods = ["😊", "😐", "😰", "🔥", "🧘"]
@@ -24,8 +25,9 @@ struct FocusSessionView: View {
                 setupView
             }
         }
-        .frame(width: 320)
-        .padding()
+        .frame(width: sWidth)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     // MARK: - Setup

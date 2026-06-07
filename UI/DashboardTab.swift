@@ -86,15 +86,16 @@ struct DashboardTab: View {
                 ForEach(days, id: \.label) { day in
                     VStack(spacing: 2) {
                         Text(day.label)
-                            .font(.system(size: 8))
+                            .font(.caption2)
                             .foregroundStyle(.tertiary)
                         RoundedRectangle(cornerRadius: 3)
                             .fill(day.active ? Color.accentColor : Color.secondary.opacity(0.12))
                             .frame(width: 20, height: 20)
                             .overlay(
                                 Text("\(day.words)")
-                                    .font(.system(size: 7))
+                                    .font(.caption2)
                                     .foregroundStyle(day.active ? .white : .clear)
+                                    .minimumScaleFactor(0.5)
                             )
                     }
                 }

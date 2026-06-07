@@ -8,7 +8,7 @@ import Foundation
 //   stdin  : one JSON object per line  {"prefix": "...", "maxTokens": 12}
 //   stdout : one JSON object per line  {"text": "..."}   (and {"ready":true} once warm)
 
-struct Req: Decodable { let prefix: String; let maxTokens: Int?; let id: Int?; let latinOnly: Bool?; let seed: UInt32?; let temperature: Double?; let repeatPenalty: Double?; let suppressMarkup: Bool? }
+struct Req: Decodable { let prefix: String; let maxTokens: Int?; let id: Int?; let latinOnly: Bool?; let seed: UInt32?; let temperature: Double?; let repeatPenalty: Double?; let suppressMarkup: Bool?; let language: String? }
 struct Resp: Encodable { let text: String; let id: Int }   // echo the request id so the parent matches responses 1:1
 
 let args = CommandLine.arguments
@@ -84,12 +84,46 @@ let reader = Thread {
 reader.stackSize = 1 << 20
 reader.start()
 
+/// Returns a short language-anchor phrase that biases the base model's continuation toward the
+/// target language. Only used when the prefix is very short (≤2 words) — a few words of text
+/// are already enough to anchor the language naturally; the anchor just prevents drift on near-
+/// empty fields where the base model otherwise wanders into Polish/English/CJK randomly.
+private func languageAnchor(_ lang: String) -> String {
+    switch lang.lowercased() {
+    case "it": return "Scrivo in italiano:"
+    case "en": return "Writing in English:"
+    case "fr": return "J'écris en français:"
+    case "de": return "Ich schreibe auf Deutsch:"
+    case "es": return "Escribo en español:"
+    case "pt": return "Escrevo em português:"
+    case "nl": return "Ik schrijf in het Nederlands:"
+    case "pl": return "Piszę po polsku:"
+    case "ru": return "Я пишу по-русски:"
+    case "ja": return "日本語で書いています:"
+    case "ko": return "한국어로 쓰고 있습니다:"
+    case "zh": return "我用中文写作:"
+    default: return ""
+    }
+}
+
 while let (seq, line) = queue.next() {
     guard !line.isEmpty, let data = line.data(using: .utf8),
           let req = try? JSONDecoder().decode(Req.self, from: data) else { continue }
+    // When language is known and the prefix is short (≤2 words), prepend a language anchor
+    // to bias the base model toward the target language. On longer prefixes the existing text
+    // already anchors the language naturally; the anchor would just waste token budget.
+    let prefix: String
+    if let lang = req.language, !lang.isEmpty {
+        let wordCount = req.prefix.split(separator: " ").filter { !$0.isEmpty }.count
+        if wordCount <= 2 {
+            let anchor = languageAnchor(lang)
+            if !anchor.isEmpty { prefix = anchor + " " + req.prefix }
+            else { prefix = req.prefix }
+        } else { prefix = req.prefix }
+    } else { prefix = req.prefix }
     let temperature = Float(req.temperature ?? 0.3)
     let repPenalty = Float(req.repeatPenalty ?? 1.0)
-    let text = session.complete(prefix: req.prefix, maxTokens: req.maxTokens ?? 12,
+    let text = session.complete(prefix: prefix, maxTokens: req.maxTokens ?? 12,
                                 temperature: temperature,
                                 seed: req.seed ?? 0,
                                 latinOnly: req.latinOnly ?? false,

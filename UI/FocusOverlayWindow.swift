@@ -9,7 +9,10 @@ final class FocusOverlayWindow {
     static let shared = FocusOverlayWindow()
 
     private var window: NSWindow?
-    private let size = NSSize(width: 280, height: 120)
+    private var size: NSSize {
+        let scale = NSFont.systemFontSize / NSFont.systemFontSize(for: .regular)
+        return NSSize(width: round(280 * scale), height: round(120 * scale))
+    }
     private var reduceMotion: Bool {
         NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
@@ -59,10 +62,13 @@ final class FocusOverlayWindow {
                 ctx.duration = 0.15
                 w.animator().alphaValue = 0
             } completionHandler: { [weak self] in
-                guard let self, let w = self.window else { return }
-                w.alphaValue = 1
-                w.orderOut(nil)
-                self.window = nil
+                guard let self else { return }
+                Task { @MainActor in
+                    guard let w = self.window else { return }
+                    w.alphaValue = 1
+                    w.orderOut(nil)
+                    self.window = nil
+                }
             }
         } else {
             window?.orderOut(nil)
@@ -93,9 +99,12 @@ final class FocusOverlayWindow {
 // MARK: - Content View
 
 struct FocusOverlayContent: View {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @StateObject private var timer = FocusTimer.shared
     @StateObject private var stats = FocusStatsStore.shared
     @StateObject private var focusMode = FocusMode.shared
+    @ScaledMetric(relativeTo: .body) private var contentWidth: CGFloat = 280
+    @ScaledMetric(relativeTo: .body) private var contentHeight: CGFloat = 70
 
     var body: some View {
         HStack(spacing: 12) {
@@ -164,11 +173,18 @@ struct FocusOverlayContent: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(.thinMaterial)
+            Group {
+                if reduceTransparency {
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.surfaceElevated)
+                } else {
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(.thinMaterial)
+                }
+            }
                 .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
         )
-        .frame(width: 280, height: 70)
+        .frame(width: contentWidth, height: contentHeight)
         .onChange(of: timer.timerState) { _, newState in
             switch newState {
             case .finished, .idle:

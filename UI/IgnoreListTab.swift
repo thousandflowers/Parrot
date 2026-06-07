@@ -52,7 +52,8 @@ struct IgnoreListTab: View {
             }
             .frame(minHeight: 180)
         }
-        .padding()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .onAppear { words = IgnoreList.all() }
     }
 

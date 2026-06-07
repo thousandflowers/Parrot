@@ -19,7 +19,7 @@ final class RetryOnceTests: XCTestCase {
     func test_emptyFirst_returnsNil() async {
         let stub = StubProvider(["", "ciao mondo"])
         let engine = CompletionEngine(provider: stub)
-        let ctx = CompletionContext(preContext: "scrivo una ", postContext: "", language: "it")
+        let ctx = CompletionContext(preContext: "scrivo una frase ", postContext: "", language: "it")
         let s = await engine.suggest(context: ctx, maxWords: 4, allowCode: false, midWord: false)
         // Single attempt — first result empty → returns nil, does not retry.
         XCTAssertNil(s)
@@ -30,7 +30,7 @@ final class RetryOnceTests: XCTestCase {
     func test_nonEmpty_returnsSuggestion() async {
         let stub = StubProvider(["ciao mondo"])
         let engine = CompletionEngine(provider: stub)
-        let ctx = CompletionContext(preContext: "scrivo una ", postContext: "", language: "it")
+        let ctx = CompletionContext(preContext: "scrivo una frase ", postContext: "", language: "it")
         let s = await engine.suggest(context: ctx, maxWords: 4, allowCode: false, midWord: false)
         XCTAssertNotNil(s)
         XCTAssertEqual(s?.text, "ciao mondo")

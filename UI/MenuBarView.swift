@@ -2,6 +2,7 @@ import SwiftUI
 import ApplicationServices
 
 struct MenuBarView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var prefs = PreferencesStore.shared
     @State private var actionsExpanded = true
     @State private var utilityExpanded = true
@@ -65,7 +66,7 @@ struct MenuBarView: View {
                     .font(.system(size: 18))
             }
             .scaleEffect(headerHovered ? 1.07 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.55), value: headerHovered)
+            .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.55), value: headerHovered)
             .onHover { headerHovered = $0 }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -483,7 +484,7 @@ struct MenuBarView: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary.opacity(0.6))
                 .rotationEffect(isExpanded ? .degrees(0) : .degrees(-90))
-                .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isExpanded)
+                .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.75), value: isExpanded)
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -532,6 +533,7 @@ private struct MenuAction: View {
 }
 
 private struct MenuActionLabel: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let icon: String
     let title: String
     var iconColor: Color? = nil
@@ -545,7 +547,7 @@ private struct MenuActionLabel: View {
                 .foregroundStyle(iconColor ?? .secondary)
                 .frame(width: 16, alignment: .center)
                 .scaleEffect(iconHovered ? 1.2 : 1)
-                .animation(.spring(response: 0.25, dampingFraction: 0.6), value: iconHovered)
+                .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.6), value: iconHovered)
             Text(title)
                 .font(.callout)
             Spacer()
@@ -588,11 +590,17 @@ private struct MenuRowButtonStyle: ButtonStyle {
 // MARK: - Disclosure Group Style
 
 private struct QuietDisclosureStyle: DisclosureGroupStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         VStack(spacing: 0) {
             Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.70)) {
+                if reduceMotion {
                     configuration.isExpanded.toggle()
+                } else {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.70)) {
+                        configuration.isExpanded.toggle()
+                    }
                 }
             } label: {
                 configuration.label

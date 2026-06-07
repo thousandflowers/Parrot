@@ -5,6 +5,7 @@ import SwiftUI
 /// neither re-implements navigation. `footerAccessory` lets a flow (Wren) show a
 /// persistent download bar above the buttons.
 struct OnboardingScaffold<Content: View, Accessory: View>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let step: Int
     let totalSteps: Int
     let finalActionTitle: String
@@ -14,6 +15,8 @@ struct OnboardingScaffold<Content: View, Accessory: View>: View {
     let onFinish: () -> Void
     @ViewBuilder var content: () -> Content
     @ViewBuilder var footerAccessory: () -> Accessory
+    @ScaledMetric(relativeTo: .body) private var scaffoldWidth: CGFloat = 620
+    @ScaledMetric(relativeTo: .body) private var scaffoldHeight: CGFloat = 520
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,7 +28,7 @@ struct OnboardingScaffold<Content: View, Accessory: View>: View {
             footerAccessory()
             footerBar
         }
-        .frame(width: 620, height: 520)
+        .frame(width: scaffoldWidth, height: scaffoldHeight)
         .background(Color.surfaceBackground)
     }
 
@@ -62,7 +65,7 @@ struct OnboardingScaffold<Content: View, Accessory: View>: View {
                 Circle()
                     .fill(i == step ? Color.accentColor : Color.secondary.opacity(0.3))
                     .frame(width: i == step ? 8 : 6, height: i == step ? 8 : 6)
-                    .animation(.spring(response: 0.3), value: step)
+                    .animation(reduceMotion ? nil : .spring(response: 0.3), value: step)
             }
         }
     }

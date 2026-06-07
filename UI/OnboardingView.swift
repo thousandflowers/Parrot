@@ -169,9 +169,9 @@ private struct InstallStep: View {
                         .font(.caption)
                         .foregroundStyle(Color.textSecondary)
                 }
-            }
-            .padding(20)
-            .background(Color.surfaceElevated, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+        .padding(.all, 20)
+        .background(Color.surfaceElevated, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .strokeBorder(Color.accentColor.opacity(0.15), lineWidth: 0.5)
@@ -196,19 +196,20 @@ private struct InstallStep: View {
                     .foregroundStyle(Color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(12)
+            .padding(.all, 12)
             .background(Color.statusWarning.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
             .padding(.horizontal, 32)
 
             Spacer()
         }
-        .padding()
+        .padding(.all, 20)
     }
 }
 
 // MARK: - Step 1: Welcome
 
 private struct WelcomeStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var welcomePulse = false
 
     var body: some View {
@@ -218,7 +219,7 @@ private struct WelcomeStep: View {
             Text("🦜")
                 .font(.system(size: 72))
                 .scaleEffect(welcomePulse ? 1.0 : 0.85)
-                .animation(.spring(response: 0.5, dampingFraction: 0.6).delay(0.1), value: welcomePulse)
+                .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.6).delay(0.1), value: welcomePulse)
                 .onAppear { welcomePulse = true }
 
             VStack(spacing: 10) {
@@ -245,7 +246,7 @@ private struct WelcomeStep: View {
 
             Spacer()
         }
-        .padding()
+        .padding(.horizontal)
     }
 }
 
@@ -278,6 +279,7 @@ private struct FeatureRow: View {
 // MARK: - Step 1: Accessibility
 
 private struct AccessibilityStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isGranted = AXIsProcessTrusted()
 
     var body: some View {
@@ -293,7 +295,7 @@ private struct AccessibilityStep: View {
                     .foregroundStyle(isGranted ? Color.statusOk : Color.statusWarning)
                     .symbolRenderingMode(.hierarchical)
             }
-            .animation(.spring(response: 0.4), value: isGranted)
+            .animation(reduceMotion ? nil : .spring(response: 0.4), value: isGranted)
 
             VStack(spacing: 10) {
                 Text(isGranted ? "Permissions granted!" : "Accessibility Permissions")
@@ -322,12 +324,13 @@ private struct AccessibilityStep: View {
                         .foregroundStyle(Color.textSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 60)
-                }
-            }
+                }  // VStack(inner)
+                .padding(.horizontal, 48)
+            }  // if !isGranted
 
             Spacer()
         }
-        .padding()
+        .padding(.horizontal)
         .task {
             while !Task.isCancelled, !isGranted {
                 try? await Task.sleep(for: .milliseconds(600))
@@ -375,7 +378,7 @@ private struct LanguageStyleStep: View {
 
             Spacer()
         }
-        .padding()
+        .padding(.horizontal)
     }
 }
 
@@ -419,7 +422,7 @@ private struct ShortcutsStep: View {
 
             Spacer()
         }
-        .padding()
+        .padding(.horizontal)
     }
 }
 
@@ -487,7 +490,7 @@ private struct TryItStep: View {
                 TextEditor(text: $sampleText)
                     .font(.system(.body, design: .monospaced))
                     .frame(height: 60)
-                    .padding(8)
+                    .padding(.all, 8)
                     .background(Color.surfaceBackground, in: RoundedRectangle(cornerRadius: 8))
                     .disabled(isCorrecting)
             }
@@ -500,7 +503,7 @@ private struct TryItStep: View {
                         .foregroundStyle(Color.statusOk)
                     Text(correctedText)
                         .font(.system(.body, design: .monospaced))
-                        .padding(8)
+                        .padding(.all, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.statusOk.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
                 }
@@ -531,13 +534,14 @@ private struct TryItStep: View {
 
             Spacer()
         }
-        .padding()
+        .padding(.horizontal)
     }
 }
 
 // MARK: - Step 6: Ready
 
 private struct ReadyStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let prefs: PreferencesStore
     @State private var celebrationPulse = false
 
@@ -552,7 +556,7 @@ private struct ReadyStep: View {
                     .symbolRenderingMode(.hierarchical)
                     .scaleEffect(celebrationPulse ? 1.0 : 0.7)
                     .opacity(celebrationPulse ? 1.0 : 0.4)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.65).delay(0.15), value: celebrationPulse)
+                    .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.65).delay(0.15), value: celebrationPulse)
                     .onAppear { celebrationPulse = true }
 
                 VStack(spacing: 6) {
@@ -578,7 +582,7 @@ private struct ReadyStep: View {
                         text: "Global shortcuts active"
                     )
                 }
-                .padding(16)
+                .padding(.all, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.surfaceElevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
@@ -658,7 +662,7 @@ private struct FeatureGuideCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(12)
+        .padding(.all, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.surfaceElevated, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(

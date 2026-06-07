@@ -14,12 +14,17 @@ final class ExplainController {
 
     private init() {}
 
+    private var overlayScale: CGFloat {
+        NSFont.systemFontSize / NSFont.systemFontSize(for: .regular)
+    }
+
     func show(pid: pid_t, selectionRect: CGRect, mode: ExplainMode,
               text: String, bundleID: String?) {
         guard panel == nil else { return }
 
+        let s = round(300 * overlayScale), sh = round(180 * overlayScale)
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 300, height: 180),
+            contentRect: NSRect(x: 0, y: 0, width: s, height: sh),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -114,6 +119,8 @@ private struct ExplainView: View {
     @State private var result = ""
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @ScaledMetric(relativeTo: .body) private var contentWidth: CGFloat = 300
+    @ScaledMetric(relativeTo: .body) private var contentHeight: CGFloat = 180
 
     var body: some View {
         VStack(spacing: 8) {
@@ -169,7 +176,7 @@ private struct ExplainView: View {
                 .padding(.bottom, 8)
             }
         }
-        .frame(width: 300, height: 180)
+        .frame(width: contentWidth, height: contentHeight)
         .background(Color.surfaceBackground)
         .task { await load() }
     }

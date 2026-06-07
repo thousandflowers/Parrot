@@ -23,18 +23,28 @@ struct LlamaCompletionClient: CompletionProviding {
     private struct Target { let port: Int; let model: String; let useRawCompletion: Bool }
     private struct RawCompletionResponse: Decodable { let content: String }
 
+    /// Whether the chosen completion model should use the raw `/completion` endpoint instead of the
+    /// instruct `/v1/chat/completions` one. Semantics: a model the user picked in the *completion*
+    /// slot is a base/continuation model (e.g. gemma-3-4b-pt) — it continues raw text and ignores
+    /// chat instructions, so it MUST go through `/completion`. An empty slot means no dedicated
+    /// completion model → fall back to the correction (instruct) model via chat.
+    static func usesRawCompletion(completionModelID: String) -> Bool {
+        !completionModelID.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     /// Resolves which server + model to use, and whether to use the raw `/completion` endpoint.
     private func resolveTarget(context: CompletionContext) async -> Target? {
         let mainID = context.selectedModelID
             .replacingOccurrences(of: ".gguf", with: "")
         let compID = context.completionModelID
             .trimmingCharacters(in: .whitespaces)
+        let useRaw = Self.usesRawCompletion(completionModelID: context.completionModelID)
 
-        func mainTarget() async -> Target? {
+        func mainTarget(useRawCompletion: Bool) async -> Target? {
             // Reuse a server that's already up (Parrot warms one; an external llama-server may exist).
             let running = await ServerManager.shared.currentPort
             if running > 0 {
-                return Target(port: running, model: mainID.isEmpty ? "local" : mainID, useRawCompletion: false)
+                return Target(port: running, model: mainID.isEmpty ? "local" : mainID, useRawCompletion: useRawCompletion)
             }
             // Nothing running. Wren (completion-only) never warms a correction server, so start one now
             // with the selected model — or any local model — otherwise completion silently never works.
@@ -47,20 +57,24 @@ struct LlamaCompletionClient: CompletionProviding {
             }
             do {
                 let port = try await ServerManager.shared.ensureRunning(modelPath: modelPath)
-                return port > 0 ? Target(port: port, model: mainID.isEmpty ? "local" : mainID, useRawCompletion: false) : nil
+                return port > 0 ? Target(port: port, model: mainID.isEmpty ? "local" : mainID, useRawCompletion: useRawCompletion) : nil
             } catch {
                 Logger.infra.error("completion: main server start failed — \(error.localizedDescription, privacy: .public)")
                 return nil
             }
         }
 
-        if compID.isEmpty || compID.caseInsensitiveCompare(mainID) == .orderedSame {
-            return await mainTarget()
+        // No dedicated completion model → use the correction model through the instruct chat endpoint.
+        guard useRaw else { return await mainTarget(useRawCompletion: false) }
+        // Same model in both slots: reuse the single running server (no second spawn), but it IS a
+        // chosen completion (base) model → drive it via raw `/completion`, not chat.
+        if compID.caseInsensitiveCompare(mainID) == .orderedSame {
+            return await mainTarget(useRawCompletion: true)
         }
         let local = await ModelManager.shared.localModels()
         guard let model = local.first(where: { $0.id.caseInsensitiveCompare(compID) == .orderedSame }) else {
             Logger.infra.debug("completion: model '\(compID, privacy: .public)' not local — falling back to main")
-            return await mainTarget()
+            return await mainTarget(useRawCompletion: useRaw)
         }
         // RAM guard: running a dedicated completion model AND a different correction model means two
         // models + two servers resident at once. On low-RAM machines (e.g. 8GB) that swaps and can
@@ -76,14 +90,14 @@ struct LlamaCompletionClient: CompletionProviding {
         let combined = mainSize + Double(model.size)
         if combined > ramBytes * 0.30 {
             Logger.infra.info("completion: combined models too large for RAM — using single shared model")
-            return await mainTarget()
+            return await mainTarget(useRawCompletion: useRaw)
         }
         do {
             let port = try await ServerManager.completion.ensureRunning(modelPath: model.path)
             return Target(port: port, model: model.id, useRawCompletion: true)
         } catch {
             Logger.infra.debug("completion: dedicated server failed (\(error.localizedDescription, privacy: .public)) — main fallback")
-            return await mainTarget()
+            return await mainTarget(useRawCompletion: useRaw)
         }
     }
 

@@ -142,7 +142,8 @@ private struct AddSnippetSheet: View {
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .frame(width: 400)
         .onAppear { focusedField = true }
     }

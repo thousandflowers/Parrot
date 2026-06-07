@@ -105,6 +105,7 @@ final class FocusSessionPanel {
         newWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         newWindow.isReleasedWhenClosed = false
         newWindow.center()
+        newWindow.maxSize = NSSize(width: 360, height: 400)
         newWindow.contentView = NSHostingView(rootView: FocusSessionView())
 
         window = newWindow

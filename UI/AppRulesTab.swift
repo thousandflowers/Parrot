@@ -180,7 +180,8 @@ struct AppRulesTab: View {
                 .controlSize(.small)
                 .accessibilityHint("Adds the currently frontmost app to the rules list")
             }
-            .padding(12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
     }
 }

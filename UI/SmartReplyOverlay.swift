@@ -14,11 +14,16 @@ final class SmartReplyController {
 
     private init() {}
 
+    private var overlayScale: CGFloat {
+        NSFont.systemFontSize / NSFont.systemFontSize(for: .regular)
+    }
+
     func show(pid: pid_t, caretRect: CGRect, bundleID: String?) {
         guard panel == nil else { return }
 
+        let s = round(320 * overlayScale), sh = round(220 * overlayScale)
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 220),
+            contentRect: NSRect(x: 0, y: 0, width: s, height: sh),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -87,6 +92,8 @@ private struct SmartReplyView: View {
     @State private var replies: [String] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @ScaledMetric(relativeTo: .body) private var contentWidth: CGFloat = 320
+    @ScaledMetric(relativeTo: .body) private var contentHeight: CGFloat = 220
 
     var body: some View {
         VStack(spacing: 8) {
@@ -149,7 +156,7 @@ private struct SmartReplyView: View {
                 .frame(maxHeight: 140)
             }
         }
-        .frame(width: 320, height: 220)
+        .frame(width: contentWidth, height: contentHeight)
         .background(Color.surfaceBackground)
         .task { await loadReplies() }
     }

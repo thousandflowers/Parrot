@@ -120,6 +120,7 @@ final class DirectApplyToast {
         panel.isOpaque = false
         panel.hasShadow = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.maxSize = size
 
         let containerView = NSView(frame: NSRect(origin: .zero, size: size))
         containerView.wantsLayer = true

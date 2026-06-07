@@ -1325,6 +1325,18 @@ final class LlamaCompletionClientTests: XCTestCase {
         let s = LlamaCompletionClient.systemPrompt(userPrompt: "   ")
         XCTAssertFalse(s.contains("Writing style to match"))
     }
+
+    // A model chosen in the completion slot is a base/continuation model → raw `/completion`
+    // endpoint, never the instruct chat endpoint. Regression guard for the bug where a base
+    // `-pt` model set in BOTH slots was driven through `/v1/chat/completions` → garbage output.
+    func testUsesRawCompletion_trueWhenCompletionModelChosen() {
+        XCTAssertTrue(LlamaCompletionClient.usesRawCompletion(completionModelID: "gemma-3-4b-pt-Q4_K_M"))
+    }
+
+    func testUsesRawCompletion_falseWhenCompletionSlotEmpty() {
+        XCTAssertFalse(LlamaCompletionClient.usesRawCompletion(completionModelID: ""))
+        XCTAssertFalse(LlamaCompletionClient.usesRawCompletion(completionModelID: "   "))
+    }
 }
 
 private final class StubCompletionProvider: CompletionProviding, @unchecked Sendable {
@@ -1346,7 +1358,7 @@ final class CompletionEngineTests: XCTestCase {
 
     func testSuggest_returnsCleanedSuggestion() async {
         let engine = CompletionEngine(provider: StubCompletionProvider(result: " come stai oggi"))
-        let s = await engine.suggest(context: ctx("Ciao Marco"), maxWords: 8)
+        let s = await engine.suggest(context: ctx("Scrivo a Marco"), maxWords: 8)
         XCTAssertEqual(s?.text, " come stai oggi")
     }
 
@@ -1358,7 +1370,7 @@ final class CompletionEngineTests: XCTestCase {
 
     func testSuggest_providerError_returnsNil() async {
         let engine = CompletionEngine(provider: StubCompletionProvider(error: CorrectionError.serverNotRunning))
-        let s = await engine.suggest(context: ctx("Ciao Marco"), maxWords: 8)
+        let s = await engine.suggest(context: ctx("Ciao Marco come"), maxWords: 8)
         XCTAssertNil(s)
     }
 
@@ -1367,7 +1379,7 @@ final class CompletionEngineTests: XCTestCase {
         let engine = CompletionEngine(provider: provider)
         // Simulate a newer request arriving mid-flight: bump generation before the result returns.
         provider.beforeReturn = { await engine.cancelPending() }
-        let s = await engine.suggest(context: ctx("Ciao Marco"), maxWords: 8)
+        let s = await engine.suggest(context: ctx("Ciao Marco come"), maxWords: 8)
         XCTAssertNil(s, "A superseded in-flight suggestion must be discarded")
     }
 }

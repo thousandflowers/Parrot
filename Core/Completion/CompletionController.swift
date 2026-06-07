@@ -19,6 +19,8 @@ final class CompletionController {
     private var shownAt = Date.distantPast
     private var ignoreTextChangesUntil = Date.distantPast   // suppress the AX event our own accept-insert causes
     private var lastSeenContext: String? = nil              // preContext from the previous look; recompute only when the text actually changes (dedups spurious AX events)
+    private var lastShownOverlayRect: CGRect = .zero         // last non-zero caret rect used for overlay.show(); fallback when AX read returns nil after partial accept
+    private var isWalking = false                           // partial-accept word-by-word walk in progress; requestSuggestion() must NOT clear current
 
     private let adaptive = AdaptiveDebounce()       // 40ms when paused → up to 200ms under fast typing
     private var lastKeystrokeAt = Date.distantPast
@@ -57,6 +59,10 @@ final class CompletionController {
         }
         // Adaptive debounce: a pause since the last change fires fast (~40ms) for an instant feel;
         // rapid changes wait longer (toward 200ms) so we don't burn inference on text about to change.
+        // Per-domain category is detected from the frontmost app — browser AX noise needs a longer
+        // minimum window; terminals want the shortest.
+        let activeBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let domain = AppDebounceCategory.detect(bundleID: activeBundleID)
         let gapMs = Int(Date().timeIntervalSince(lastKeystrokeAt) * 1000)
         lastKeystrokeAt = Date()
         // Keep any visible suggestion through the debounce. requestSuggestion() replaces it ONLY when
@@ -64,7 +70,7 @@ final class CompletionController {
         // suggestion vanish on the repeated spurious AX events that fire without a real edit (and on
         // focus/tab re-entry), leaving it visible only on the very first appearance.
         debounce?.cancel()
-        let ms = adaptive.nextDelayMs(sinceLastKeystrokeMs: gapMs)
+        let ms = adaptive.nextDelayMs(sinceLastKeystrokeMs: gapMs, category: domain)
         debounce = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(ms))
             guard !Task.isCancelled else { return }
@@ -149,24 +155,18 @@ final class CompletionController {
         // a text box"). Wren suggests ONLY where AX exposes a real field. Proper AX-blind support for
         // Chromium/Electron is deferred to dedicated caret-bounds work.
         if ax == nil || (ax?.preContext.isEmpty ?? true) {
-            #if DEBUG
-            CrashLogger.log("DIAG req: AX empty → no suggestion (AX-blind fallback disabled)")
-            #endif
+            CrashLogger.log("DIAG req: RETURN AX empty (app=\(bundleID ?? "?")) → no suggestion")
             typedBuffer.invalidate()
             lastAXFoundField = false
             return
         }
         lastAXFoundField = axHasField
         guard let ax, !ax.isSecure else {
-            #if DEBUG
-            CrashLogger.log("DIAG req: ax=nil (no usable field)")
-            #endif
+            CrashLogger.log("DIAG req: RETURN ax=nil/secure (no usable field)")
             Logger.infra.debug("completion: no usable focused field (or secure)")
             return
         }
-        #if DEBUG
-        CrashLogger.log("DIAG req: app=\(bundleID ?? "?") preLen=\(ax.preContext.count) caret=\(ax.caretRect != .zero) allowCode=\(allowCode)")
-        #endif
+        CrashLogger.log("DIAG req: app=\(bundleID ?? "?") preLen=\(ax.preContext.count) caret=\(ax.caretRect != .zero) lastSeen=\(lastSeenContext?.suffix(12) ?? "nil") cur=\(current != nil)")
 
         // Recompute ONLY when the focused text actually changed since the last look. The AX observer
         // fires repeatedly WITHOUT a real edit (and on focus / tab re-entry); those ticks read the
@@ -174,19 +174,22 @@ final class CompletionController {
         // generation, so the in-flight compute is never superseded and always lands. Dismiss (Esc)
         // is covered for free: current stays nil and the same text won't recompute until it changes.
         if ax.preContext == lastSeenContext {
-            #if DEBUG
-            CrashLogger.log("DIAG req: text unchanged since last look → keep current (shown=\(current != nil))")
-            #endif
+            CrashLogger.log("DIAG req: RETURN dedup (text unchanged, shown=\(current != nil))")
             return
         }
         lastSeenContext = ax.preContext
         // Real change (or first time for this text): drop the now-stale suggestion so a nil result
         // hides it instead of leaving the old one glued at the wrong caret position.
-        current = nil
-        currentPID = 0
-        currentContextKeys = []
-        TabInterceptor.setSuggestionVisible(false)
-        overlay.hide()
+        // Guard: never kill a partial-accept word walk — the user is mid-Tab and the next press
+        // expects remaining words, not a fresh LLM call. The walk is cleared by its own code
+        // (tryAcceptPartial's empty-remaining branch, dismiss, requestImmediately, clearSuggestion).
+        if !isWalking {
+            current = nil
+            currentPID = 0
+            currentContextKeys = []
+            TabInterceptor.setSuggestionVisible(false)
+            overlay.dim()
+        }
         // Bump the generation only now (real change) so stale model results are discarded on show.
         let gen = { self.suggestionGen += 1; return self.suggestionGen }()
 
@@ -199,6 +202,7 @@ final class CompletionController {
                 current = CompletionSuggestion(text: expansion, kind: .replaceLastWord(wrong: token))
                 currentPID = pid
                 TabInterceptor.setSuggestionVisible(true)
+                lastShownOverlayRect = ax.caretRect
                 overlay.show(text: expansion.count > 30 ? String(expansion.prefix(30)) + "…" : expansion, atCaretRect: ax.caretRect)
                 Logger.infra.debug("completion: snippet \(token, privacy: .public)")
                 return
@@ -211,6 +215,7 @@ final class CompletionController {
             currentPID = pid
             guard suggestionGen == gen else { return }
             TabInterceptor.setSuggestionVisible(true)
+            lastShownOverlayRect = ax.caretRect
             overlay.show(text: em.emoji, atCaretRect: ax.caretRect, fontName: ax.fontName, fontSize: ax.fontSize)
             await StatsStore.shared.recordShown()
             Logger.infra.debug("completion: emoji \(em.shortcode, privacy: .public) -> \(em.emoji, privacy: .public)")
@@ -225,6 +230,7 @@ final class CompletionController {
             currentPID = pid
             guard suggestionGen == gen else { return }
             TabInterceptor.setSuggestionVisible(true)
+            lastShownOverlayRect = ax.caretRect
             overlay.show(text: snippet.expansion, atCaretRect: ax.caretRect, fontName: ax.fontName, fontSize: ax.fontSize)
             await StatsStore.shared.recordSnippetExpansion()
             Logger.infra.debug("completion: snippet \(snippet.abbreviation, privacy: .public) -> \(snippet.expansion, privacy: .public)")
@@ -239,6 +245,7 @@ final class CompletionController {
             currentPID = pid
             guard suggestionGen == gen else { return }
             TabInterceptor.setSuggestionVisible(true)
+            lastShownOverlayRect = ax.caretRect
             overlay.show(text: "✓ " + fix.correction, atCaretRect: ax.caretRect, fontName: ax.fontName, fontSize: ax.fontSize)
             await StatsStore.shared.recordTypoFix()
             Logger.infra.debug("completion: typo fix \(fix.wrong, privacy: .public) -> \(fix.correction, privacy: .public)")
@@ -257,6 +264,7 @@ final class CompletionController {
             await CompletionLearningStore.shared.noteShown(key: learned.key)
             guard suggestionGen == gen else { return }
             TabInterceptor.setSuggestionVisible(true)
+            lastShownOverlayRect = ax.caretRect
             overlay.show(text: cleaned, atCaretRect: ax.caretRect, fontName: ax.fontName, fontSize: ax.fontSize)
             await StatsStore.shared.recordShown()
             Logger.infra.debug("completion: learned suggestion for '\(learned.key, privacy: .public)'")
@@ -277,6 +285,7 @@ final class CompletionController {
             currentContextKeys = contextKeys
             guard suggestionGen == gen else { return }
             TabInterceptor.setSuggestionVisible(true)
+            lastShownOverlayRect = ax.caretRect
             overlay.show(text: hit, atCaretRect: ax.caretRect, fontName: ax.fontName, fontSize: ax.fontSize)
             shownAt = Date()
             await StatsStore.shared.recordShown()
@@ -343,6 +352,7 @@ final class CompletionController {
         currentContextKeys = contextKeys
         cache.set(contextHash: cacheKey, suggestion: suggestion.text)   // warm the hot path for repeats
         TabInterceptor.setSuggestionVisible(true)
+        lastShownOverlayRect = ax.caretRect
         overlay.show(text: suggestion.text, atCaretRect: ax.caretRect, fontName: ax.fontName, fontSize: ax.fontSize)
         shownAt = Date()
         await StatsStore.shared.recordShown()
@@ -407,13 +417,21 @@ final class CompletionController {
         // the new caret WITHOUT a model call; only recompute once the suggestion is exhausted.
         if hasRemaining {
             current = CompletionSuggestion(text: remaining, kind: .insert)
-            // Suppress the AX value-changed event our insert is about to cause, so textChanged() does
-            // NOT regenerate and clobber the remaining words we're walking. Each Tab re-extends it.
-            ignoreTextChangesUntil = Date().addingTimeInterval(0.6)
+            // Mark walk in progress — requestSuggestion() must NOT clear current
+            // while the user is still pressing Tab to step through remaining words.
+            isWalking = true
+            // Show remaining text at the LAST KNOWN caret position IMMEDIATELY (synchronous).
+            // The Task below will adjust the position after AX reads the new caret location,
+            // but until then the overlay stays VISIBLE — no 45ms gap where it disappears.
+            overlay.show(text: remaining, atCaretRect: lastShownOverlayRect)
+            // Suppress the AX value-changed event our insert is about to cause, so textChanged()
+            // does NOT regenerate and clobber the remaining words we're walking.
+            ignoreTextChangesUntil = Date().addingTimeInterval(0.5)
             // keep TabInterceptor visible flag TRUE so the next Tab is still captured
         } else {
             current = nil
             currentContextKeys = []
+            isWalking = false
             TabInterceptor.setSuggestionVisible(false)
             overlay.hide()
         }
@@ -422,25 +440,23 @@ final class CompletionController {
             await StatsStore.shared.recordAccepted(text: word)
             if hasRemaining {
                 // insertCompletion posts keyboard events and returns before the app processes them,
-                // so an immediate AX read would return the PRE-insert text — we'd pin the wrong
-                // context and the real post-insert event would then recompute and wipe the walk.
-                // Let the app apply the keystrokes first.
+                // so an immediate AX read would return the PRE-insert text. Let the app apply first.
                 try? await Task.sleep(for: .milliseconds(45))
                 let ax = await AccessibilityBridge.shared.completionContext(pid: pid)
                 await MainActor.run {
-                    guard self.current != nil else { return }   // typing superseded us meanwhile
+                    guard self.current != nil else { return }
+                    // Pin lastSeenContext so the AX events that follow don't trigger a regeneration.
                     if let ax, ax.caretRect != .zero {
-                        // Pin lastSeenContext to the post-insert text so the AX events that follow
-                        // our own insertion DON'T look like a "real change" and recompute — that
-                        // recompute was clobbering the word-by-word Tab walk before the user could
-                        // press Tab again (and breaking the 2nd accept). Keep the walk alive; only a
-                        // genuine new keystroke (different text) recomputes.
+                        self.lastShownOverlayRect = ax.caretRect
                         self.lastSeenContext = ax.preContext
-                        self.ignoreTextChangesUntil = Date().addingTimeInterval(1.5)
-                        TabInterceptor.setSuggestionVisible(true)   // keep Tab captured for the next walk step
+                        self.ignoreTextChangesUntil = Date().addingTimeInterval(0.5)
+                        // Reposition the overlay (already shown with remaining text in sync path)
                         self.overlay.show(text: remaining, atCaretRect: ax.caretRect)
                     } else {
-                        self.overlay.hide()
+                        // No AX info — overlay stays at the position set in the sync path.
+                        // Still extend the suppression window so we don't regenerate while the
+                        // user is about to press Tab again.
+                        self.ignoreTextChangesUntil = Date().addingTimeInterval(0.5)
                     }
                 }
             } else {
@@ -508,6 +524,7 @@ final class CompletionController {
         current = nil
         currentPID = 0
         currentContextKeys = []
+        isWalking = false
         TabInterceptor.setSuggestionVisible(false)
         overlay.hide()
     }

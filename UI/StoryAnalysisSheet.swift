@@ -29,7 +29,7 @@ struct StoryAnalysisSheet: View {
                         .lineLimit(3)
                 }
             }
-            .padding()
+            .padding(.all)
             .background(Color.surfaceElevated, in: RoundedRectangle(cornerRadius: 12))
 
             ScrollView {
@@ -38,10 +38,10 @@ struct StoryAnalysisSheet: View {
                         CategoryRow(category: cat)
                     }
                 }
-                .padding()
+                .padding(.horizontal)
             }
         }
-        .padding()
+        .padding(.horizontal)
         .frame(minWidth: 440, idealWidth: 500, maxWidth: .infinity, minHeight: 380, idealHeight: 420, maxHeight: .infinity)
     }
 }

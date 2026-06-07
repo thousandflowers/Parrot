@@ -3,6 +3,7 @@ import Vision
 import CoreGraphics
 import AppKit
 import OSLog
+import ScreenCaptureKit
 
 /// Reads on-screen text via on-device OCR (Apple Vision) so completion understands context that is
 /// NOT in the text field — e.g. the conversation above a chat input, or the email being replied to.
@@ -37,7 +38,7 @@ actor ScreenContextProvider {
     private func refresh(pid: pid_t, caretRect: CGRect, screenHeight: CGFloat) async {
         defer { capturing = false }
 
-        let captured = (pid != 0 ? Self.captureFrontWindow(pid: pid) : nil)
+        let captured = (pid != 0 ? await Self.captureFrontWindow(pid: pid) : nil)
         guard var img = captured?.image ?? Self.captureMainDisplay() else { return }
 
         // Crop to above the caret so the input field is excluded.
@@ -61,7 +62,7 @@ actor ScreenContextProvider {
 
     /// Captures just the frontmost on-screen window owned by `pid` (the app being typed in), with its
     /// on-screen bounds (points, top-left origin) so the image can be cropped relative to the caret.
-    private static func captureFrontWindow(pid: pid_t) -> (image: CGImage, bounds: CGRect)? {
+    private static func captureFrontWindow(pid: pid_t) async -> (image: CGImage, bounds: CGRect)? {
         guard CGPreflightScreenCaptureAccess() else { return nil }
         guard let infoList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return nil }
         // Pick the largest normal-layer window belonging to this PID.
@@ -80,9 +81,19 @@ actor ScreenContextProvider {
                 bestBounds = CGRect(x: b["X"] ?? 0, y: b["Y"] ?? 0, width: width, height: height)
             }
         }
-        guard let windowID = bestID,
-              let image = CGWindowListCreateImage(.null, .optionIncludingWindow, windowID, [.boundsIgnoreFraming, .nominalResolution]) else { return nil }
-        return (image, bestBounds)
+        guard let windowID = bestID else { return nil }
+        // ScreenCaptureKit replaces CGWindowListCreateImage (deprecated in macOS 14).
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            guard let scWindow = content.windows.first(where: { $0.windowID == windowID }),
+                  let scDisplay = content.displays.first(where: { $0.frame.contains(bestBounds) })
+            else { return nil }
+            let filter = SCContentFilter(display: scDisplay, including: [scWindow])
+            let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: SCStreamConfiguration())
+            return (image, bestBounds)
+        } catch {
+            return nil
+        }
     }
 
     /// Asks for Screen Recording permission (no-op if already granted).

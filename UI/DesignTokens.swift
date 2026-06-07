@@ -31,7 +31,7 @@ extension NSColor {
     // Parrot eye (custom NSBezierPath drawing in the menu bar icon)
     static let eyeSurface = appearanceColor(
         light: NSColor.white,
-        dark: NSColor(white: 0.2, alpha: 1)
+        dark: NSColor(displayP3Red: 0.65, green: 0.62, blue: 0.58, alpha: 1)
     )
 
     // Generic surfaces
@@ -102,8 +102,8 @@ extension NSColor {
     )
 
     /// Ghost completion text — dimmed base, highlighted first word (partial-accept target)
-    static let ghostTextBase = NSColor(calibratedWhite: 1.0, alpha: 0.72)
-    static let ghostTextHighlight = NSColor(calibratedWhite: 1.0, alpha: 0.98)
+    static let ghostTextBase = NSColor(displayP3Red: 0.93, green: 0.92, blue: 0.90, alpha: 0.72)
+    static let ghostTextHighlight = NSColor(displayP3Red: 0.97, green: 0.96, blue: 0.94, alpha: 0.98)
 }
 
 extension Color {

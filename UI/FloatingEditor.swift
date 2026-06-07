@@ -31,6 +31,7 @@ final class FloatingEditorController {
         newWindow.isReleasedWhenClosed = false
         newWindow.center()
         newWindow.setFrameAutosaveName("FloatingEditorWindow")
+        newWindow.maxSize = NSSize(width: 1600, height: 1200)
 
         newWindow.contentView = FixedSizeHostingView(rootView: FloatingEditorView(onDismiss: { [weak self] in
             self?.close()
@@ -72,6 +73,7 @@ struct FloatingEditorView: View {
     @State private var isAnalyzing = false
     @State private var showAnalysis = false
     @State private var recordingPulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     enum CheckMode: String, CaseIterable {
         case grammar = "grammar"
@@ -240,7 +242,7 @@ struct FloatingEditorView: View {
                         .fill(Color.statusError)
                         .frame(width: 6, height: 6)
                         .opacity(recordingPulse ? 1 : 0.4)
-                        .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: recordingPulse)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: recordingPulse)
                         .onAppear { recordingPulse = true }
                         .onDisappear { recordingPulse = false }
                     Text(dictation.transcribedText)

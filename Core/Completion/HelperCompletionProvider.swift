@@ -34,7 +34,7 @@ actor HelperCompletionProvider: CompletionProviding {
         if pipeWaiters.isEmpty { pipeBusy = false } else { pipeWaiters.removeFirst().resume() }
     }
 
-    private struct Req: Encodable { let prefix: String; let maxTokens: Int; let id: Int; let latinOnly: Bool; let seed: UInt32; let temperature: Double; let repeatPenalty: Double; let suppressMarkup: Bool }
+    private struct Req: Encodable { let prefix: String; let maxTokens: Int; let id: Int; let latinOnly: Bool; let seed: UInt32; let temperature: Double; let repeatPenalty: Double; let suppressMarkup: Bool; let language: String? }
     private struct Resp: Decodable { let text: String; let id: Int }
 
     func complete(context: CompletionContext, maxWords: Int, allowCode: Bool) async throws -> String {
@@ -65,7 +65,8 @@ actor HelperCompletionProvider: CompletionProviding {
         // budget-stop, so a little extra room keeps the trimmed result at the intended word count.
         let temp = Constants.completionTemperature
         let repPenalty = temp < 0.15 ? 1.0 : 1.3   // lower t = less repetition penalty (don't fight the cold)
-        guard let line = try? JSONEncoder().encode(Req(prefix: pre, maxTokens: max(12, maxWords * 3 + 4), id: reqID, latinOnly: latinOnly, seed: context.generationSeed, temperature: temp, repeatPenalty: repPenalty, suppressMarkup: !allowCode)),
+        let lang: String? = context.language.split(separator: "-").first.map(String.init)   // "it-IT" → "it"
+        guard let line = try? JSONEncoder().encode(Req(prefix: pre, maxTokens: max(12, maxWords * 3 + 4), id: reqID, latinOnly: latinOnly, seed: context.generationSeed, temperature: temp, repeatPenalty: repPenalty, suppressMarkup: !allowCode, language: lang)),
               let stdin = stdinHandle else {
             return try await fallback.complete(context: context, maxWords: maxWords, allowCode: allowCode)
         }
@@ -186,6 +187,25 @@ actor HelperCompletionProvider: CompletionProviding {
         stdinHandle = inPipe.fileHandleForWriting
         modelInUse = modelPath
         Logger.infra.info("completion helper started for \(modelPath, privacy: .public)")
+    }
+
+    /// Kill the helper subprocess immediately, free the pipe, and resume any pending continuation
+    /// with an empty result. The next `complete()` call will re-launch via `ensureHelper()`.
+    /// Call this when a newer request supersedes an in-flight one — avoids blocking on stale inference.
+    func cancelInflight() {
+        guard pending != nil || process?.isRunning == true else { return }
+        #if DEBUG
+        CrashLogger.log("DIAG helper: cancelInflight — killing helper, releasing pipe waiters=\(pipeWaiters.count)")
+        #endif
+        // Tear down the process + resume pending
+        teardownHelper()
+        // Release ALL pipe waiters: the old request's `defer { releasePipe() }` will still fire
+        // when its abandoned `complete()` returns, but any waiter that was already enqueued must
+        // be freed immediately so the new request can proceed without blocking.
+        while !pipeWaiters.isEmpty {
+            pipeWaiters.removeFirst().resume()
+        }
+        pipeBusy = false
     }
 
     private func teardownHelper() {

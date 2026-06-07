@@ -55,12 +55,11 @@ actor CustomRuleStore {
                     // treat it as a no-match to prevent ReDoS on pathological patterns
                     // like (a+)+b crafted by the user. NSRegularExpression is synchronous
                     // with no built-in timeout, so we run it on a background queue with
-                    // a deadline.
-                    let deadline = Date().addingTimeInterval(0.1)
-                    let matches = try await withThrowingTaskGroup(of: [NSTextCheckingResult].self) { group in
+                    // a deadline. NSTextCheckingResult is not Sendable, so map to NSRange.
+                    let matches = try await withThrowingTaskGroup(of: [NSRange].self) { group in
                         group.addTask {
                             try Task.checkCancellation()
-                            return regex.matches(in: result, options: [], range: nsRange)
+                            return regex.matches(in: result, options: [], range: nsRange).map(\.range)
                         }
                         group.addTask {
                             try await Task.sleep(for: .milliseconds(100))
@@ -72,7 +71,7 @@ actor CustomRuleStore {
                     }
                     guard !matches.isEmpty else { continue }
                     for match in matches {
-                        if let range = Range(match.range, in: result) {
+                        if let range = Range(match, in: result) {
                             fixes.append(CustomRuleFix(ruleName: rule.name, original: String(result[range]), corrected: rule.replacement))
                         }
                     }

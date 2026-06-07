@@ -82,6 +82,7 @@ final class HoverAnnotationPopup {
         p.hasShadow = true
         p.isMovable = false
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        p.maxSize = NSSize(width: 320, height: 40)
         panel = p
     }
 

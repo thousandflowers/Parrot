@@ -27,9 +27,13 @@ enum Constants {
     // which read as random/wrong suggestions. 0.1 sharpens the distribution toward the top token —
     // this is how small-model completion tools (Cotypist/Cotabby on 1.5B) stay on-context.
     static let completionTemperature: Double = 0.1
-    static let completionDefaultMaxWords = 2        // 1–2 words: granular, avoids over-suggesting/drift
+    static let completionDefaultMaxWords = 4        // a short phrase the user can partial-accept word-by-word (Tab walk)
     static let completionDefaultDebounceMs = 350    // wait for a real pause → far fewer inferences
-    static let completionMinPrefixChars = 3         // don't suggest on near-empty fields
+    // Base model (gemma-3-4b-pt) has no language signal from a 1-2 word prefix and DRIFTS to other
+    // languages (Polish/English) on near-empty fields; accepting that drift corrupts the field and
+    // snowballs. Gate on WORD count (more robust than chars): a few real words anchor the language.
+    static let completionMinPrefixWords = 3         // need ≥3 words before suggesting ("Cia" blocked, "Ciao io non" ok)
+    static let completionMinPrefixChars = 8         // char floor guarding against ultra-short words ("a b c")
     // Preceding text sent to the model. Longer = more relevant ("not pulled from a hat"); KV-cache
     // reuse makes the extra context cheap after the first decode.
     static let completionMaxPrefixChars = 1200

@@ -54,7 +54,7 @@ struct DiffHighlightView: View {
         }
     }
 
-    private static func computeDiff(original: String, corrected: String) -> (attributed: AttributedString, hasChanges: Bool) {
+    private nonisolated static func computeDiff(original: String, corrected: String) -> (attributed: AttributedString, hasChanges: Bool) {
         let maxWords = 300
         let origWords = original.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
         let corrWords = corrected.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
@@ -143,7 +143,7 @@ struct DiffHighlightView: View {
         return (result, hasChanges)
     }
 
-    private static func longestCommonSubsequence(_ a: [String], _ b: [String]) -> [String] {
+    private nonisolated static func longestCommonSubsequence(_ a: [String], _ b: [String]) -> [String] {
         let m = a.count, n = b.count
         guard m > 0, n > 0 else { return [] }
         var dp = [[Int]](repeating: [Int](repeating: 0, count: n + 1), count: m + 1)

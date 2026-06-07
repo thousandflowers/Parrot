@@ -17,7 +17,8 @@ struct CustomRulesView: View {
                 .buttonStyle(.bordered)
                 .accessibilityLabel("Add rule")
             }
-            .padding()
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
 
             if rules.isEmpty {
                 VStack(spacing: 12) {
@@ -130,6 +131,7 @@ struct EditRuleView: View {
     @FocusState private var focusedField: Bool
     @State private var rule: CustomRule
     let onSave: (CustomRule) -> Void
+    @ScaledMetric(relativeTo: .body) private var editorWidth: CGFloat = 420
 
     init(rule: CustomRule, onSave: @escaping (CustomRule) -> Void) {
         _rule = State(initialValue: rule)
@@ -167,7 +169,7 @@ struct EditRuleView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 420)
+        .frame(width: editorWidth)
         .onAppear { focusedField = true }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -201,3 +203,4 @@ struct EditRuleView: View {
     ), onSave: { _ in })
         .frame(width: 420)
 }
+

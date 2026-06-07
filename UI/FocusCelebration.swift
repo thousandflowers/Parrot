@@ -122,6 +122,7 @@ final class FocusCelebration {
         panel.isOpaque = false
         panel.hasShadow = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.maxSize = size
 
         let container = NSView(frame: NSRect(origin: .zero, size: size))
         container.wantsLayer = true

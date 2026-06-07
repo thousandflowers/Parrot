@@ -19,6 +19,8 @@ struct SuggestionView: View {
     @State private var appeared = false
     @State private var closeHovered = false
     @State private var appliedProgress: Double = 1.0
+    @ScaledMetric(relativeTo: .body) private var sWidth: CGFloat = 340
+    @ScaledMetric(relativeTo: .body) private var sHeight: CGFloat = 280
 
     private static let loadingMessages = [
         "Analyzing grammar...",
@@ -78,17 +80,21 @@ struct SuggestionView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
         }
-        .frame(width: 340, height: 280)
+        .frame(width: sWidth, height: sHeight)
         .animation(.easeOut(duration: 0.18), value: stateHash)
         .background(Color.surfaceElevated, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(.separator, lineWidth: 0.5)
         )
-        .shadow(color: .black.opacity(0.14), radius: 18, x: 0, y: 6)
+        .shadow(color: .black.opacity(0.14), radius: 12, x: 0, y: 6)
         .scaleEffect(appeared ? 1.0 : 0.93)
         .onAppear {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) { appeared = true }
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) { appeared = true }
+            } else {
+                appeared = true
+            }
         }
         .onDisappear {
             speech.stop()
@@ -106,7 +112,7 @@ struct SuggestionView: View {
                 .font(.subheadline.weight(.semibold))
             if let tone = toneLabel {
                 Text("·")
-                    .foregroundStyle(.quaternary)
+                    .foregroundStyle(.tertiary)
                 Text(tone)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
@@ -114,7 +120,7 @@ struct SuggestionView: View {
             Spacer()
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(closeHovered ? Color.primary.opacity(0.65) : .secondary)
                     .frame(width: 20, height: 20)
                     .background(Circle().fill(Color.primary.opacity(closeHovered ? 0.12 : 0.06)))
@@ -160,7 +166,11 @@ struct SuggestionView: View {
                 .foregroundStyle(Color.statusOk)
                 .scaleEffect(noErrorsShown ? 1.0 : 0.4)
                 .onAppear {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { noErrorsShown = true }
+                    if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { noErrorsShown = true }
+                    } else {
+                        noErrorsShown = true
+                    }
                 }
                 .onDisappear { noErrorsShown = false }
         case .error:
@@ -206,9 +216,14 @@ struct SuggestionView: View {
                 loadingMessageIndex = Int(Date().timeIntervalSince1970) % Self.loadingMessages.count
             }
             .task {
+                let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(3))
-                    withAnimation(.easeInOut(duration: 0.25)) {
+                    if !reduceMotion {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            loadingMessageIndex = (loadingMessageIndex + 1) % Self.loadingMessages.count
+                        }
+                    } else {
                         loadingMessageIndex = (loadingMessageIndex + 1) % Self.loadingMessages.count
                     }
                 }
@@ -318,7 +333,11 @@ struct SuggestionView: View {
             .frame(maxWidth: .infinity)
             .onAppear {
                 appliedProgress = 1.0
-                withAnimation(.linear(duration: 4.8)) { appliedProgress = 0.0 }
+                if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                    withAnimation(.linear(duration: 4.8)) { appliedProgress = 0.0 }
+                } else {
+                    appliedProgress = 0.0
+                }
             }
 
         case .modelMissing:

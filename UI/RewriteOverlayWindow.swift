@@ -136,7 +136,7 @@ final class RewriteOverlayWindow {
         p.setAccessibilityRole(.staticText)
 
         let blur = NSVisualEffectView()
-        blur.material = .hudWindow
+        blur.material = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency ? .underPageBackground : .hudWindow
         blur.state = .active
         blur.blendingMode = .behindWindow
         blur.wantsLayer = true
@@ -197,8 +197,12 @@ final class RewriteController {
         Task {
             try? await AccessibilityBridge.shared.replaceSelectedText(with: text)
             await StatsStore.shared.recordAccepted(text: text)
-            DirectApplyToast.show(message: "✓ Replaced")
+            await MainActor.run { DirectApplyToast.show(message: "✓ Replaced") }
             Logger.infra.debug("rewrite-inline: accepted replacement")
+            // Re-arm completion pipeline so the ghost overlay re-appears for the
+            // next word — don't rely solely on the AX value-changed event (which
+            // can be delayed or missed with clipboard-based injection).
+            await MainActor.run { CompletionController.shared.textChanged() }
         }
     }
 

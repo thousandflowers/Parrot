@@ -24,7 +24,11 @@ struct CompletionContext: Sendable, Equatable {
     var generationSeed: UInt32 = 0
 
     var isUsable: Bool {
-        preContext.trimmingCharacters(in: .whitespacesAndNewlines).count >= Constants.completionMinPrefixChars
+        // Gate on real words, not raw chars: a base model needs a few words to lock onto the language
+        // (a 1-2 word prefix drifts to other languages and the accepted drift corrupts the field).
+        let trimmed = preContext.trimmingCharacters(in: .whitespacesAndNewlines)
+        let words = trimmed.split(whereSeparator: { $0.isWhitespace }).count
+        return words >= Constants.completionMinPrefixWords && trimmed.count >= Constants.completionMinPrefixChars
     }
 }
 
@@ -71,6 +75,11 @@ protocol CompletionProviding: Sendable {
     /// `allowCode`: the focused app is a code editor, so markup/code is wanted and must NOT be
     /// suppressed. In prose contexts (false) the backend suppresses HTML/markup drift at the source.
     func complete(context: CompletionContext, maxWords: Int, allowCode: Bool) async throws -> String
+
+    /// Cancel any in-flight generation immediately so the next `complete()` call starts fresh
+    /// instead of waiting for stale inference. Default no-op; providers with real subprocess or
+    /// network I/O override this to avoid pipe-waiting / request queuing on supersede.
+    func cancelInflight() async
 }
 
 extension CompletionProviding {
@@ -78,4 +87,7 @@ extension CompletionProviding {
     func complete(context: CompletionContext, maxWords: Int) async throws -> String {
         try await complete(context: context, maxWords: maxWords, allowCode: false)
     }
+
+    /// Default: no in-flight cancellation support.
+    func cancelInflight() async {}
 }

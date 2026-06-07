@@ -136,15 +136,11 @@ private func tabTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: CG
     if keycode == partialKey && !hasModifier {
         Logger.infra.debug("TabInterceptor: partial accept (keycode \(partialKey))")
         Task { @MainActor in
-            if !CompletionController.shared.tryAcceptPartial() {
-                // Suggestion was already cleared → let the real key through instead of eating it.
-                let src = CGEventSource(stateID: .hidSystemState)
-                if let kd = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(partialKey), keyDown: true),
-                   let ku = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(partialKey), keyDown: false) {
-                    kd.post(tap: .cghidEventTap)
-                    ku.post(tap: .cghidEventTap)
-                }
-            }
+            // We only reach here because a suggestion WAS visible (gate above), so the user pressed
+            // Tab to ACCEPT — not to indent. If the accept lost a race (current cleared between the
+            // flag check and this @MainActor hop), do NOTHING rather than re-posting a literal Tab:
+            // injecting a tab into the user's prose was the "premo Tab ma viene messo un tab" bug.
+            _ = CompletionController.shared.tryAcceptPartial()
         }
         return nil   // swallow the key
     }
