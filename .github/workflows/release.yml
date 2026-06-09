@@ -40,7 +40,8 @@ permissions:
 
 jobs:
   build-and-release:
-    runs-on: macos-14
+    # macos-15: mlx-swift-lm's manifest needs Swift tools 6.1 (Xcode 16.3+).
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
