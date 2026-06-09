@@ -17,3 +17,4 @@ xcuserdata/
 # Tool caches / generated artifacts
 graphify-out/
 Parrot_0.9.1.zip
+.xcbuild/

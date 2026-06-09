@@ -7,6 +7,7 @@ enum ServiceType: String, Codable, CaseIterable {
     case ollama
     case openRouter
     case appleIntelligence
+    case mlx
 }
 
 enum PromptType: Sendable, Codable, Equatable, Hashable {

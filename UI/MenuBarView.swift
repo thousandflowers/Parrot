@@ -186,6 +186,7 @@ struct MenuBarView: View {
         case .remote:            return "OpenAI · \(prefs.openAIModel)"
         case .openRouter:        return "OpenRouter · \(prefs.openRouterModel)"
         case .appleIntelligence: return "Apple Intelligence"
+        case .mlx:               return "MLX · \(MLXLLMService.shared.selectedModelID)"
         case .stub:              return "Stub (no connection)"
         }
     }
@@ -220,6 +221,7 @@ struct MenuBarView: View {
         case .remote:            return "cloud"
         case .openRouter:        return "network"
         case .appleIntelligence: return "apple.logo"
+        case .mlx:               return "bolt.fill"
         case .stub:              return "wrench.and.screwdriver"
         }
     }

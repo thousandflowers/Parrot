@@ -96,6 +96,7 @@ enum Constants {
 
     enum UserDefaultsKey {
         static let selectedModelID = "selectedModelID"
+        static let selectedMLXModelID = "selectedMLXModelID"
         static let language = "language"
         static let style = "style"
         static let serviceType = "serviceType"

@@ -34,6 +34,8 @@ struct ServiceStep: View {
                             .tag(ServiceType.appleIntelligence)
                         Label("Local (llama.cpp — offline)", systemImage: "memory.chip")
                             .tag(ServiceType.local)
+                        Label("Local (MLX — fastest on Apple Silicon)", systemImage: "bolt.fill")
+                            .tag(ServiceType.mlx)
                         HStack(spacing: 6) {
                             Image(systemName: "ellipsis.curlybraces")
                                 .foregroundStyle(Color.primary)
@@ -98,6 +100,28 @@ struct ServiceStep: View {
                         }
                     }
                 }
+            }
+            .padding(12)
+            .background(Color.surfaceElevated, in: RoundedRectangle(cornerRadius: 8))
+
+        case .mlx:
+            VStack(alignment: .leading, spacing: 10) {
+                Label("MLX — Apple's ML framework, fastest local option", systemImage: "bolt.fill")
+                    .foregroundStyle(Color.statusOk)
+                    .font(.callout)
+                Divider()
+                Picker("Model", selection: Binding(
+                    get: { UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedMLXModelID) ?? MLXLLMService.defaultModelID },
+                    set: { UserDefaults.standard.set($0, forKey: Constants.UserDefaultsKey.selectedMLXModelID) }
+                )) {
+                    ForEach(MLXLLMService.catalog) { entry in
+                        Text("\(entry.name) — \(entry.sizeLabel)").tag(entry.id)
+                    }
+                }
+                Text("Downloaded from Hugging Face on first use, then cached. Runs 2-3× faster than llama.cpp on Apple Silicon.")
+                    .font(.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(12)
             .background(Color.surfaceElevated, in: RoundedRectangle(cornerRadius: 8))

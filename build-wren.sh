@@ -56,6 +56,17 @@ cp "${HELPER}" "${MACOS}/ParrotCompletionHelper"
 install_name_tool -add_rpath "@loader_path/../Frameworks" "${MACOS}/ParrotCompletionHelper" 2>/dev/null || true
 install_name_tool -delete_rpath "/opt/homebrew/lib" "${MACOS}/ParrotCompletionHelper" 2>/dev/null || true
 
+# MLX Metal shaders: SwiftPM cannot compile .metal sources (mlx-swift README), so reuse the
+# metallib produced by an xcodebuild pass when available. Without it the MLX backend reports
+# "unavailable" at runtime (it does not crash).
+MLX_METALLIB=$(ls .xcbuild/Build/Products/*/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib 2>/dev/null | head -1)
+if [ -n "${MLX_METALLIB}" ]; then
+    cp "${MLX_METALLIB}" "${MACOS}/mlx.metallib"
+    echo "[✓] MLX metallib bundled"
+else
+    echo "[i] No MLX metallib (run 'xcodebuild build -scheme Parrot-Package -destination platform=macOS -derivedDataPath .xcbuild' once to enable the MLX backend)"
+fi
+
 # App icon
 cp Resources/AppIcon.icns "${RES}/"
 

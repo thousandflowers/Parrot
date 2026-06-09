@@ -10,6 +10,11 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
+        // MLX backend for the correction/chat path — 2-3× faster than llama.cpp on Apple Silicon.
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "3.31.3"),
+        // Hub download + tokenizer for MLX models (MLXHuggingFace macros expand to these).
+        .package(url: "https://github.com/huggingface/swift-huggingface", from: "0.9.0"),
+        .package(url: "https://github.com/huggingface/swift-transformers", from: "1.3.3"),
     ],
     targets: [
         .target(
@@ -36,6 +41,11 @@ let package = Package(
             name: "Parrot",
             dependencies: [
                 .product(name: "Sparkle", package: "Sparkle"),
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "MLXHuggingFace", package: "mlx-swift-lm"),
+                .product(name: "HuggingFace", package: "swift-huggingface"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
                 "ParrotObjC",
             ],
             path: ".",

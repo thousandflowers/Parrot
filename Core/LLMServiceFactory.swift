@@ -23,6 +23,7 @@ struct LLMServiceFactory {
             }
             Logger.infra.warning("Apple Intelligence requires macOS 26+, falling back to .stub")
             return StubLLMService.shared
+        case .mlx:               return MLXLLMService.shared
         }
     }
 
@@ -64,6 +65,9 @@ struct LLMServiceFactory {
             return UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.openRouterModel) ?? "openai/gpt-4o-mini"
         case .appleIntelligence:
             return "apple-intelligence"
+        case .mlx:
+            return UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedMLXModelID)
+                ?? MLXLLMService.defaultModelID
         }
     }
 

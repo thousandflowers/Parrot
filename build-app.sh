@@ -81,6 +81,17 @@ else
     echo "[!] ParrotCompletionHelper not built — inline completion will use the server fallback."
 fi
 
+# MLX Metal shaders: SwiftPM cannot compile .metal sources (mlx-swift README), so reuse the
+# metallib produced by an xcodebuild pass when available. Without it the MLX backend reports
+# "unavailable" at runtime (it does not crash).
+MLX_METALLIB=$(ls .xcbuild/Build/Products/*/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib 2>/dev/null | head -1)
+if [ -n "${MLX_METALLIB}" ]; then
+    cp "${MLX_METALLIB}" "${MACOS}/mlx.metallib"
+    echo "[✓] MLX metallib bundled"
+else
+    echo "[i] No MLX metallib (run 'xcodebuild build -scheme Parrot-Package -destination platform=macOS -derivedDataPath .xcbuild' once to enable the MLX backend)"
+fi
+
 # Embed Sparkle.framework (always from arm64 build — framework is architecture-independent)
 SPARKLE_SRC=".build/arm64-apple-macosx/${CONFIG}/Sparkle.framework"
 if [ -d "${SPARKLE_SRC}" ]; then
