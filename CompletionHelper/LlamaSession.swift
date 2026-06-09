@@ -152,16 +152,14 @@ final class LlamaSession {
         var batch = llama_batch_get_one(&newTokens, Int32(newTokens.count))
         guard llama_decode(ctx, batch) == 0 else { return "" }
 
-        // Sampler chain: top_k → top_p → min_p → temp → repeat_penalty → [logit_bias] → dist.
-        // Tight pruning keeps inline completion on the most-likely path: a small top_k plus min_p
-        // drop the low-probability tail (random years/numbers/off-topic tokens) before sampling,
-        // so a base model's per-keystroke continuation stays relevant instead of wandering.
+        // Sampler chain: [logit_bias] → top_k → top_p → min_p → temp → repeat_penalty → dist.
+        // CRITICAL ORDER: the logit biases must run BEFORE the truncation samplers (top_k/top_p/
+        // min_p). When a markup/CJK token dominates the distribution, min_p prunes every alternative
+        // out of the candidate set; a bias applied *after* that can only crush the lone survivor's
+        // logit — it cannot resurrect the pruned alternatives, so the unwanted token still wins (this
+        // is why `<strong>…</strong>` leaked through despite suppressMarkup). Biasing first drops the
+        // markup/CJK tokens to -100 up front, so the truncation samplers keep the real alternatives.
         let smpl = llama_sampler_chain_init(llama_sampler_chain_default_params())
-        llama_sampler_chain_add(smpl, llama_sampler_init_top_k(20))
-        llama_sampler_chain_add(smpl, llama_sampler_init_top_p(0.9, 1))
-        llama_sampler_chain_add(smpl, llama_sampler_init_min_p(0.05, 1))
-        llama_sampler_chain_add(smpl, llama_sampler_init_temp(temperature))
-        llama_sampler_chain_add(smpl, llama_sampler_init_penalties(512, repeatPenalty, 0.0, 0.0))
         if latinOnly && !cjkBias.isEmpty {
             cjkBias.withUnsafeBufferPointer { buf in
                 llama_sampler_chain_add(smpl, llama_sampler_init_logit_bias(
@@ -180,6 +178,11 @@ final class LlamaSession {
                     llama_vocab_n_tokens(vocab), Int32(buf.count), buf.baseAddress))
             }
         }
+        llama_sampler_chain_add(smpl, llama_sampler_init_top_k(20))
+        llama_sampler_chain_add(smpl, llama_sampler_init_top_p(0.9, 1))
+        llama_sampler_chain_add(smpl, llama_sampler_init_min_p(0.05, 1))
+        llama_sampler_chain_add(smpl, llama_sampler_init_temp(temperature))
+        llama_sampler_chain_add(smpl, llama_sampler_init_penalties(512, repeatPenalty, 0.0, 0.0))
         llama_sampler_chain_add(smpl, llama_sampler_init_dist(seed))
         defer { llama_sampler_free(smpl) }
 

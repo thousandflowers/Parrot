@@ -85,9 +85,10 @@ reader.stackSize = 1 << 20
 reader.start()
 
 /// Returns a short language-anchor phrase that biases the base model's continuation toward the
-/// target language. Only used when the prefix is very short (≤2 words) — a few words of text
-/// are already enough to anchor the language naturally; the anchor just prevents drift on near-
-/// empty fields where the base model otherwise wanders into Polish/English/CJK randomly.
+/// target language. DISABLED in practice: on-device this primed the base model into web/forum
+/// boilerplate and meta-commentary ("(non so se è possibile scrivere in italiano)") with no
+/// quality gain, and the `isUsable` gate (≥3 words) never sends a prefix short enough to trigger
+/// the `≤2 words` branch below anyway. Kept dead pending a proper logit/grammar-level anchor.
 private func languageAnchor(_ lang: String) -> String {
     switch lang.lowercased() {
     case "it": return "Scrivo in italiano:"

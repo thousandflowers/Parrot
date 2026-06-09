@@ -155,18 +155,24 @@ final class CompletionController {
         // a text box"). Wren suggests ONLY where AX exposes a real field. Proper AX-blind support for
         // Chromium/Electron is deferred to dedicated caret-bounds work.
         if ax == nil || (ax?.preContext.isEmpty ?? true) {
+            #if DEBUG
             CrashLogger.log("DIAG req: RETURN AX empty (app=\(bundleID ?? "?")) → no suggestion")
+            #endif
             typedBuffer.invalidate()
             lastAXFoundField = false
             return
         }
         lastAXFoundField = axHasField
         guard let ax, !ax.isSecure else {
+            #if DEBUG
             CrashLogger.log("DIAG req: RETURN ax=nil/secure (no usable field)")
+            #endif
             Logger.infra.debug("completion: no usable focused field (or secure)")
             return
         }
+        #if DEBUG
         CrashLogger.log("DIAG req: app=\(bundleID ?? "?") preLen=\(ax.preContext.count) caret=\(ax.caretRect != .zero) lastSeen=\(lastSeenContext?.suffix(12) ?? "nil") cur=\(current != nil)")
+        #endif
 
         // Recompute ONLY when the focused text actually changed since the last look. The AX observer
         // fires repeatedly WITHOUT a real edit (and on focus / tab re-entry); those ticks read the
@@ -174,7 +180,9 @@ final class CompletionController {
         // generation, so the in-flight compute is never superseded and always lands. Dismiss (Esc)
         // is covered for free: current stays nil and the same text won't recompute until it changes.
         if ax.preContext == lastSeenContext {
+            #if DEBUG
             CrashLogger.log("DIAG req: RETURN dedup (text unchanged, shown=\(current != nil))")
+            #endif
             return
         }
         lastSeenContext = ax.preContext
@@ -336,13 +344,23 @@ final class CompletionController {
         guard let suggestion = await CompletionEngine.shared.suggest(context: context, maxWords: effectiveMaxWords, allowCode: allowCode, midWord: midWord) else {
             CrashLogger.log("DIAG timing: engine=\(Int(Date().timeIntervalSince(tPreEngine)*1000))ms total=\(Int(Date().timeIntervalSince(t0)*1000))ms -> nil")
             Logger.infra.debug("completion: engine returned no suggestion")
+            // Honour dim()'s contract: a nil result clears the dimmed ghost left by the real-change
+            // dim() above, instead of leaving it glued at the old caret. Only the latest generation
+            // owns the overlay — skip if a newer request already superseded this one (it dims/shows
+            // for itself).
+            if suggestionGen == gen { overlay.hide() }
             return
         }
+        #if DEBUG
         CrashLogger.log("DIAG timing: engine=\(Int(Date().timeIntervalSince(tPreEngine)*1000))ms total=\(Int(Date().timeIntervalSince(t0)*1000))ms suggestion='\(suggestion.text.prefix(30))'")
+        #else
+        CrashLogger.log("DIAG timing: engine=\(Int(Date().timeIntervalSince(tPreEngine)*1000))ms total=\(Int(Date().timeIntervalSince(t0)*1000))ms shown")
+        #endif
         guard !Task.isCancelled else { return }
 
         if ax.caretRect == .zero {
             Logger.infra.debug("completion: have suggestion but caret bounds .zero — app exposes no caret rect, cannot show ghost")
+            if suggestionGen == gen { overlay.hide() }   // clear the dimmed ghost; can't reposition it
             return
         }
 

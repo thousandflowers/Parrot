@@ -189,23 +189,20 @@ actor HelperCompletionProvider: CompletionProviding {
         Logger.infra.info("completion helper started for \(modelPath, privacy: .public)")
     }
 
-    /// Kill the helper subprocess immediately, free the pipe, and resume any pending continuation
-    /// with an empty result. The next `complete()` call will re-launch via `ensureHelper()`.
-    /// Call this when a newer request supersedes an in-flight one — avoids blocking on stale inference.
+    /// Cooperatively abandon the in-flight request so a newer one can proceed — WITHOUT killing the
+    /// helper. Tearing down the process here threw away the warm KV cache and forced a full cold
+    /// model reload (Metal warmup) on every keystroke, since the guard fired whenever the helper was
+    /// merely running. Instead we resume the pending continuation so the abandoned `complete()`
+    /// returns at once; its `defer { releasePipe() }` then hands the pipe to the next waiter in
+    /// order (no manual drain, no double-release of `pipeBusy`). The subprocess keeps generating the
+    /// old request, but its late response carries a stale id and is discarded by the id-match in
+    /// `onData` — the same mechanism the timeout path relies on to keep the helper alive.
     func cancelInflight() {
-        guard pending != nil || process?.isRunning == true else { return }
+        guard pending != nil else { return }
         #if DEBUG
-        CrashLogger.log("DIAG helper: cancelInflight — killing helper, releasing pipe waiters=\(pipeWaiters.count)")
+        CrashLogger.log("DIAG helper: cancelInflight — abandoning in-flight request, helper kept warm")
         #endif
-        // Tear down the process + resume pending
-        teardownHelper()
-        // Release ALL pipe waiters: the old request's `defer { releasePipe() }` will still fire
-        // when its abandoned `complete()` returns, but any waiter that was already enqueued must
-        // be freed immediately so the new request can proceed without blocking.
-        while !pipeWaiters.isEmpty {
-            pipeWaiters.removeFirst().resume()
-        }
-        pipeBusy = false
+        resumePending(with: "")
     }
 
     private func teardownHelper() {

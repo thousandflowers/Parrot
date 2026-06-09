@@ -23,10 +23,10 @@ actor CompletionEngine {
         generation &+= 1
         let mine = generation
 
-        // Kill any in-flight inference immediately instead of pipe-waiting for a stale result.
-        // The helper subprocess is relaunched on the next `complete()` call (Metal shaders are
-        // cached, so restart is fast). Without this, fast typing queues requests behind a running
-        // inference that will be discarded anyway, accumulating latency linearly.
+        // Cooperatively abandon any in-flight inference so this request isn't queued behind a stale
+        // one. This keeps the helper warm (it used to kill+relaunch the subprocess, paying a cold
+        // model reload on every keystroke); the abandoned request's late response is discarded by
+        // id-match. No-op when nothing is in flight.
         await provider.cancelInflight()
 
         // Single attempt — the retry (a 2nd inference with a different seed) DOUBLED latency on
@@ -44,12 +44,16 @@ actor CompletionEngine {
         let modelMs = (CFAbsoluteTimeGetCurrent() - started) * 1000
         LatencyTracer.shared.record(stage: .model, milliseconds: modelMs)
         LatencyTracer.shared.record(stage: .total, milliseconds: modelMs)
+        #if DEBUG
         CrashLogger.log("DIAG engine: raw='\(raw.replacingOccurrences(of: "\n", with: "\\n").prefix(50))' len=\(raw.count) superseded=\(mine != generation)")
+        #endif
         guard mine == generation else { return nil }
         let cleaned = CompletionPostprocessor.clean(raw: raw, preContext: context.preContext,
                                                     maxWords: maxWords, allowCode: allowCode, midWord: midWord,
                                                     postContext: context.postContext)
+        #if DEBUG
         CrashLogger.log("DIAG engine: cleaned='\((cleaned ?? "<nil>").prefix(50))'")
+        #endif
         guard let cleaned, !cleaned.isEmpty else { return nil }
         return CompletionSuggestion(text: cleaned)
     }

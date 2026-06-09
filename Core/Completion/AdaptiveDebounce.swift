@@ -9,16 +9,14 @@ enum AppDebounceCategory: String, CaseIterable {
     case terminal
 
     static func detect(bundleID: String?) -> AppDebounceCategory {
-        guard let id = bundleID?.lowercased() else { return .native }
-        let browserPrefixes = ["com.google.chrome", "com.apple.safari", "org.mozilla.firefox",
-                               "com.microsoft.edgemac", "com.brave.browser", "com.operasoftware.opera",
-                               "com.vivaldi.vivaldi", "com.torchbrowser.torch", "company.thebrowser.browser",
-                               "com.apple.webkit"]
-        if browserPrefixes.contains(where: { id.hasPrefix($0) }) { return .browser }
-        let terminalPrefixes = ["com.googlecode.iterm2", "com.apple.terminal", "com.warp.warp",
-                                "com.mitchellh.ghostty", "app.alacritty", "co.zeit.hyper",
-                                "com.sourcetree.sourcetree", "com.microsoft.vscode"]
-        if terminalPrefixes.contains(where: { id.hasPrefix($0) }) { return .terminal }
+        // Single source of truth for app classification is `AppDetector` (canonical, case-sensitive
+        // bundle IDs). The old inline lists here drifted from it — e.g. they classed VSCode as a
+        // terminal (it is a code editor) and lowercased the ID, which would also have broken
+        // AppDetector's case-sensitive matching. Code editors fall through to `.native` (clean AX,
+        // standard typing cadence).
+        guard let id = bundleID else { return .native }
+        if AppDetector.isBrowser(id) { return .browser }
+        if AppDetector.isTerminal(id) { return .terminal }
         return .native
     }
 }
@@ -32,10 +30,11 @@ enum AppDebounceCategory: String, CaseIterable {
 ///   native  → min  80 ms (clean AX, faster caret-response)
 ///   terminal → min  50 ms (fastest typing pattern)
 struct AdaptiveDebounce {
-    let minMs: Int
     let maxMs: Int
 
-    init(minMs: Int = 140, maxMs: Int = 300) { self.minMs = minMs; self.maxMs = maxMs }
+    // The "paused" floor is per-domain (see `minMs(for:)`), not a single instance value — an earlier
+    // instance `minMs` was silently ignored by `nextDelayMs` once the per-category floors landed.
+    init(maxMs: Int = 300) { self.maxMs = maxMs }
 
     /// Minimum delay for each domain category. Used as the "paused" floor.
     static func minMs(for category: AppDebounceCategory) -> Int {
