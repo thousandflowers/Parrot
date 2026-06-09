@@ -16,6 +16,8 @@ actor ScreenContextProvider {
     private var cached: String = ""
     private var lastCapture: Date = .distantPast
     private var capturing = false
+    /// Last context per app (RAM-only, never persisted) so the topic follows app switches.
+    private var crossApp = CrossAppContextStore()
 
     /// Returns recent on-screen text (cached). Empty if unavailable / no permission.
     /// Captures the focused app's frontmost window, then OCRs ONLY the region strictly above the
@@ -25,17 +27,26 @@ actor ScreenContextProvider {
     /// NON-BLOCKING: returns the last OCR result immediately (possibly empty/stale) and, when the
     /// cache is older than the TTL, kicks off a background re-capture+OCR. Completion never waits on
     /// the screen capture, so screen context adds no latency to the suggestion path.
-    func currentContext(pid: pid_t = 0, caretRect: CGRect = .zero, screenHeight: CGFloat = 0) -> String {
+    func currentContext(pid: pid_t = 0, caretRect: CGRect = .zero, screenHeight: CGFloat = 0,
+                        bundleID: String? = nil) -> String {
         if Date().timeIntervalSince(lastCapture) >= Constants.completionScreenContextTTL, !capturing {
             capturing = true
-            Task { await self.refresh(pid: pid, caretRect: caretRect, screenHeight: screenHeight) }
+            Task { await self.refresh(pid: pid, caretRect: caretRect, screenHeight: screenHeight,
+                                      bundleID: bundleID) }
         }
         return cached
     }
 
+    /// Most recent screen context captured in a DIFFERENT app (e.g. the email read in Mail
+    /// while now typing in Slack), or nil when nothing fresh exists. RAM-only.
+    func previousAppContext(excluding bundleID: String?) -> String? {
+        crossApp.previous(excluding: bundleID ?? "")?.text
+    }
+
     /// Captures the front window, crops to above the caret, OCRs, and updates the cache. Runs in the
     /// background off the suggestion path.
-    private func refresh(pid: pid_t, caretRect: CGRect, screenHeight: CGFloat) async {
+    private func refresh(pid: pid_t, caretRect: CGRect, screenHeight: CGFloat,
+                         bundleID: String? = nil) async {
         defer { capturing = false }
 
         let captured = (pid != 0 ? await Self.captureFrontWindow(pid: pid) : nil)
@@ -57,6 +68,7 @@ actor ScreenContextProvider {
         if !text.isEmpty {
             cached = String(text.suffix(Constants.completionScreenContextMaxChars))
             lastCapture = Date()
+            if let bundleID { crossApp.record(text: cached, bundleID: bundleID) }
         }
     }
 
