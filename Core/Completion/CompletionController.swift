@@ -309,8 +309,14 @@ final class CompletionController {
         if !allowCode, ax.caretRect != .zero,
            screenCtxEnabled, ScreenContextProvider.hasPermission {
             let screenH = NSScreen.main?.frame.height ?? 0
-            let screen = await ScreenContextProvider.shared.currentContext(pid: pid, caretRect: ax.caretRect, screenHeight: screenH)
-            if !screen.isEmpty { modelPre = screen + "\n" + preContext }
+            let screen = await ScreenContextProvider.shared.currentContext(pid: pid, caretRect: ax.caretRect, screenHeight: screenH, bundleID: bundleID)
+            // Cross-app continuity: when the current app has no fresh screen text yet (just
+            // switched), fall back to the last topic seen in the previous app so "as I said
+            // in my email…" completes on-topic. RAM-only; expires after a few minutes.
+            let topic = screen.isEmpty
+                ? await ScreenContextProvider.shared.previousAppContext(excluding: bundleID)
+                : screen
+            if let topic, !topic.isEmpty { modelPre = topic + "\n" + preContext }
         }
 
         // Merge per-app style instructions into the global personalization instructions.
@@ -322,8 +328,12 @@ final class CompletionController {
             }
             return globalInstructions
         }()
+        // Code-switching: the sentence being typed decides the completion language; the
+        // app-level preference is only the fallback when the tail has too little signal.
+        let sentenceLang = SentenceLanguage.detect(preContext: modelPre,
+                                                   fallback: PreferencesStore.shared.language)
         let context = CompletionContext(preContext: modelPre, postContext: ax.postContext,
-                                        language: PreferencesStore.shared.language,
+                                        language: sentenceLang,
                                         userPromptOverride: appRulePrompt,
                                         personalizationInstructions: mergedInstructions,
                                         personalizationStrength: PreferencesStore.shared.personalizationStrength,
