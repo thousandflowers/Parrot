@@ -58,11 +58,9 @@ final class MenuBarParrot {
     /// Wren menu bar icon loaded from bundle (or fallback path for development builds).
     private static let wrenMenuIcon: NSImage? = {
         if let bundled = NSImage(named: "MenuIcon") { return bundled }
-        // Fallback for `swift build`/development (no .app bundle).
+        // Fallback for `swift build`/development (no .app bundle): #file-derived package root.
         let devPath = URL(fileURLWithPath: "Resources/MenuIcon.png", relativeTo: projectRoot)
-        if let img = NSImage(contentsOf: devPath) { return img }
-        let absPath = URL(fileURLWithPath: "/Users/eugeniozamengopontrelli/Desktop/Progetti dev/Swift/Wren/core/Resources/MenuIcon.png")
-        return NSImage(contentsOf: absPath)
+        return NSImage(contentsOf: devPath)
     }()
 
     /// Root of the Swift package (used to find development resources).
