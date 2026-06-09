@@ -143,11 +143,10 @@ struct SpanRowView: View {
     }
 
     private var rowBackground: Color {
-        switch span.accepted {
-        case true:  return Color.green.opacity(0.08)
-        case false: return Color.red.opacity(0.08)
-        case nil:   return Color.surfaceElevated
-        }
+        // Not a switch: older compilers (Xcode 16 on CI) reject true/false/nil
+        // patterns over Bool? as non-exhaustive.
+        guard let accepted = span.accepted else { return Color.surfaceElevated }
+        return accepted ? Color.green.opacity(0.08) : Color.red.opacity(0.08)
     }
 
     private var sourceBadgeColor: Color {
