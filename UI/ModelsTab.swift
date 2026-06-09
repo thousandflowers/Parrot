@@ -19,10 +19,32 @@ struct ModelsTab: View {
                 Picker("Service", selection: $prefs.serviceType) {
                     Text("Apple Intelligence").tag(ServiceType.appleIntelligence)
                     Text("Local (llama.cpp)").tag(ServiceType.local)
+                    Text("Local (MLX)").tag(ServiceType.mlx)
                     Text("Ollama").tag(ServiceType.ollama)
                     Text("OpenAI / Compatible").tag(ServiceType.remote)
                     Text("OpenRouter").tag(ServiceType.openRouter)
                     Text("Stub (test)").tag(ServiceType.stub)
+                }
+
+                if prefs.serviceType == .mlx {
+                    Picker("MLX model", selection: Binding(
+                        get: { UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedMLXModelID) ?? MLXLLMService.defaultModelID },
+                        set: { UserDefaults.standard.set($0, forKey: Constants.UserDefaultsKey.selectedMLXModelID) }
+                    )) {
+                        ForEach(MLXLLMService.catalog) { entry in
+                            Text("\(entry.name) — \(entry.sizeLabel)").tag(entry.id)
+                        }
+                    }
+                    if !MLXLLMService.metalRuntimeAvailable {
+                        Label("MLX needs an Xcode-built app (no Metal library in this build)",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Color.statusWarning)
+                            .font(.callout)
+                    } else {
+                        Text("Downloaded from Hugging Face on first use, then cached. 2-3× faster than llama.cpp on Apple Silicon.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 if prefs.serviceType == .appleIntelligence {
