@@ -1,4 +1,6 @@
 import Foundation
+
+#if canImport(FoundationModels)
 import FoundationModels
 
 @available(macOS 26.0, *)
@@ -111,3 +113,40 @@ actor AppleIntelligenceService: @preconcurrency LLMService {
         return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
+
+#else
+
+/// Stub for toolchains without the FoundationModels SDK (Xcode < 26 — e.g. CI runners).
+/// Keeps every call site unconditional: reports "unavailable" and throws if invoked.
+@available(macOS 26.0, *)
+actor AppleIntelligenceService: @preconcurrency LLMService {
+    static let shared = AppleIntelligenceService()
+
+    nonisolated var isAvailable: Bool { false }
+
+    nonisolated var availabilityDescription: String {
+        "Apple Intelligence requires a build with the macOS 26 SDK"
+    }
+
+    func handleOpenAIHTTPStatus(_ statusCode: Int, data: Data) throws {
+        throw CorrectionError.modelNotLoaded
+    }
+
+    func correct(text: String, promptType: PromptType, language: String) async throws -> CorrectionResult {
+        throw CorrectionError.modelNotLoaded
+    }
+
+    func correctFluency(text: String) async throws -> CorrectionResult {
+        throw CorrectionError.modelNotLoaded
+    }
+
+    func explain(original: String, corrected: String) async throws -> String {
+        throw CorrectionError.modelNotLoaded
+    }
+
+    func streamCorrect(text: String, promptType: PromptType) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { $0.finish(throwing: CorrectionError.modelNotLoaded) }
+    }
+}
+
+#endif
