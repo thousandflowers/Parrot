@@ -48,8 +48,15 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       # ── Toolchain ──────────────────────────────────────────────────────────
-      - name: Select Xcode 16
-        run: sudo xcode-select -s /Applications/Xcode_16.app
+      - name: Select latest Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
+
+      # CLlama's modulemap points at the Homebrew llama.h, so this must precede swift build.
+      - name: Install llama.cpp (CLlama header + dylibs)
+        run: brew install llama.cpp || brew upgrade llama.cpp || true
 
       # ── Build ──────────────────────────────────────────────────────────────
       - name: Swift build — arm64
@@ -60,11 +67,16 @@ jobs:
 
       # ── Certificate import ─────────────────────────────────────────────────
       - name: Import Developer ID certificate
-        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
+          # The `secrets` context is not allowed in step-level `if:` (it makes the whole
+          # workflow file invalid — every push shows an instant 0s failure). Gate in-script.
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "[i] APPLE_CERTIFICATE not set — skipping import (ad-hoc signing)"
+            exit 0
+          fi
           KEYCHAIN_PASS=$(openssl rand -base64 30)
           echo "$APPLE_CERTIFICATE" | base64 --decode > /tmp/cert.p12
 
@@ -91,9 +103,11 @@ jobs:
       # ── Resolve signing identity ───────────────────────────────────────────
       - name: Resolve signing identity
         id: identity
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
-          if [ -n "${{ secrets.APPLE_SIGNING_IDENTITY }}" ]; then
-            echo "value=${{ secrets.APPLE_SIGNING_IDENTITY }}" >> $GITHUB_OUTPUT
+          if [ -n "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "value=$APPLE_SIGNING_IDENTITY" >> $GITHUB_OUTPUT
           elif security find-identity -v -p codesigning build.keychain 2>/dev/null \
                | grep -q "Developer ID Application"; then
             ID=$(security find-identity -v -p codesigning build.keychain \
@@ -118,9 +132,7 @@ jobs:
       # ── Wren standalone .app + DMG (bundles a model) ───────────────────────
       # Wren is the inline-completion sibling app. build-wren.sh bundles a small GGUF so the
       # app runs offline out of the box; CI must fetch that model first.
-      - name: Ensure llama.cpp dylibs (for Wren bundle)
-        run: brew install llama.cpp ggml 2>/dev/null || brew upgrade llama.cpp ggml 2>/dev/null || true
-
+      # (llama.cpp dylibs already installed in the Toolchain section above.)
       - name: Fetch bundled model for Wren
         run: |
           mkdir -p /tmp/wren-model

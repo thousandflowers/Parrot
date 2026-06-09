@@ -25,6 +25,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v4
+        with:
+          # Auto-enable Pages (build_type=workflow) so a fresh repo doesn't 404 here.
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs
