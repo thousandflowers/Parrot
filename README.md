@@ -1,71 +1,35 @@
 # Parrot
 
-[![CI](https://github.com/thousandflowers/Parrot/actions/workflows/ci.yml/badge.svg)](https://github.com/thousandflowers/Parrot/actions)
-![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue?style=flat-square)
-![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)
-[![GitHub Sponsors](https://img.shields.io/github/sponsors/thousandflowers?style=flat-square&label=Sponsor)](https://github.com/sponsors/thousandflowers)
+[![CI](https://github.com/thousandflowers/Parrot/actions/workflows/ci.yml/badge.svg)](https://github.com/thousandflowers/Parrot/actions) [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)](https://github.com/thousandflowers/Parrot) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 **Select text. Press ⌘⇧E. Done.**
 
-Parrot is a macOS menu bar app that corrects your writing in any app — terminal, Xcode, Notion, Figma, anywhere — using a local AI model that never sends your text anywhere. No subscription. No browser extension. No cloud. Just a keyboard shortcut and a floating panel that shows you exactly what changed.
+Parrot is a macOS menu bar app that corrects your writing in any app - terminal, Xcode, Notion, Figma, anywhere — using a local AI model that never sends your text anywhere. No subscription. No browser extension. No cloud.
 
-> Works on macOS 14 Sonoma and macOS 26 Tahoe.
-
----
-
-<!-- Replace this line with a GIF or screen recording of the full flow -->
-![Demo](docs/demo.gif)
+<!-- GIF: 10-second screen recording — select text in any app → ⌘⇧E → diff panel appears → press Return to apply. Trim to the essentials. -->
+![Parrot in action](docs/demo.gif)
 
 ---
 
-## In 10 seconds
+## Why I built this
 
-- **Press ⌘⇧E** in any app — Parrot reads the selected text via the macOS Accessibility API, corrects it, and shows a diff panel next to your cursor
-- **One more keypress** applies the correction back into the focused field — no copy-paste, no context switch
-- **The AI runs locally** by default (a bundled `llama-server`). On macOS 26 you can use Apple Intelligence instead. Zero bytes leave your Mac either way
-- **No daemon, no extension, no account.** Install once, grant Accessibility permission, pick a model, start writing
+Two reasons.
 
----
+My girlfriend is Chinese. She writes in Italian every day emails,
+messages, university assignments. She knows what she wants to say;
+she just needs something to catch the grammar before she sends it.
+Every tool she tried either required an account, sent her text to a
+server she didn't choose, or simply didn't work in the app she was
+already using.
 
-## Why I built Parrot
+I have dyslexia. Verb tenses, agreement, the small things that are
+supposed to be automatic they're not, for me. I needed a correction
+layer that works everywhere I write: terminal, Xcode, a chat window,
+a commit message.
 
-I write a lot in my second language. I have dyslexia. Every time I wanted to fix a sentence in Xcode, in a terminal commit message, or in a chat window, I had to copy the text, open a browser tab, paste it into some tool that either required an account or sent my words to a server in another country, then copy the result back.
-
-I wanted something that would just sit in the menu bar, work everywhere without exceptions, run offline, and disappear the moment I pressed Enter. Nothing I found did all of that. So I built it.
-
----
-
-## Who is this for?
-
-**Students and non-native writers** — you write theses, essays, and emails in a language that's not your first. You want immediate feedback, privately, without switching app or losing your train of thought.
-
-**Developers** — you write code comments, commit messages, PR descriptions, and Slack messages all day long. Grammarly doesn't work in your terminal or IDE. Parrot does.
-
-**Writers** — you draft in any editor, from iA Writer to VS Code to plain TextEdit. You want a grammar pass with a diff view that shows exactly what changed, not a full rewrite.
-
-**Professionals** — you send a lot of email and Slack messages. You want a fast sanity check before you hit Send, without your words going through someone else's servers.
-
----
-
-## Get started in 1 minute
-
-1. **Download** [Parrot.dmg](https://github.com/thousandflowers/Parrot/releases/latest) and drag the app to `/Applications`
-2. **Launch Parrot** — a small ✓ icon appears in your menu bar
-3. **Grant Accessibility access** when prompted *(System Settings → Privacy & Security → Accessibility → add Parrot)*
-4. **Download a model** — open Settings → Models → download `qwen2.5-1.5b` (~1 GB, fast on M1+). Or enter an OpenAI/OpenRouter API key if you prefer cloud
-5. **Try it** — open Notes, type *"i writed this yesterday"*, select it, press **⌘⇧E**. The correction panel appears in under 3 seconds
-
-> **First launch on macOS:** if you see "unidentified developer", right-click the app → Open. A notarized build is on the roadmap.
-
-Or install via Homebrew:
-```bash
-brew install --cask thousandflowers/parrot/parrot
-```
-
-Prefer inline completion instead of grammar correction? Install **Wren** (the on-device autocomplete sibling, ships from the same releases):
-```bash
-brew install --cask thousandflowers/parrot/wren
-```
+We needed the same thing: something quiet, offline, that works in
+whatever app is already open, and disappears the moment you're done.
+Nothing we found did all of that. So I built it.
 
 ---
 
@@ -73,165 +37,117 @@ brew install --cask thousandflowers/parrot/wren
 
 ```
 Select text in any app
-       ↓
-  ⌘⇧E (or your custom shortcut)
-       ↓
-Parrot reads selected text via AXUIElement API
-       ↓
-Local LLM (llama-server) corrects it — 0 bytes leave your Mac
-       ↓
+        ↓
+  ⌘⇧E
+        ↓
+Parrot reads it via the macOS Accessibility API
+        ↓
+Local LLM corrects it — 0 bytes leave your Mac
+        ↓
 Floating diff panel appears next to your cursor
-       ↓
-  Return — correction is written back into the focused field
+        ↓
+  Return — correction written back into the field
 ```
 
-Parrot uses the macOS Accessibility API to read and write text directly in the focused UI element. It does not touch the system clipboard. If the Accessibility API is not available for a specific app, it falls back to clipboard injection automatically.
+<!-- GIF: close-up of the diff panel — individual spans highlighted, accept/reject a single change. -->
+![Diff panel](docs/diff-panel.gif)
+
+No clipboard. No context switch. No copy-paste.
 
 ---
 
 ## Parrot vs. Grammarly vs. LanguageTool
 
-|  | **Parrot** | Grammarly | LanguageTool |
+|  | Parrot | Grammarly | LanguageTool |
 |---|---|---|---|
 | Works in every macOS app (terminal, Xcode, Figma…) | ✅ | ❌ | ❌ |
 | Offline by default, 0 bytes sent | ✅ | ❌ | partial |
 | No account, no subscription, no extension | ✅ | ❌ | partial |
-| Per-app rules (different prompt for each app) | ✅ | ❌ | ❌ |
+| Per-app rules (different prompt per app) | ✅ | ❌ | ❌ |
+| Accept/reject individual corrections | ✅ | ❌ | ❌ |
 | Open source | ✅ | ❌ | ✅ |
 
 ---
 
-## Wren — works in (inline completion)
+## Get started
 
-Wren reads the focused field via the macOS Accessibility API to offer context-aware completion; where a field can't be read it falls back to a typed-input buffer (completes from what you type, but can't see pre-existing text). Verdicts below are self-verifiable: in Wren open **Settings → Advanced → App compatibility → Check last focused app** while a text field is focused in the target app.
+```bash
+brew install --cask thousandflowers/parrot/parrot
+```
 
-| App | Status |
-|---|---|
-| TextEdit | ✅ Full |
-| Notes | ✅ Full |
-| Pages | _to verify_ |
-| Mail | _to verify_ |
-| Safari | _to verify_ |
-| Chrome | _to verify (Chromium AX)_ |
-| Slack | _to verify (Electron AX)_ |
-| Messages | _to verify_ |
-| Telegram | _to verify_ |
-| Outlook | _to verify_ |
-| Bear | _to verify_ |
-| Notion | _to verify (Electron AX)_ |
-| VS Code | _to verify (Electron AX)_ |
-| Terminal | ⚠️ Partial (typed-only) |
+Or [download the DMG](https://github.com/thousandflowers/Parrot/releases) and drag to `/Applications`.
 
-> Legend: **✅ Full** = context-aware (reads the field) · **⚠️ Partial** = typed-only fallback · **🔒 Secure** = password fields, never completed by design.
+**First launch on macOS:** if you see "unidentified developer", right-click → Open. A notarized build is in progress.
 
----
+**Setup in 60 seconds:**
+1. Launch Parrot — a small ✓ appears in your menu bar
+2. Grant Accessibility access when prompted (System Settings → Privacy & Security → Accessibility)
+3. Open Settings → Models → download `qwen2.5-1.5b` (~1 GB, fast on M1+)
+4. Open Notes, type `"i writed this yesterday"`, select it, press ⌘⇧E
 
-## Performance
+Want inline autocomplete instead of grammar correction? Install the sibling app:
 
-Wren runs inference in a **separate subprocess** (`ParrotCompletionHelper`), so a model load or CPU spike never freezes the UI — unlike in-process competitors. Numbers below are collected on-device: in Wren open **Settings → Advanced → Performance → Refresh metrics** after typing for a bit, and paste the table here.
-
-**Inference latency** (warm, per request):
-
-| Stage | p50 | p95 | p99 | n |
-|---|---|---|---|---|
-| model | _measure_ | _measure_ | _measure_ | _measure_ |
-| total | _measure_ | _measure_ | _measure_ | _measure_ |
-
-**Memory** (Activity Monitor or the in-app readout):
-
-| Process | Idle | Active |
-|---|---|---|
-| Wren app | _measure_ | _measure_ |
-| ParrotCompletionHelper (model) | _measure_ | _measure_ |
-
-> Methodology: latency is the inference round-trip recorded by `LatencyTracer`; app memory is `phys_footprint`. The helper process holds the model weights, so total RAM = app + helper. Measured on _your Mac model / model file_ — fill in before publishing.
+```bash
+brew install --cask thousandflowers/parrot/wren
+```
 
 ---
 
 ## Features
 
-**Correction modes** — Grammar, Fluency, Grammar+Fluency combined, Translate, Writing coach, De-Slop (strips AI hedging and filler), AI Prompt Optimizer (reformats text into a cleaner prompt), and fully custom prompts. Bind any mode to a keyboard shortcut.
+**Correction modes** — Grammar, Fluency, Grammar+Fluency, Translate, Writing Coach, De-Slop (strips AI filler), AI Prompt Optimizer, and fully custom prompts. Bind any mode to a keyboard shortcut.
 
-**Span-based diff panel** — Each correction is a standalone span: accept or reject individual changes instead of the whole suggestion. Every span shows a source badge (⚡ deterministic rule, 🔤 LanguageTool, 📖 Harper, 🤖 LLM) and an inline reason. Toggle to a clean result view. One-click apply, explain, translate, or undo.
+**Span-based diff panel** — Accept or reject individual corrections instead of the whole suggestion. Each span shows a source badge (⚡ rule · 🔤 LanguageTool · 📖 Harper · 🤖 LLM) and an inline reason.
 
-**Hybrid correction engine** — Four layers, no unnecessary LLM calls: deterministic rules for obvious errors → LanguageTool for 500+ grammar rules across 25+ languages (fully offline) → Harper for advanced English grammar (offline binary) → LLM for complex rewrites. Each layer only runs when the previous one isn't enough.
+**Hybrid correction engine** — Four layers, fastest first: deterministic rules → LanguageTool (500+ grammar rules, 25+ languages, fully offline) → Harper (advanced English, offline) → LLM (complex rewrites). The LLM only runs when the lighter layers aren't enough.
 
-**StyleProfiler** — Detects your writing style (formal, conversational, technical, narrative) and tone from a browser URL or pasted text, then adapts suggestions to match it.
+**StyleProfiler** — Detects your writing style and tone from a URL or pasted text, then adapts suggestions to match it.
 
-**Learns your style — offline.** Every time you reject a correction, Parrot logs the pair locally in `~/Library/Application Support/Parrot/feedback.jsonl`. After enough rejections it detects patterns (e.g. you always reject *"qui" → "qua"*) and injects them as a style note into future LLM prompts — so the same correction is not suggested again. No model is retrained; no data leaves your Mac. The log is capped at 10 MB and rotated automatically.
+**Learns your style — offline.** Every rejected correction is logged locally. After enough rejections it detects patterns and injects them as style notes into future prompts. No model retraining. No data leaves your Mac.
 
-**Smart Expand** — Detects draft emails and short notes, learns contact names from your macOS Contacts, and expands them into full messages with the right tone and length.
+**Smart Expand** — Turns draft emails and short notes into full messages. Learns contact names from macOS Contacts.
 
-**Inline annotations** — Real-time underlines appear as you pause typing, without needing to trigger a shortcut. Hover over an underline to see the suggestion and apply it with one click. Deep accessibility tree scanning can be toggled per app. Enable hover-only mode to keep underlines invisible until you need them.
+**Inline annotations** — Real-time underlines as you pause typing, without triggering a shortcut. Hover to see the suggestion and apply with one click.
 
-**Flows** — Chain multiple steps into a single action: *grammar → simplify → translate to French*. Save flows and trigger them with a shortcut.
+**Flows** — Chain multiple steps into a single action: grammar → simplify → translate to French. Save and trigger with a shortcut.
 
-**Knowledge Base** — Store reference documents (style guides, glossaries, brand voice examples). Parrot automatically finds the most relevant entries for your current text and injects them as context into LLM prompts, so suggestions stay consistent with your terminology.
+**Knowledge Base** — Store style guides, glossaries, brand voice examples. Parrot finds the most relevant entries and injects them as context into LLM prompts.
 
-**Plagiarism detection** — Checks text against your Knowledge Base (Jaccard similarity), and optionally uses the LLM to identify AI-generated patterns and copied phrasing.
+**Per-app rules** — Different prompt, backend, or language per app, by bundle ID.
 
-**Floating Editor** — A full split-screen editor for longer texts. Includes dictation input (macOS Speech framework), file import, and a **Story Analyzer** that scores narrative structure, pacing, and style for manuscripts over 100 words.
+**Backends** — llama.cpp (bundled, default), Apple Intelligence (macOS 26+), LanguageTool (offline), Harper (offline), Ollama, OpenAI, OpenRouter.
 
-**Per-app rules** — Assign a different prompt, backend, or language to any app by bundle ID. Add the frontmost app with one click. Enable or disable rules without deleting them.
-
-**Custom rules** — Define regex patterns with backreference support, case sensitivity, and per-language filtering. Applied before any LLM call.
-
-**Presets** — Save language + model + temperature combinations and bind them to shortcuts for instant switching.
-
-**Export / Import** — Back up or share your entire configuration as JSON. Choose exactly which sections to include: Flows, Custom Prompts, Presets, App Rules, Shortcuts, Preferences.
-
-**Intelligence** — Language auto-detection (50+ languages, with CJK and RTL optimizations), real-time mode, correction history (200 entries), ignore list, response caching. Grammar mode targets minimum changes and preserves verb tense, mood, gender, and voice. Smart translation target detection infers target language from context (browser URL, app name, surrounding text) without a setting to configure.
-
-**Privacy and sync** — iCloud sync for settings and history across your Macs. Local-only mode keeps everything on device. API keys stored in Keychain, never on disk.
-
-**Backends** — llama.cpp (bundled, default), Apple Intelligence (macOS 26+, automatic fallback when llama-server is unavailable), LanguageTool (offline, bundled), Harper (offline, bundled), Ollama, OpenAI, OpenRouter. Model downloads from HuggingFace with optional token support (speeds downloads from ~500 KB/s to ~50 MB/s).
+**Privacy** — iCloud sync for settings across your Macs. Local-only mode keeps everything on device. API keys stored in Keychain.
 
 ---
 
 ## Status
 
-**Current release: 0.9.3**
+Current release: **v0.9.3 beta**
 
 | Feature | Status |
 |---|---|
-| Grammar / Fluency / Translate / Coach / De-Slop / AI Prompt Optimizer | ✔ shipped |
-| Span-based diff panel (per-fix accept/reject, source badges) | ✔ shipped |
-| Hybrid engine: rules + LanguageTool + Harper + LLM | ✔ shipped |
-| Inline annotations (real-time underlines, hover popup) | ✔ shipped |
-| StyleProfiler + offline style learning from rejections | ✔ shipped |
-| Smart Expand — draft-to-full-email with Contacts integration | ✔ shipped |
-| Smart translation target detection | ✔ shipped |
-| Knowledge Base with context injection | ✔ shipped |
-| Plagiarism detection | ✔ shipped |
-| Flows, Story Analyzer | ✔ shipped |
-| Per-app rules, Custom rules (regex), Presets | ✔ shipped |
-| Export / Import configuration (JSON) | ✔ shipped |
-| Offline local LLM (llama-server bundled) | ✔ shipped |
-| Apple Intelligence backend (macOS 26, auto-fallback) | ✔ shipped |
-| iCloud sync | ✔ shipped |
-| Homebrew cask | ✔ shipped |
-| Animated menu bar icon | ✔ shipped |
-| Notarized release (no right-click needed) | ◻︎ in progress |
+| Grammar / Fluency / Translate / Coach / De-Slop / AI Prompt Optimizer | ✅ shipped |
+| Span-based diff panel (per-fix accept/reject, source badges) | ✅ shipped |
+| Hybrid engine: rules + LanguageTool + Harper + LLM | ✅ shipped |
+| Inline annotations | ✅ shipped |
+| StyleProfiler + offline style learning | ✅ shipped |
+| Smart Expand | ✅ shipped |
+| Knowledge Base + Flows + Story Analyzer | ✅ shipped |
+| Per-app rules, custom regex rules, presets | ✅ shipped |
+| Apple Intelligence backend (macOS 26) | ✅ shipped |
+| iCloud sync | ✅ shipped |
+| Homebrew cask | ✅ shipped |
+| Notarized release | ◻︎ in progress |
 | Mac App Store | ◻︎ planned |
-
-### What's new in 0.9.3
-
-- **Span-based UI** — accept or reject individual corrections instead of the whole suggestion; each span shows its source (⚡ rule / 🔤 LanguageTool / 🤖 LLM) and a reason
-- **LanguageTool integration** — 500+ grammar rules, 25+ languages, runs fully offline with no extra download
-- **Hybrid pipeline** — deterministic rules → LanguageTool → LLM, so fast rules fire instantly and the LLM is only called when needed
-- **StyleProfiler** — detects your writing tone from a URL or sample text, adapts suggestions to match your style
-- **Smart Expand** — turns draft notes and short email stubs into full messages; learns contact names from macOS Contacts
-- **Smart translation target** — infers target language from browser URL, app context, and recent messages; no manual language setting needed
-- **Apple Intelligence auto-fallback** — if llama-server fails to start, Parrot falls back to Apple Intelligence on macOS 26 automatically
-- **Animated menu bar bird** — the menu bar icon animates while a correction is in progress
 
 ---
 
 ## Architecture
 
-Swift/SwiftUI app using `actor` for all shared state (zero data races by construction). The AI inference runs via a bundled `llama-server` subprocess — no Ollama dependency, no always-on daemon, no port conflicts. Text is read and written via `AXUIElement` APIs directly into the focused UI element.
+Swift/SwiftUI app with actor-based shared state (zero data races by construction). AI inference runs via a bundled `llama-server` subprocess — no Ollama dependency, no always-on daemon, no port conflicts. Text is read and written via `AXUIElement` APIs directly into the focused UI element.
 
-See [docs/architecture.md](docs/architecture.md) for a full breakdown of the module structure, the macOS 26 constraint-loop fix, and design decisions.
+See [`docs/architecture.md`](docs/architecture.md) for module structure, the macOS 26 constraint-loop fix, and design decisions.
 
 ---
 
@@ -244,15 +160,15 @@ swift build -c release
 ./build-app.sh release   # produces Parrot.app + Parrot.dmg
 ```
 
-**Requirements:** macOS 14+, Xcode 16 / Swift 5.10.
+Requirements: macOS 14+, Xcode 16 / Swift 5.10.
 
 ---
 
 ## Contributing
 
-Bug report → [open an issue](https://github.com/thousandflowers/Parrot/issues/new?template=bug_report.md)
-Feature idea → [open a discussion](https://github.com/thousandflowers/Parrot/discussions)
-Easy first tasks → [good first issue](https://github.com/thousandflowers/Parrot/labels/good%20first%20issue)
+- Bug report → [open an issue](https://github.com/thousandflowers/Parrot/issues)
+- Feature idea → [open a discussion](https://github.com/thousandflowers/Parrot/discussions)
+- Easy first tasks → [`good first issue`](https://github.com/thousandflowers/Parrot/labels/good%20first%20issue)
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
