@@ -206,6 +206,10 @@ final class CompletionController {
             let token = String(ax.preContext.reversed().prefix { !$0.isWhitespace }.reversed())
             if token.count >= 2, token.count <= 30,
                let raw = await SnippetStore.shared.expansion(for: token) {
+                // Discard if a newer keystroke superseded us during the await above — otherwise we
+                // write `current` and paint a stale expansion at a stale caret (the sibling emoji /
+                // snippet / typo paths are safe only because they don't suspend before showing).
+                guard suggestionGen == gen else { return }
                 let expansion = SnippetExpander.expand(raw)
                 current = CompletionSuggestion(text: expansion, kind: .replaceLastWord(wrong: token))
                 currentPID = pid
