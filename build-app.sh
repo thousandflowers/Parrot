@@ -84,7 +84,7 @@ fi
 # MLX Metal shaders: SwiftPM cannot compile .metal sources (mlx-swift README), so reuse the
 # metallib produced by an xcodebuild pass when available. Without it the MLX backend reports
 # "unavailable" at runtime (it does not crash).
-MLX_METALLIB=$(ls .xcbuild/Build/Products/*/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib 2>/dev/null | head -1)
+MLX_METALLIB=$(ls .xcbuild/Build/Products/*/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib 2>/dev/null | head -1 || true)
 if [ -n "${MLX_METALLIB}" ]; then
     cp "${MLX_METALLIB}" "${MACOS}/mlx.metallib"
     echo "[✓] MLX metallib bundled"
