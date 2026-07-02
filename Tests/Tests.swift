@@ -554,9 +554,21 @@ final class ToneDetectorTests: XCTestCase {
         XCTAssertEqual(tone, .neutral)
     }
 
-    func testItalianInformal_textWithContractions_detectedAsInformal() async {
-        let tone = await ToneDetector.shared.detect(text: "c'è una cosa che non va nell'idea, secondo me è sbagliata", language: "it")
+    func testItalianInformal_colloquialMarkers_detectedAsInformal() async {
+        // Genuine informal signals (ciao/eh + the c'è contraction + exclamations),
+        // not articulated-preposition elisions which are register-neutral grammar.
+        let tone = await ToneDetector.shared.detect(text: "Ciao! Eh, c'è una cosa che non va, secondo me è proprio sbagliata!", language: "it")
         XCTAssertEqual(tone, .informal)
+    }
+
+    func testItalianFormal_articulatedPrepositions_notInformal() async {
+        // dell'/nell'/all'/dall' are mandatory register-neutral grammar, not
+        // informal contractions — formal prose full of them must not read informal.
+        let tone = await ToneDetector.shared.detect(
+            text: "L'analisi dell'andamento nell'ambito dell'esercizio corrente conferma la solidità all'interno dall'inizio dell'anno.",
+            language: "it"
+        )
+        XCTAssertNotEqual(tone, .informal)
     }
 
     func testDetectedTone_isSendableAndCaseIterable() {
@@ -999,6 +1011,27 @@ final class LexiconTests: XCTestCase {
         let scores = Lexicon.computeWordScores(words: [], rawWords: [], text: "")
         XCTAssertEqual(scores.wordCount, 1)  // max(0, 1)
         XCTAssertEqual(scores.informalScore, 0.0)
+    }
+
+    func testComputeWordScores_numbers_notCountedAsShouting() {
+        // Letter-free tokens equal their own uppercase — they must not inflate allCapsRatio.
+        let scores = Lexicon.computeWordScores(
+            words: ["1234", "5678", "9012"],
+            rawWords: ["1234", "5678", "9012"],
+            text: "1234 5678 9012"
+        )
+        XCTAssertEqual(scores.informalScore, 0.0)
+    }
+
+    func testComputeWordScores_allCapsShouting_countedAsInformal() {
+        // Shouting must be caught on RAW (original-case) words; the old
+        // lowercased comparison never matched real all-caps text.
+        let scores = Lexicon.computeWordScores(
+            words: ["stop", "doing", "that"],
+            rawWords: ["STOP", "DOING", "THAT"],
+            text: "STOP DOING THAT"
+        )
+        XCTAssertGreaterThan(scores.informalScore, 10.0)
     }
 }
 

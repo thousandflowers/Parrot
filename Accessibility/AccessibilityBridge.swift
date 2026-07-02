@@ -92,7 +92,9 @@ actor AccessibilityBridge: AXBridgeProtocol {
             throw CorrectionError.textExtractionFailed(appName: "unknown")
         }
         let nsText = fullText as NSString
-        let cursorPos = cursorRange.location
+        // Clamp: a stale AX cursor range past the end throws NSRangeException
+        // in character(at:) below.
+        let cursorPos = max(0, min(cursorRange.location, nsText.length))
         var lineStart = cursorPos
         while lineStart > 0 {
             let prev = nsText.character(at: lineStart - 1)
@@ -123,15 +125,11 @@ actor AccessibilityBridge: AXBridgeProtocol {
             await updateBounds(axElement: axElement)
             return selectedText
         }
-        var valueRef: CFTypeRef?
-        let valueResult = AXUIElementCopyAttributeValue(
-            axElement, kAXValueAttribute as CFString, &valueRef
-        )
-        if valueResult == .success, let val = valueRef as? String, !val.isEmpty {
-            await updateBounds(axElement: axElement)
-            return val
-        }
-        throw CorrectionError.textExtractionFailed(appName: "unknown")
+        // No live selection. Signal the caller to fall back to line-at-cursor
+        // extraction (fetchTextOrLineAtCursor), which captures the CFRange needed
+        // for a targeted replace. Returning the whole kAXValue here would bypass
+        // that path and duplicate the entire field on apply.
+        throw CorrectionError.noTextSelected
     }
 
     func fetchSelectedText(fromPID pid: pid_t) async throws -> String {
@@ -196,6 +194,10 @@ actor AccessibilityBridge: AXBridgeProtocol {
     }
 
     func replaceSelectedText(with correctedText: String) async throws {
+        try await replaceSelectedText(with: correctedText, range: nil)
+    }
+
+    func replaceSelectedText(with correctedText: String, range: CFRange?) async throws {
         guard AXIsProcessTrusted() else {
             throw CorrectionError.accessibilityPermissionDenied
         }
@@ -228,14 +230,26 @@ actor AccessibilityBridge: AXBridgeProtocol {
               let axElement = Self.asElement(focusedElement) else {
             throw CorrectionError.noTextSelected
         }
+        // If we captured a specific range at extraction time (the no-live-selection
+        // path), re-select it first so the replace targets exactly that line/range
+        // instead of inserting at the caret.
+        if var r = range {
+            guard let axRange = AXValueCreate(.cfRange, &r),
+                  AXUIElementSetAttributeValue(
+                    axElement, kAXSelectedTextRangeAttribute as CFString, axRange
+                  ) == .success else {
+                // Could not re-establish the selection — paste instead.
+                try await injectViaClipboard(correctedText: correctedText)
+                return
+            }
+        }
+        // Replace the (now) selected range. Deliberately NO kAXValue fallback:
+        // setting kAXValue overwrites the ENTIRE field, destroying surrounding text
+        // when only a line/selection should change.
         let setResult = AXUIElementSetAttributeValue(
             axElement, kAXSelectedTextAttribute as CFString, correctedText as CFTypeRef
         )
         if setResult == .success { return }
-        let valueResult = AXUIElementSetAttributeValue(
-            axElement, kAXValueAttribute as CFString, correctedText as CFTypeRef
-        )
-        if valueResult == .success { return }
         try await injectViaClipboard(correctedText: correctedText)
     }
 

@@ -278,7 +278,7 @@ final class SuggestionPanelController {
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText)
+                try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText, range: result.replacementRange)
                 Task { await HistoryStore.shared.add(result: result) }
                 self.showOrUpdate(result: result, state: .applied(result))
                 self.undoTask?.cancel()
@@ -301,7 +301,13 @@ final class SuggestionPanelController {
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await AccessibilityBridge.shared.replaceSelectedText(with: result.originalText)
+                // After apply, the corrected text occupies a range starting at the
+                // original location with the corrected text's length. Re-select that
+                // span so undo replaces it instead of inserting the original at the caret.
+                let undoRange: CFRange? = result.replacementRange.map {
+                    CFRange(location: $0.location, length: (result.correctedText as NSString).length)
+                }
+                try await AccessibilityBridge.shared.replaceSelectedText(with: result.originalText, range: undoRange)
                 let state: SuggestionState = result.hasChanges ? .suggestion(result) : .noErrors
                 self.showOrUpdate(result: result, state: state)
             } catch {
@@ -506,7 +512,7 @@ final class SuggestionPanelController {
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText)
+                try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText, range: result.replacementRange)
                 Task { await HistoryStore.shared.add(result: result) }
                 if result.promptType == PromptType.expand.label {
                     Task { await self.learnContactFromExpand(result: result) }

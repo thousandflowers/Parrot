@@ -6,6 +6,7 @@ final class DirectApplyToast {
     private static var dismissTask: Task<Void, Never>?
     private static var undoOriginal: String?
     private static var undoPID: pid_t?
+    private static var undoRange: CFRange?
 
     private static var reduceMotion: Bool {
         NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -44,11 +45,12 @@ final class DirectApplyToast {
         show(message: successMessages[messageIndex])
     }
 
-    static func showUndo(message: String, original: String, corrected: String, pid: pid_t) {
+    static func showUndo(message: String, original: String, corrected: String, pid: pid_t, range: CFRange? = nil) {
         dismissTask?.cancel()
         dismissAnimated(currentWindow)
         undoOriginal = original
         undoPID = pid
+        undoRange = range
 
         var undoButton: NSButton?
         let panel = buildPanel(message: message, showUndo: true, undoButton: &undoButton)
@@ -70,9 +72,10 @@ final class DirectApplyToast {
     @objc private static func performUndoAction() {
         dismissTask?.cancel()
         guard let original = undoOriginal else { return }
+        let range = undoRange
         Task {
             do {
-                try await AccessibilityBridge.shared.replaceSelectedText(with: original)
+                try await AccessibilityBridge.shared.replaceSelectedText(with: original, range: range)
             } catch {
                 // Cmd+Z available as manual fallback
             }

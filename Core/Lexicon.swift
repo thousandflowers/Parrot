@@ -82,8 +82,10 @@ enum Lexicon {
         "i've", "you've", "we've", "they've", "i'd", "you'd", "he'd", "she'd",
     ]
 
+    // Articulated-preposition elisions (dell', nell', all', sull', dall', coll')
+    // are mandatory, register-neutral Italian grammar — NOT informal — and appear
+    // constantly in formal text, so they are deliberately excluded here.
     static let informalContractionsIT: Set<String> = [
-        "dell'", "nell'", "sull'", "coll'", "all'", "dall'",
         "c'è", "c'era", "c'erano", "l'ho", "l'hai", "l'ha",
         "m'ha", "t'ho", "s'è", "n'è",
     ]
@@ -129,7 +131,13 @@ enum Lexicon {
         let technicalCount = words.filter { technicalWords.contains($0) }.count
         let exclamationCount = text.filter { $0 == "!" }.count
         let allCapsRatio: Double = {
-            let capsWords = rawWords.filter { $0 == $0.uppercased() && $0.count > 2 }
+            // Require an actual letter (after punctuation trim) so figures like
+            // "1234" don't read as shouting.
+            let capsWords = rawWords.filter { raw in
+                let w = raw.trimmingCharacters(in: .punctuationCharacters)
+                guard w.count > 2, w.contains(where: { $0.isLetter }) else { return false }
+                return w == w.uppercased()
+            }
             return Double(capsWords.count) / Double(wordCount)
         }()
 
