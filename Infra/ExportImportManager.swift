@@ -1,4 +1,6 @@
 import Foundation
+import AppKit
+import OSLog
 
 struct ExportableSection: Identifiable, Hashable {
     let id: String
@@ -129,22 +131,89 @@ final class ExportImportManager {
             prefs.selectedModelID = preferences.selectedModelID
             prefs.language = preferences.language
             prefs.style = preferences.style
-            prefs.serviceType = preferences.serviceType
             prefs.autoCheckEnabled = preferences.autoCheckEnabled
             prefs.realtimeEnabled = preferences.realtimeEnabled
-            prefs.openAIBaseURL = preferences.openAIBaseURL
             prefs.openAIModel = preferences.openAIModel
-            prefs.ollamaBaseURL = preferences.ollamaBaseURL
             prefs.ollamaModel = preferences.ollamaModel
             prefs.openRouterModel = preferences.openRouterModel
             prefs.translationLanguage = preferences.translationLanguage
             prefs.excludedBundleIDs = preferences.excludedBundleIDs
             prefs.inlineAnnotationsHoverOnly = preferences.inlineAnnotationsHoverOnly
             prefs.aiPromptAutoDetect = preferences.aiPromptAutoDetect
+            // SECURITY: serviceType + endpoint URLs from an imported file can silently
+            // repoint the LLM backend at an attacker server, exfiltrating the user's
+            // text and API key. Validate the URLs and confirm before switching backends.
+            Self.applyRemoteConfig(from: preferences, into: prefs)
             imported.append("preferences")
         }
 
         return imported
+    }
+
+    /// Validates and applies serviceType + endpoint URLs from an imported config.
+    /// Rejects non-https remote endpoints and asks the user to confirm before
+    /// switching the LLM backend to an external server (exfiltration guard).
+    static func applyRemoteConfig(from preferences: PreferencesExport, into prefs: PreferencesStore) {
+        let openAIValid = isValidRemoteURL(preferences.openAIBaseURL, allowLoopbackHTTP: false)
+        let ollamaValid = isValidRemoteURL(preferences.ollamaBaseURL, allowLoopbackHTTP: true)
+
+        if openAIValid {
+            prefs.openAIBaseURL = preferences.openAIBaseURL
+        } else if !preferences.openAIBaseURL.isEmpty {
+            Logger.infra.error("Import: rejected non-https openAIBaseURL")
+        }
+        if ollamaValid {
+            prefs.ollamaBaseURL = preferences.ollamaBaseURL
+        } else if !preferences.ollamaBaseURL.isEmpty {
+            Logger.infra.error("Import: rejected invalid ollamaBaseURL")
+        }
+
+        let target = preferences.serviceType
+        guard target == .remote || target == .ollama else {
+            // stub/local/openRouter/apple/mlx use no user-supplied endpoint.
+            prefs.serviceType = target
+            return
+        }
+        let endpoint = target == .remote ? preferences.openAIBaseURL : preferences.ollamaBaseURL
+        let endpointValid = target == .remote ? openAIValid : ollamaValid
+        guard endpointValid else {
+            Logger.infra.error("Import: not switching to \(target.rawValue, privacy: .public) — endpoint invalid")
+            return
+        }
+        let host = URL(string: endpoint)?.host ?? endpoint
+        let loopback: Set<String> = ["localhost", "127.0.0.1", "::1"]
+        if loopback.contains(host.lowercased()) {
+            prefs.serviceType = target
+        } else if confirmRemoteSwitch(service: target.rawValue, host: host) {
+            prefs.serviceType = target
+        } else {
+            Logger.infra.error("Import: user declined switch to external endpoint")
+        }
+    }
+
+    /// Test hook for the URL-validation rule (the real method is private).
+    nonisolated static func isValidRemoteURLForTest(_ string: String, allowLoopbackHTTP: Bool) -> Bool {
+        isValidRemoteURL(string, allowLoopbackHTTP: allowLoopbackHTTP)
+    }
+
+    nonisolated private static func isValidRemoteURL(_ string: String, allowLoopbackHTTP: Bool) -> Bool {
+        guard !string.isEmpty, let url = URL(string: string),
+              let scheme = url.scheme?.lowercased(), let host = url.host, !host.isEmpty else { return false }
+        if scheme == "https" { return true }
+        if scheme == "http", allowLoopbackHTTP {
+            return ["localhost", "127.0.0.1", "::1"].contains(host.lowercased())
+        }
+        return false
+    }
+
+    private static func confirmRemoteSwitch(service: String, host: String) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Allow this settings file to change your AI backend?"
+        alert.informativeText = "It will send the text you correct (and your API key) to “\(host)” using the \(service) backend. Only continue if you trust the source of this file."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Allow")
+        alert.addButton(withTitle: "Keep current")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 }
 

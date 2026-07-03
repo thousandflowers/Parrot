@@ -78,8 +78,13 @@ extension LLMService {
     }
 
     private func throwIfInvalidLLMURL(_ url: URL) throws {
-        guard let scheme = url.scheme, ["http", "https"].contains(scheme),
-              url.host?.isEmpty == false else {
+        guard let scheme = url.scheme?.lowercased(), let host = url.host, !host.isEmpty else {
+            throw CorrectionError.networkUnavailable
+        }
+        // Plain http only to loopback — otherwise the user's text and Bearer key
+        // would go cleartext to an arbitrary host. Everything else must be https.
+        let loopback: Set<String> = ["localhost", "127.0.0.1", "::1"]
+        guard scheme == "https" || (scheme == "http" && loopback.contains(host.lowercased())) else {
             throw CorrectionError.networkUnavailable
         }
     }

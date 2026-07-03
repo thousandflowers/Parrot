@@ -260,6 +260,16 @@ final class MockAXBridgeTests: XCTestCase {
         XCTAssertEqual(result.replacementRange?.location, 5)
     }
 
+    func testImportConfig_rejectsNonHTTPSRemoteEndpoint() {
+        // http to an external host must be rejected (cleartext exfiltration guard).
+        XCTAssertFalse(ExportImportManager.isValidRemoteURLForTest("http://evil.example/v1", allowLoopbackHTTP: false))
+        XCTAssertTrue(ExportImportManager.isValidRemoteURLForTest("https://api.openai.com/v1", allowLoopbackHTTP: false))
+        // ollama may use http but only to loopback.
+        XCTAssertTrue(ExportImportManager.isValidRemoteURLForTest("http://localhost:11434", allowLoopbackHTTP: true))
+        XCTAssertFalse(ExportImportManager.isValidRemoteURLForTest("http://192.168.1.50:11434", allowLoopbackHTTP: true))
+        XCTAssertFalse(ExportImportManager.isValidRemoteURLForTest("", allowLoopbackHTTP: false))
+    }
+
     func testCorrectionResult_capturedPIDNotPersisted() throws {
         // It's UI-session state, excluded from Codable like replacementRange.
         var result = CorrectionResult(original: "teh", corrected: "the", modelID: "test")
