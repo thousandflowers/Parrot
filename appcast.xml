@@ -26,20 +26,13 @@
         </item>
         -->
 
-        <item>
-            <title>Version 0.9.1</title>
-            <pubDate>mer, 20 mag 2026 14:13:54 +0000</pubDate>
-            <sparkle:version>2</sparkle:version>
-            <sparkle:shortVersionString>0.9.1</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure
-                url="https://github.com/thousandflowers/Parrot/releases/download/v0.9.1/Parrot_0.9.1.zip"
-                length="13002086"
-                type="application/octet-stream"
-                sparkle:edSignature="3qDtUETq8ijSBEV0Wl/xm+2lTkGChBKmU8weEn7V/ibjn7ea83rsVhJo3bzFtuU85HLT+l11A76UuFN2xsFqDg=="
-            />
-            <sparkle:releaseNotesLink>https://github.com/thousandflowers/Parrot/releases/tag/v0.9.1</sparkle:releaseNotesLink>
-        </item>
+        <!-- No release advertised. The previous v0.9.1 <item> pointed at
+             releases/download/v0.9.1/Parrot_0.9.1.zip, which was never published
+             (only v0.9.0-beta1 exists), so every installed app hit a 404 on update
+             check. release.yml regenerates this file with a real, uploaded, signed
+             asset on the next `git tag vX.Y.Z && git push --tags`. Do NOT hand-add
+             an <item> unless its enclosure asset exists and its edSignature matches
+             the uploaded bytes. -->
 
     </channel>
 </rss>
