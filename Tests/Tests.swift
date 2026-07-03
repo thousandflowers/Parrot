@@ -226,7 +226,7 @@ final class MockAXBridgeTests: XCTestCase {
     func testFetchSelectedText_returnsMockText() async throws {
         let mock = MockAXBridge()
         await mock.setMockText("test text")
-        let text = try await mock.fetchSelectedText()
+        let (text, _) = try await mock.fetchSelectedText()
         XCTAssertEqual(text, "test text")
     }
 
@@ -246,8 +246,27 @@ final class MockAXBridgeTests: XCTestCase {
     func testReplaceSelectedText_storesText() async throws {
         let mock = MockAXBridge()
         try await mock.replaceSelectedText(with: "replaced")
-        let text = try await mock.fetchSelectedText()
+        let (text, _) = try await mock.fetchSelectedText()
         XCTAssertEqual(text, "replaced")
+    }
+
+    func testCorrectionResult_carriesCapturedPIDForApplyGuard() {
+        // capturedPID must survive on the result so apply/undo can verify the
+        // focused app before re-selecting a range (guards cross-app overwrite).
+        var result = CorrectionResult(original: "teh", corrected: "the", modelID: "test")
+        result.capturedPID = 4242
+        result.replacementRange = CFRange(location: 5, length: 3)
+        XCTAssertEqual(result.capturedPID, 4242)
+        XCTAssertEqual(result.replacementRange?.location, 5)
+    }
+
+    func testCorrectionResult_capturedPIDNotPersisted() throws {
+        // It's UI-session state, excluded from Codable like replacementRange.
+        var result = CorrectionResult(original: "teh", corrected: "the", modelID: "test")
+        result.capturedPID = 99
+        let data = try JSONEncoder().encode(result)
+        let decoded = try JSONDecoder().decode(CorrectionResult.self, from: data)
+        XCTAssertNil(decoded.capturedPID)
     }
 
     func testLastSelectionBounds_defaultValue() async {

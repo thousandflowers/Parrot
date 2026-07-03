@@ -42,9 +42,11 @@ actor AccessibilityBridge: AXBridgeProtocol {
         return _lastKnownFrontAppPID
     }
 
-    private(set) var lastSelectedRange: CFRange = CFRange(location: 0, length: 0)
+    // Optional: nil means "no reliable range captured". Callers must NOT reuse a
+    // stale value — a wrong range would overwrite the wrong span on apply.
+    private(set) var lastSelectedRange: CFRange?
 
-    func fetchTextOrLineAtCursor(fromPID pid: pid_t) async throws -> (text: String, range: CFRange) {
+    func fetchTextOrLineAtCursor(fromPID pid: pid_t) async throws -> (text: String, range: CFRange?) {
         guard AXIsProcessTrusted() else {
             throw CorrectionError.accessibilityPermissionDenied
         }
@@ -61,7 +63,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
         return try await fetchTextOrLineAtCursor(from: element)
     }
 
-    func fetchTextOrLineAtCursor(from element: AXUIElement?) async throws -> (text: String, range: CFRange) {
+    func fetchTextOrLineAtCursor(from element: AXUIElement?) async throws -> (text: String, range: CFRange?) {
         guard let axElement = element else {
             throw CorrectionError.noTextSelected
         }
@@ -70,8 +72,8 @@ actor AccessibilityBridge: AXBridgeProtocol {
             axElement, kAXSelectedTextAttribute as CFString, &selectedTextRef
         )
         if textResult == .success, let selectedText = selectedTextRef as? String, !selectedText.isEmpty {
-            await updateBounds(axElement: axElement)
-            return (selectedText, lastSelectedRange)
+            let range = await updateBounds(axElement: axElement)
+            return (selectedText, range)
         }
         var rangeRef: CFTypeRef?
         let rangeResult = AXUIElementCopyAttributeValue(
@@ -116,14 +118,14 @@ actor AccessibilityBridge: AXBridgeProtocol {
         return (String(lineText), lineRange)
     }
 
-    private func extractText(from axElement: AXUIElement) async throws -> String {
+    private func extractText(from axElement: AXUIElement) async throws -> (text: String, range: CFRange?) {
         var selectedTextRef: CFTypeRef?
         let textResult = AXUIElementCopyAttributeValue(
             axElement, kAXSelectedTextAttribute as CFString, &selectedTextRef
         )
         if textResult == .success, let selectedText = selectedTextRef as? String, !selectedText.isEmpty {
-            await updateBounds(axElement: axElement)
-            return selectedText
+            let range = await updateBounds(axElement: axElement)
+            return (selectedText, range)
         }
         // No live selection. Signal the caller to fall back to line-at-cursor
         // extraction (fetchTextOrLineAtCursor), which captures the CFRange needed
@@ -132,7 +134,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
         throw CorrectionError.noTextSelected
     }
 
-    func fetchSelectedText(fromPID pid: pid_t) async throws -> String {
+    func fetchSelectedText(fromPID pid: pid_t) async throws -> (text: String, range: CFRange?) {
         guard AXIsProcessTrusted() else {
             throw CorrectionError.accessibilityPermissionDenied
         }
@@ -167,7 +169,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
         return value
     }
 
-    func fetchSelectedText() async throws -> String {
+    func fetchSelectedText() async throws -> (text: String, range: CFRange?) {
         guard AXIsProcessTrusted() else {
             throw CorrectionError.accessibilityPermissionDenied
         }
@@ -197,18 +199,27 @@ actor AccessibilityBridge: AXBridgeProtocol {
         try await replaceSelectedText(with: correctedText, range: nil)
     }
 
-    func replaceSelectedText(with correctedText: String, range: CFRange?) async throws {
+    /// Replaces the selection (or the captured `range`) with `correctedText`.
+    /// - Parameter expectedPID: when non-nil, the write is refused unless the
+    ///   currently-focused app is still this PID — prevents overwriting a span in
+    ///   a different document if focus moved during the LLM round-trip.
+    /// - Returns: the span actually written via a targeted AX replace, so undo can
+    ///   re-select it exactly; nil if the write went through the clipboard or
+    ///   replaced the live selection (span not known).
+    @discardableResult
+    func replaceSelectedText(with correctedText: String, range: CFRange?, expectedPID: pid_t? = nil) async throws -> CFRange? {
         guard AXIsProcessTrusted() else {
             throw CorrectionError.accessibilityPermissionDenied
         }
         // Chromium/Electron: AX setters claim success without touching DOM text.
-        // Detect via last known PID and go directly to clipboard.
+        // Detect via last known PID and go directly to clipboard — but only if we
+        // are still on the app the text was captured from.
         let targetPID = _lastKnownFrontAppPID
-        if targetPID != 0 {
+        if targetPID != 0, expectedPID == nil || targetPID == expectedPID {
             let bid = await AppDetector.shared.frontAppBundleID(forPID: targetPID)
             if let b = bid, await ElectronFallbackHandler.shared.isElectronApp(bundleID: b) {
                 try await injectViaClipboard(correctedText: correctedText, targetPID: targetPID)
-                return
+                return nil
             }
         }
         let systemAX = AXUIElementCreateSystemWide()
@@ -220,6 +231,14 @@ actor AccessibilityBridge: AXBridgeProtocol {
               let frontApp = frontAppRef,
               let frontAppAX = Self.asElement(frontApp) else {
             throw CorrectionError.noTextSelected
+        }
+        // Fail closed if focus moved to a different app than the capture came from.
+        if let expected = expectedPID {
+            var focusedPID: pid_t = 0
+            AXUIElementGetPid(frontAppAX, &focusedPID)
+            guard focusedPID == expected else {
+                throw CorrectionError.noTextSelected
+            }
         }
         var focusedRef: CFTypeRef?
         let focusResult = AXUIElementCopyAttributeValue(
@@ -240,17 +259,26 @@ actor AccessibilityBridge: AXBridgeProtocol {
                   ) == .success else {
                 // Could not re-establish the selection — paste instead.
                 try await injectViaClipboard(correctedText: correctedText)
-                return
+                return nil
             }
+            // Replace the (now) selected range. Deliberately NO kAXValue fallback:
+            // setting kAXValue overwrites the ENTIRE field, destroying surrounding
+            // text when only a line/selection should change.
+            let setResult = AXUIElementSetAttributeValue(
+                axElement, kAXSelectedTextAttribute as CFString, correctedText as CFTypeRef
+            )
+            if setResult == .success {
+                return CFRange(location: r.location, length: (correctedText as NSString).length)
+            }
+            try await injectViaClipboard(correctedText: correctedText)
+            return nil
         }
-        // Replace the (now) selected range. Deliberately NO kAXValue fallback:
-        // setting kAXValue overwrites the ENTIRE field, destroying surrounding text
-        // when only a line/selection should change.
         let setResult = AXUIElementSetAttributeValue(
             axElement, kAXSelectedTextAttribute as CFString, correctedText as CFTypeRef
         )
-        if setResult == .success { return }
+        if setResult == .success { return nil }
         try await injectViaClipboard(correctedText: correctedText)
+        return nil
     }
 
     private static let clipboardTokenType = NSPasteboard.PasteboardType("com.parrot.clipboard-token")
@@ -587,13 +615,22 @@ actor AccessibilityBridge: AXBridgeProtocol {
         }
         var cfRange = range
         guard let axRangeValue = AXValueCreate(.cfRange, &cfRange) else { throw CorrectionError.noTextSelected }
-        AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, axRangeValue)
-        AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFTypeRef)
+        let selectResult = AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, axRangeValue)
+        let setResult = AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFTypeRef)
+        // AX setters can claim nothing (Electron) or fail outright — don't report
+        // silent success. Fall back to clipboard so the fix actually lands.
+        if selectResult != .success || setResult != .success {
+            try await injectViaClipboard(correctedText: text, targetPID: pid)
+        }
     }
 
     // MARK: - Private Helpers
 
-    private func updateBounds(axElement: AXUIElement) async {
+    @discardableResult
+    private func updateBounds(axElement: AXUIElement) async -> CFRange? {
+        var capturedRange: CFRange?
+        // Reset first so a failed range read yields nil, never a stale prior value.
+        self.lastSelectedRange = nil
         var rangeRef: CFTypeRef?
         AXUIElementCopyAttributeValue(
             axElement, kAXSelectedTextRangeAttribute as CFString, &rangeRef
@@ -604,6 +641,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
             var cfRange = CFRange()
             AXValueGetValue(axRange, .cfRange, &cfRange)
             self.lastSelectedRange = cfRange
+            capturedRange = cfRange
 
             var boundsRef: CFTypeRef?
             let boundsResult = AXUIElementCopyParameterizedAttributeValue(
@@ -619,7 +657,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
                 var rect = CGRect()
                 AXValueGetValue(axValue, .cgRect, &rect)
                 self.lastSelectionBounds = rect
-                return
+                return capturedRange
             }
         }
 
@@ -642,12 +680,13 @@ actor AccessibilityBridge: AXBridgeProtocol {
                     AXValueGetValue(axPos, .cgPoint, &point)
                     AXValueGetValue(axSize, .cgSize, &sz)
                     self.lastSelectionBounds = CGRect(origin: point, size: sz)
-                    return
+                    return capturedRange
                 }
             }
         }
 
         self.lastSelectionBounds = NSScreen.main?.visibleFrame ?? .zero
+        return capturedRange
     }
 }
 

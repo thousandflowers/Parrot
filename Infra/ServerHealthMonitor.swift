@@ -58,7 +58,16 @@ actor ServerHealthMonitor: Sendable {
 
     private func restartServer() async {
         await ServerManager.shared.stop()
-        guard let modelPath = ModelManager.shared.currentModelPath else { return }
+        guard let modelPath = ModelManager.shared.currentModelPath else {
+            // Server stopped and no model to restart with → local corrections are
+            // dead. Surface it instead of silently going quiet.
+            Logger.server.error("ServerHealthMonitor: no model to restart with — local engine stopped")
+            consecutiveFailures = 0
+            await MainActor.run {
+                SuggestionPanelController.shared.showError(.modelNotLoaded)
+            }
+            return
+        }
         do {
             try await ServerManager.shared.start(modelPath: modelPath)
             consecutiveFailures = 0

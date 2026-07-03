@@ -73,9 +73,10 @@ final class DirectApplyToast {
         dismissTask?.cancel()
         guard let original = undoOriginal else { return }
         let range = undoRange
+        let pid = undoPID
         Task {
             do {
-                try await AccessibilityBridge.shared.replaceSelectedText(with: original, range: range)
+                try await AccessibilityBridge.shared.replaceSelectedText(with: original, range: range, expectedPID: pid)
             } catch {
                 // Cmd+Z available as manual fallback
             }

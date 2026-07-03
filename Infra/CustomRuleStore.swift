@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 actor CustomRuleStore {
     static let shared = CustomRuleStore()
@@ -98,7 +99,12 @@ actor CustomRuleStore {
     }
 
     private func save() {
-        try? JSONEncoder().encode(rules).write(to: fileURL, options: .atomic)
+        let count = rules.count
+        do {
+            try JSONEncoder().encode(rules).write(to: fileURL, options: .atomic)
+        } catch {
+            Logger.infra.error("CustomRuleStore: save failed (\(count, privacy: .public) rules): \(error.localizedDescription, privacy: .public)")
+        }
     }
 }
 

@@ -193,9 +193,17 @@ final class RewriteController {
     func accept() {
         guard isActive, currentPID != 0 else { return }
         let text = overlay.currentCorrection
+        let pid = currentPID
         dismiss()
         Task {
-            try? await AccessibilityBridge.shared.replaceSelectedText(with: text)
+            do {
+                try await AccessibilityBridge.shared.replaceSelectedText(with: text, range: nil, expectedPID: pid == 0 ? nil : pid)
+            } catch {
+                // The replace failed — do NOT record it as accepted or claim success.
+                Logger.infra.error("rewrite-inline: replace failed: \(error.localizedDescription)")
+                await MainActor.run { DirectApplyToast.show(message: "Couldn't replace text") }
+                return
+            }
             await StatsStore.shared.recordAccepted(text: text)
             await MainActor.run { DirectApplyToast.show(message: "✓ Replaced") }
             Logger.infra.debug("rewrite-inline: accepted replacement")

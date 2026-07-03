@@ -98,13 +98,17 @@ final class InlineHighlightController {
                     failures += 1
                 }
             }
+            let total = toApply.count
             if failures > 0 {
-                Logger.ui.debug("InlineHighlightController: \(failures, privacy: .public)/\(toApply.count, privacy: .public) replacements failed")
+                Logger.ui.error("InlineHighlightController: \(failures, privacy: .public)/\(total, privacy: .public) replacements failed")
             }
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 self.clear()
                 SuggestionPanelController.shared.close()
+                if failures > 0 {
+                    DirectApplyToast.show(message: "\(failures) of \(total) fixes couldn't be applied")
+                }
             }
         }
     }

@@ -159,7 +159,7 @@ actor RealtimeMonitor {
 
     private func fetchCurrentText(pid: pid_t) async throws -> String {
         do {
-            return try await AccessibilityBridge.shared.fetchSelectedText(fromPID: pid)
+            return try await AccessibilityBridge.shared.fetchSelectedText(fromPID: pid).text
         } catch CorrectionError.noTextSelected {
             let (text, _) = try await AccessibilityBridge.shared.fetchTextOrLineAtCursor(fromPID: pid)
             return text

@@ -1,5 +1,6 @@
 import SwiftUI
 import Cocoa
+import OSLog
 
 @MainActor
 final class HoverAnnotationPopup {
@@ -64,7 +65,13 @@ final class HoverAnnotationPopup {
                     InlineHighlightController.shared.clear()
                 }
             } catch {
-                // Text field might have changed — silently ignore
+                // The fix wasn't applied (field changed / AX write failed) — tell
+                // the user instead of pretending nothing was there to fix.
+                Logger.ui.error("HoverAnnotationPopup: apply failed: \(error.localizedDescription)")
+                await MainActor.run {
+                    self.hide()
+                    DirectApplyToast.show(message: "Couldn't apply fix")
+                }
             }
         }
     }

@@ -19,6 +19,10 @@ struct CorrectionResult: Identifiable, Sendable, Codable {
     var replacementRange: CFRange? = nil
     var anchorRect: CGRect? = nil
     var correctionSpans: [CorrectionSpan]? = nil
+    // PID of the app the text was extracted from. apply/undo verify the focused
+    // app still matches before re-selecting a range, so a correction never
+    // overwrites a span in a different document if focus moved during the LLM call.
+    var capturedPID: pid_t? = nil
 
     enum CorrectionSource: String, Codable, Sendable {
         case ruleBased = "rule_based"

@@ -89,7 +89,13 @@ actor ContactStore {
     }
 
     private func persist() {
-        guard let url = fileURL, let data = try? JSONEncoder().encode(contacts) else { return }
-        try? data.write(to: url, options: .atomic)
+        guard let url = fileURL else { return }
+        let count = contacts.count
+        do {
+            let data = try JSONEncoder().encode(contacts)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            Logger.core.error("ContactStore: persist failed (\(count, privacy: .public) contacts): \(error.localizedDescription, privacy: .public)")
+        }
     }
 }

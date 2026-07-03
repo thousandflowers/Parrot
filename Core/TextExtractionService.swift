@@ -17,7 +17,9 @@ actor TextExtractionService: Sendable {
         
         if let pid = pid {
             do {
-                text = try await AccessibilityBridge.shared.fetchSelectedText(fromPID: pid)
+                let (selText, selRange) = try await AccessibilityBridge.shared.fetchSelectedText(fromPID: pid)
+                text = selText
+                replacementRange = selRange
             } catch CorrectionError.noTextSelected {
                 let (fallbackText, range) = try await AccessibilityBridge.shared.fetchTextOrLineAtCursor(fromPID: pid)
                 text = fallbackText
@@ -26,7 +28,9 @@ actor TextExtractionService: Sendable {
             bundleID = await AppDetector.shared.frontAppBundleID(forPID: pid)
         } else {
             do {
-                text = try await AccessibilityBridge.shared.fetchSelectedText()
+                let (selText, selRange) = try await AccessibilityBridge.shared.fetchSelectedText()
+                text = selText
+                replacementRange = selRange
             } catch CorrectionError.noTextSelected {
                 let lastPID = await AccessibilityBridge.shared.lastKnownFrontAppPID()
                 guard lastPID != 0 else { throw CorrectionError.noTextSelected }

@@ -59,6 +59,9 @@ final class SuggestionPanelController {
     private var currentState: SuggestionState?
     private var explanationTask: Task<Void, Never>?
     private var undoTask: Task<Void, Never>?
+    // The span apply actually wrote (nil if it went via clipboard/live-selection).
+    // Undo re-selects exactly this, never a fabricated location+length span.
+    private var lastAppliedRange: CFRange?
     private var clickMonitor: Any?
     private var appObserver: NSObjectProtocol?
 
@@ -278,7 +281,8 @@ final class SuggestionPanelController {
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText, range: result.replacementRange)
+                self.lastAppliedRange = try await AccessibilityBridge.shared.replaceSelectedText(
+                    with: result.correctedText, range: result.replacementRange, expectedPID: result.capturedPID)
                 Task { await HistoryStore.shared.add(result: result) }
                 self.showOrUpdate(result: result, state: .applied(result))
                 self.undoTask?.cancel()
@@ -301,17 +305,18 @@ final class SuggestionPanelController {
         Task { [weak self] in
             guard let self else { return }
             do {
-                // After apply, the corrected text occupies a range starting at the
-                // original location with the corrected text's length. Re-select that
-                // span so undo replaces it instead of inserting the original at the caret.
-                let undoRange: CFRange? = result.replacementRange.map {
-                    CFRange(location: $0.location, length: (result.correctedText as NSString).length)
-                }
-                try await AccessibilityBridge.shared.replaceSelectedText(with: result.originalText, range: undoRange)
+                // Re-select exactly the span apply wrote (nil if it went via
+                // clipboard/live-selection → replace current selection, never a
+                // fabricated span that could corrupt unrelated text).
+                try await AccessibilityBridge.shared.replaceSelectedText(
+                    with: result.originalText, range: self.lastAppliedRange, expectedPID: result.capturedPID)
                 let state: SuggestionState = result.hasChanges ? .suggestion(result) : .noErrors
                 self.showOrUpdate(result: result, state: state)
             } catch {
-                self.close()
+                // Undo failed — the corrected text is still in place. Tell the user
+                // instead of silently closing as if the original was restored.
+                Logger.ui.error("SuggestionPanel: undo failed: \(error.localizedDescription)")
+                self.showError(error as? CorrectionError ?? .textExtractionFailed(appName: "unknown"))
             }
         }
     }
@@ -512,7 +517,8 @@ final class SuggestionPanelController {
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText, range: result.replacementRange)
+                self.lastAppliedRange = try await AccessibilityBridge.shared.replaceSelectedText(
+                    with: result.correctedText, range: result.replacementRange, expectedPID: result.capturedPID)
                 Task { await HistoryStore.shared.add(result: result) }
                 if result.promptType == PromptType.expand.label {
                     Task { await self.learnContactFromExpand(result: result) }

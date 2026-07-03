@@ -56,8 +56,13 @@ actor SnippetStore {
     func remove(_ abbr: String) { loadIfNeeded(); map.removeValue(forKey: abbr.lowercased()); save() }
 
     private func save() {
-        guard let data = try? JSONEncoder().encode(map) else { return }
-        try? FileManager.default.createDirectory(at: Self.fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? data.write(to: Self.fileURL, options: .atomic)
+        let count = map.count
+        do {
+            let data = try JSONEncoder().encode(map)
+            try FileManager.default.createDirectory(at: Self.fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: Self.fileURL, options: .atomic)
+        } catch {
+            Logger.core.error("SnippetStore: save failed (\(count, privacy: .public) snippets): \(error.localizedDescription, privacy: .public)")
+        }
     }
 }

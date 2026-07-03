@@ -145,7 +145,8 @@ extension TextCheckCoordinator {
             guard result.hasChanges else { return }
             Task {
                 do {
-                    try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText, range: result.replacementRange)
+                    try await AccessibilityBridge.shared.replaceSelectedText(
+                        with: result.correctedText, range: result.replacementRange, expectedPID: result.capturedPID)
                 } catch {
                     await MainActor.run {
                         SuggestionPanelController.shared.showError(error as? CorrectionError ?? .textExtractionFailed(appName: "unknown"))
@@ -175,13 +176,16 @@ extension TextCheckCoordinator {
             Task {
                 do {
                     let original = result.originalText
-                    let pid = await AccessibilityBridge.shared.lastKnownFrontAppPID()
-                    try await AccessibilityBridge.shared.replaceSelectedText(with: result.correctedText, range: result.replacementRange)
-                    // After apply, the corrected text spans the original location
-                    // with the corrected text's length — that's what undo must re-select.
-                    let undoRange: CFRange? = result.replacementRange.map {
-                        CFRange(location: $0.location, length: (result.correctedText as NSString).length)
+                    let pid: pid_t
+                    if let captured = result.capturedPID {
+                        pid = captured
+                    } else {
+                        pid = await AccessibilityBridge.shared.lastKnownFrontAppPID()
                     }
+                    // Undo re-selects exactly the span apply wrote (nil if it went via
+                    // clipboard/live-selection), never a fabricated location+length.
+                    let undoRange = try await AccessibilityBridge.shared.replaceSelectedText(
+                        with: result.correctedText, range: result.replacementRange, expectedPID: result.capturedPID)
                     await MainActor.run {
                         DirectApplyToast.showUndo(
                             message: "Correction applied",

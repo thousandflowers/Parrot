@@ -229,7 +229,7 @@ struct TextCheckCoordinator: Sendable {
 
         let contextPID: pid_t = if let pid = frontAppPID { pid } else { await AccessibilityBridge.shared.lastKnownFrontAppPID() }
         let surroundingText = await AccessibilityBridge.shared.fetchSurroundingText(
-            pid: contextPID, selectionRange: capturedRange
+            pid: contextPID, selectionRange: capturedRange ?? CFRange(location: 0, length: 0)
         )
 
         // Recipient-aware tone: when enabled, mirror the conversation partner's register
@@ -284,7 +284,9 @@ struct TextCheckCoordinator: Sendable {
             CrashLogger.log("performCheck: prepareCheck done, text=\(prepared.text.prefix(30))")
             await MainActor.run { SuggestionPanelController.shared.showLoading() }
 
-            let replacementRange: CFRange = prepared.replacementRange ?? CFRange(location: 0, length: 0)
+            // Keep the range optional: nil means "no reliable range", so apply/undo
+            // must NOT re-select a fabricated span (that would overwrite the wrong text).
+            let replacementRange: CFRange? = prepared.replacementRange
             let detectedTone = await ToneDetector.shared.detect(text: prepared.text, language: prepared.resolvedLanguage)
             CrashLogger.log("performCheck: running action, promptType=\(prepared.promptType.label)")
 
@@ -292,10 +294,11 @@ struct TextCheckCoordinator: Sendable {
             let rawResult = try await action(prepared.text, resolved, replacementRange, detectedTone, prepared.resolvedLanguage, prepared.bundleID)
             CrashLogger.log("performCheck: action done")
 
-            let anchorRange: CFRange = await AccessibilityBridge.shared.lastSelectedRange
-            let anchorRect: CGRect? = anchorRange.length > 0
-                ? await AccessibilityBridge.shared.boundsForRange(anchorRange, pid: prepared.capturedPID)
-                : nil
+            let anchorRect: CGRect? = if let anchorRange = await AccessibilityBridge.shared.lastSelectedRange, anchorRange.length > 0 {
+                await AccessibilityBridge.shared.boundsForRange(anchorRange, pid: prepared.capturedPID)
+            } else {
+                nil
+            }
 
             var mutableResult = CorrectionResult(
                 original: rawResult.originalText,
@@ -308,13 +311,14 @@ struct TextCheckCoordinator: Sendable {
                 detectedTone: rawResult.detectedTone ?? detectedTone.rawValue,
                 source: rawResult.source)
             mutableResult.replacementRange = replacementRange
+            mutableResult.capturedPID = prepared.capturedPID
             mutableResult.anchorRect = anchorRect
             let finalResult = mutableResult
 
             try Task.checkCancellation()
             await MainActor.run { onSuccess(finalResult) }
 
-            let textOffset = self.replaceOffset(for: replacementRange)
+            let textOffset = self.replaceOffset(for: replacementRange ?? CFRange(location: 0, length: 0))
             await self.showInlineAnnotations(result: finalResult, textOffset: textOffset, pid: prepared.capturedPID)
         }
     }
@@ -409,27 +413,29 @@ struct TextCheckCoordinator: Sendable {
         }
     }
 
-    private func fetchSelectedTextAndRange(frontAppPID: pid_t?, attempt: Int) async throws -> (String, CFRange) {
+    // Returns text + the range it was captured from (nil = no reliable range /
+    // clipboard path). Text and range come back as one atomic value so a
+    // concurrent extraction can never pair this text with a stale range.
+    private func fetchSelectedTextAndRange(frontAppPID: pid_t?, attempt: Int) async throws -> (String, CFRange?) {
         let maxAttempts = 2
         do {
             if let pid = frontAppPID {
                 let bid = await AppDetector.shared.frontAppBundleID(forPID: pid)
                 if let b = bid, await ElectronFallbackHandler.shared.isElectronApp(bundleID: b) {
                     let text = try await ElectronFallbackHandler.shared.extractViaClipboard(pid: pid)
-                    return (text, CFRange(location: 0, length: 0))
+                    return (text, nil)
                 }
-                let text = try await AccessibilityBridge.shared.fetchSelectedText(fromPID: pid)
-                let range = await AccessibilityBridge.shared.lastSelectedRange
+                let (text, range) = try await AccessibilityBridge.shared.fetchSelectedText(fromPID: pid)
                 return (text, range)
             }
-            let text = try await AccessibilityBridge.shared.fetchSelectedText()
-            let range = await AccessibilityBridge.shared.lastSelectedRange
+            let (text, range) = try await AccessibilityBridge.shared.fetchSelectedText()
             return (text, range)
         } catch CorrectionError.noTextSelected {
             guard attempt < maxAttempts else {
                 let pid: pid_t
                 if let p = frontAppPID { pid = p } else { pid = await AccessibilityBridge.shared.lastKnownFrontAppPID() }
-                return try await AccessibilityBridge.shared.fetchTextOrLineAtCursor(fromPID: pid)
+                let (text, range) = try await AccessibilityBridge.shared.fetchTextOrLineAtCursor(fromPID: pid)
+                return (text, range)
             }
             try await Task.sleep(nanoseconds: 300_000_000)
             return try await fetchSelectedTextAndRange(frontAppPID: frontAppPID, attempt: attempt + 1)
@@ -440,10 +446,9 @@ struct TextCheckCoordinator: Sendable {
             let bid = await AppDetector.shared.frontAppBundleID(forPID: pid)
             if let b = bid, await ElectronFallbackHandler.shared.isElectronApp(bundleID: b) {
                 let text = try await ElectronFallbackHandler.shared.extractViaClipboard(pid: pid)
-                return (text, CFRange(location: 0, length: 0))
+                return (text, nil)
             }
-            let text = try await AccessibilityBridge.shared.fetchSelectedText(fromPID: pid)
-            let range = await AccessibilityBridge.shared.lastSelectedRange
+            let (text, range) = try await AccessibilityBridge.shared.fetchSelectedText(fromPID: pid)
             return (text, range)
         }
     }
