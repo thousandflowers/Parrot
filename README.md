@@ -23,11 +23,7 @@ We needed the same thing: something quiet, offline, that works in whatever app i
 
 ## Quickstart
 
-```bash
-brew install --cask thousandflowers/parrot/parrot
-```
-
-Or [download the DMG](https://github.com/thousandflowers/Parrot/releases/latest) and drag to `/Applications`.
+[Download Parrot_beta1.dmg](https://github.com/thousandflowers/Parrot/releases/download/v0.9.0-beta1/Parrot_beta1.dmg) (v0.9.0 beta) and drag to `/Applications`. Homebrew install arrives with the first stable release.
 
 **First launch on macOS:** if you see "unidentified developer", right-click → Open. A notarized build is in progress.
 
@@ -36,11 +32,7 @@ Or [download the DMG](https://github.com/thousandflowers/Parrot/releases/latest)
 3. Open Settings → Models → download `qwen2.5-1.5b` (~1 GB, fast on M1+)
 4. Open Notes, type `"i writed this yesterday"`, select it, press ⌘⇧E
 
-Want inline autocomplete instead? Install the sibling app:
-
-```bash
-brew install --cask thousandflowers/parrot/wren
-```
+Want inline autocomplete instead? Check out the sibling app: [Wren](https://github.com/thousandflowers/Wren).
 
 ---
 
@@ -145,7 +137,7 @@ Current release: **v0.9.3 beta**
 | Per-app rules, custom regex rules, presets | ✅ |
 | Apple Intelligence backend (macOS 26) | ✅ |
 | iCloud sync | ✅ |
-| Homebrew cask | ✅ |
+| Homebrew cask | ◻︎ with first stable release |
 | Notarized release | ◻︎ in progress |
 | Mac App Store | ◻︎ planned |
 
