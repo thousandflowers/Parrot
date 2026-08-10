@@ -1,5 +1,7 @@
 # Parrot
 
+> ⚠️ Beta (v0.9.0-beta1) — usable, but expect rough edges.
+
 [![CI](https://github.com/thousandflowers/Parrot/actions/workflows/ci.yml/badge.svg)](https://github.com/thousandflowers/Parrot/actions) [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)](https://github.com/thousandflowers/Parrot) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Sponsor](https://img.shields.io/github/sponsors/thousandflowers?label=Sponsor)](https://github.com/sponsors/thousandflowers)
 
 **⌘⇧E. Grammar fixed. Any app. Offline. Zero bytes sent.**
