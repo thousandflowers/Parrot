@@ -6,9 +6,6 @@
 
 **⌘⇧E. Grammar fixed. Any app. Offline. Zero bytes sent.**
 
-<!-- GIF: 10-second screen recording — select text in any app → ⌘⇧E → diff panel appears → press Return to apply -->
-![Parrot in action](docs/demo.gif)
-
 ---
 
 ## Why I built this
@@ -50,9 +47,6 @@ Parrot is a hybrid correction engine with 4 layers — fastest first, LLM only w
 | 🤖 Local LLM | Complex rewrites, fluency, style | 1–3s |
 
 Each layer only runs if the previous one isn't enough. The LLM is never called to fix a missing apostrophe.
-
-<!-- GIF: close-up of the diff panel — individual spans highlighted, accept/reject a single change -->
-![Diff panel](docs/diff-panel.gif)
 
 ```
 Select text in any app
