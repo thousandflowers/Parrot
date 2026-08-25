@@ -1,4 +1,4 @@
-# SP1 — Inline Completion Engine (Cotypist-parity) — Design Spec
+# SP1 - Inline Completion Engine (Cotypist-parity) - Design Spec
 
 **Date:** 2026-05-29
 **Status:** Approved design, pre-implementation
@@ -27,7 +27,7 @@ and request cancellation. We do **not** link `libllama` into the app process.
 **Rationale (priority = solidity / long-term reliability):**
 - `llama-server` is upstream-maintained and crash-isolated: an inference crash never takes down
   Parrot. A hand-rolled `libllama` C↔Swift bridge is code *we* own and maintain across every
-  llama.cpp update — more surface, less reliable.
+  llama.cpp update - more surface, less reliable.
 - Features ≠ architecture: every Cotypist feature is reachable on the server backend. In-process is
   only a latency optimization, not a product capability.
 - One inference engine, not two. Avoids the "two code paths" maintenance trap.
@@ -36,19 +36,19 @@ and request cancellation. We do **not** link `libllama` into the app process.
 
 **Escape hatch (measured, not speculative):** SP1 ships a latency benchmark. If end-to-end
 keystroke→ghost latency exceeds the target on target hardware, we introduce `libllama` in an
-**isolated XPC helper process** (preserving crash isolation) — only then, and backed by numbers.
+**isolated XPC helper process** (preserving crash isolation) - only then, and backed by numbers.
 
 ## The hard part: ghost text inside arbitrary apps
 
 You cannot draw grey text inside another app's text field via Accessibility. Solution (same shape
 as Cotypist): a borderless, non-activating **overlay window** that draws the suggestion at the caret
 screen position, obtained from `AccessibilityBridge.boundsForRange(_:pid:)` (already implemented via
-`kAXBoundsForRangeParameterizedAttribute`). Tab is intercepted with a `CGEventTap` (new capability —
+`kAXBoundsForRangeParameterizedAttribute`). Tab is intercepted with a `CGEventTap` (new capability -
 none exists in the codebase today) and swallowed when a suggestion is visible.
 
 ## Components (isolated units)
 
-### 1. `CompletionEngine` — `Core/Completion/CompletionEngine.swift` (actor)
+### 1. `CompletionEngine` - `Core/Completion/CompletionEngine.swift` (actor)
 - `suggest(preContext: String, postContext: String, language: String) async -> String?`
 - Builds an `/infill` request (`input_prefix` = preContext, `input_suffix` = postContext) with
   `n_predict = maxCompletionLength` (default 8 tokens), `cache_prompt: true`, `stream: true`,
@@ -58,7 +58,7 @@ none exists in the codebase today) and swallowed when a suggestion is visible.
 - *Does NOT* go through `RequestQueue` (that serialises correction jobs); completions use their own
   lightweight path with a single reused slot so a stale completion never blocks a correction.
 
-### 2. Server endpoint support — `Core/Completion/LlamaCompletionClient.swift`
+### 2. Server endpoint support - `Core/Completion/LlamaCompletionClient.swift`
 - **Primary: `/completion`** (prefix continuation). VERIFIED 2026-05-29 against the bundled server:
   `/completion` produces good continuations; **`/infill` does NOT work** with Parrot's instruct
   models (Qwen2.5-instruct, Gemma-it) because `/infill` requires a FIM-trained model and these
@@ -68,29 +68,29 @@ none exists in the codebase today) and swallowed when a suggestion is visible.
   uses prefix-only `/completion` and is unaffected.
 - **Model-quality note:** pretrained/base models (e.g. `gemma-*-pt`) continue text better than
   instruct models for raw completion. Recommend offering a base model for the completion feature
-  (catalog addition, tracked separately); not a blocker — instruct models still produce usable output.
+  (catalog addition, tracked separately); not a blocker - instruct models still produce usable output.
 - Streaming SSE parse (reuse `SSEStreamingEngine` if compatible, else a thin parser).
 - `cache_prompt: true` so consecutive completions sharing a prefix reuse the slot KV cache.
 - Uses a dedicated slot (server reports `total_slots: 4`) so completions never evict the
   correction slot's cache.
 
-### 3. `CompletionController` — `Core/Completion/CompletionController.swift` (`@MainActor`)
+### 3. `CompletionController` - `Core/Completion/CompletionController.swift` (`@MainActor`)
 Orchestrates the live loop. Owns suggestion state and the debounce.
 - Subscribes to text-change events (extend `RealtimeMonitor`; completion uses a **shorter** debounce
-  ~400ms vs the existing 800ms correction debounce — configurable).
+  ~400ms vs the existing 800ms correction debounce - configurable).
 - On debounce fire: read pre/post context + caret bounds via `AccessibilityBridge`, call
   `CompletionEngine.suggest`, and if non-empty show the overlay.
 - Cancels/clears on: caret move, focus change, Escape, any non-Tab keystroke, app excluded.
 - Guards: min preContext length, skip in password fields (`AXSecureTextField`), skip excluded apps.
 
-### 4. `CompletionOverlayWindow` — `UI/CompletionOverlayWindow.swift`
+### 4. `CompletionOverlayWindow` - `UI/CompletionOverlayWindow.swift`
 - `NSPanel`, `.nonactivatingPanel`, `ignoresMouseEvents = true`, `level = .statusBar`,
   `collectionBehavior` = canJoinAllSpaces + stationary. Borderless, transparent.
 - Draws the ghost suggestion (grey, matching approximate font size) at the caret rect; partial-accept
   word boundary subtly marked.
 - Positioned from `boundsForRange` screen coordinates; hides if bounds are `.zero`/offscreen.
 
-### 5. `TabInterceptor` — `Shortcuts/TabInterceptor.swift` (`CGEventTap`)
+### 5. `TabInterceptor` - `Shortcuts/TabInterceptor.swift` (`CGEventTap`)
 - A `CGEventTap` on `keyDown`. When a suggestion is visible:
   - **Tab** → swallow the event, insert the full suggestion via `AccessibilityBridge`, clear overlay.
   - **partial-accept shortcut** (default ⌘→ or Cotypist-style) → insert first word only, re-suggest.
@@ -99,11 +99,11 @@ Orchestrates the live loop. Owns suggestion state and the debounce.
 - Requires Accessibility permission (already requested by Parrot). Tap re-armed on disable/timeout.
 - *Safety:* the tap callback is minimal and never blocks; heavy work is dispatched off the tap.
 
-### 6. Insertion — reuse `AccessibilityBridge.replaceSelectedText` / value-set path
+### 6. Insertion - reuse `AccessibilityBridge.replaceSelectedText` / value-set path
 Insert at caret. Prefer `AXValue` insertion; fall back to the existing clipboard-paste path (with
 clipboard save/restore already implemented) for apps that reject direct insertion.
 
-### 7. Settings & per-app control — extend existing
+### 7. Settings & per-app control - extend existing
 - New `PreferencesStore` keys: `inlineCompletionEnabled` (default true), `maxCompletionLength` (4),
   `completionDebounceMs` (400), `partialAcceptShortcut`, `completionUserPrompt` (personalization
   string, like Cotypist's userPrompt).
@@ -153,11 +153,11 @@ A dev-only measurement harness logs the pipeline stages:
 - Latency harness produces stage timings (smoke test, not asserted thresholds in CI).
 
 ## Risks
-- **Ghost rendering fidelity** across apps (font/size/baseline) — overlay is approximate; acceptable,
+- **Ghost rendering fidelity** across apps (font/size/baseline) - overlay is approximate; acceptable,
   matches Cotypist's known limitation; per-app AX quirks documented as discovered.
 - **CGEventTap** is privileged and global; bugs could swallow keystrokes. Mitigate: only swallow Tab,
   only when a suggestion is visibly shown, with a hard kill-switch and auto-pass-through on any error.
-- **Per-app AX compatibility** (Electron, terminals) — some apps don't expose caret bounds; feature
+- **Per-app AX compatibility** (Electron, terminals) - some apps don't expose caret bounds; feature
   degrades to "no suggestion" there, never breaks typing.
 
 ## Build-order note

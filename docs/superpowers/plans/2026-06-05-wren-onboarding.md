@@ -26,21 +26,21 @@
 ## File Structure
 
 **New files:**
-- `Core/Completion/ToneSeeder.swift` — pure: turns onboarding input (phrase completions / pasted text) into seeded entries + a learned-count, and records style samples. No UI.
-- `Core/Completion/TonePhrases.swift` — pure: the curated, localized, case-spanning phrase set + rotation logic.
-- `Core/Completion/ToneTuneUpScheduler.swift` — pure: given last-run date + cadence + now, decides if a tune-up is due. Injectable clock.
-- `UI/OnboardingScaffold.swift` — shared chrome (footer bar, step dots, container) extracted from the current `OnboardingView`.
-- `UI/Onboarding/WrenOnboardingView.swift` — Wren root flow + its step subviews.
-- `UI/Onboarding/ModelDownloadCoordinator.swift` — `@Observable` background-download state.
-- `UI/TonePracticeView.swift` — reusable tone-capture UI (phrases + paste + upload), used by onboarding step 2 and the recurring tune-up.
+- `Core/Completion/ToneSeeder.swift` - pure: turns onboarding input (phrase completions / pasted text) into seeded entries + a learned-count, and records style samples. No UI.
+- `Core/Completion/TonePhrases.swift` - pure: the curated, localized, case-spanning phrase set + rotation logic.
+- `Core/Completion/ToneTuneUpScheduler.swift` - pure: given last-run date + cadence + now, decides if a tune-up is due. Injectable clock.
+- `UI/OnboardingScaffold.swift` - shared chrome (footer bar, step dots, container) extracted from the current `OnboardingView`.
+- `UI/Onboarding/WrenOnboardingView.swift` - Wren root flow + its step subviews.
+- `UI/Onboarding/ModelDownloadCoordinator.swift` - `@Observable` background-download state.
+- `UI/TonePracticeView.swift` - reusable tone-capture UI (phrases + paste + upload), used by onboarding step 2 and the recurring tune-up.
 
 **Modified files:**
-- `UI/OnboardingView.swift` — rename `OnboardingView` → `ParrotOnboardingView`; make `OnboardingController` mode-gated; per-mode completion key.
-- `App/AppDelegate.swift` — AppMode-aware status-item label/help (B1); wire the tune-up scheduler.
-- `Core/Completion/CompletionLearningStore.swift` — add `recordStyleSample(from:)` so onboarding text updates `StyleProfile`.
-- `Core/Completion/LlamaCompletionClient.swift` — thread `styleDescriptor` into the chat prompt (C2).
-- `Infra/PreferencesStore.swift` + `App/Constants.swift` — add `toneTuneUpCadence` setting + key.
-- `UI/CompletionTab.swift` — cadence picker UI.
+- `UI/OnboardingView.swift` - rename `OnboardingView` → `ParrotOnboardingView`; make `OnboardingController` mode-gated; per-mode completion key.
+- `App/AppDelegate.swift` - AppMode-aware status-item label/help (B1); wire the tune-up scheduler.
+- `Core/Completion/CompletionLearningStore.swift` - add `recordStyleSample(from:)` so onboarding text updates `StyleProfile`.
+- `Core/Completion/LlamaCompletionClient.swift` - thread `styleDescriptor` into the chat prompt (C2).
+- `Infra/PreferencesStore.swift` + `App/Constants.swift` - add `toneTuneUpCadence` setting + key.
+- `UI/CompletionTab.swift` - cadence picker UI.
 
 ---
 
@@ -131,7 +131,7 @@ final class OnboardingControllerTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter OnboardingControllerTests`
-Expected: FAIL — `completionKey(for:)` does not exist.
+Expected: FAIL - `completionKey(for:)` does not exist.
 
 - [ ] **Step 3: Rename the Parrot view and add gating**
 
@@ -404,7 +404,7 @@ Note: `CompletionLearningStore()` is constructible (the `init` is implicit; `sha
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter StyleSampleTests`
-Expected: FAIL — `recordStyleSample(from:)` does not exist.
+Expected: FAIL - `recordStyleSample(from:)` does not exist.
 
 - [ ] **Step 3: Implement**
 
@@ -497,7 +497,7 @@ final class ToneSeederTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter ToneSeederTests`
-Expected: FAIL — `ToneSeeder` undefined.
+Expected: FAIL - `ToneSeeder` undefined.
 
 - [ ] **Step 3: Implement**
 
@@ -618,7 +618,7 @@ final class TonePhrasesTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter TonePhrasesTests`
-Expected: FAIL — `TonePhrases` undefined.
+Expected: FAIL - `TonePhrases` undefined.
 
 - [ ] **Step 3: Implement**
 
@@ -726,7 +726,7 @@ final class ModelDownloadCoordinatorTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter ModelDownloadCoordinatorTests`
-Expected: FAIL — `ModelDownloadCoordinator` undefined.
+Expected: FAIL - `ModelDownloadCoordinator` undefined.
 
 - [ ] **Step 3: Implement**
 
@@ -802,7 +802,7 @@ git commit -m "feat(wren): ModelDownloadCoordinator background download state"
 **Files:**
 - Create: `UI/TonePracticeView.swift`
 
-UI task — no fragile snapshot test; logic is already covered by `ToneSeederTests`/`TonePhrasesTests`. Verify by build.
+UI task - no fragile snapshot test; logic is already covered by `ToneSeederTests`/`TonePhrasesTests`. Verify by build.
 
 - [ ] **Step 1: Implement the view**
 
@@ -919,12 +919,12 @@ git commit -m "feat(wren): reusable TonePracticeView (phrases + paste + upload)"
 
 ---
 
-## Task 9: WrenOnboardingView — full flow assembly
+## Task 9: WrenOnboardingView - full flow assembly
 
 **Files:**
 - Modify: `UI/Onboarding/WrenOnboardingView.swift` (replace the Task 2 stub)
 
-UI assembly — verify by build + manual run. Uses the scaffold, coordinator, and step subviews defined inline here.
+UI assembly - verify by build + manual run. Uses the scaffold, coordinator, and step subviews defined inline here.
 
 - [ ] **Step 1: Replace the stub with the full flow**
 
@@ -1235,7 +1235,7 @@ final class ToneTuneUpSchedulerTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter ToneTuneUpSchedulerTests`
-Expected: FAIL — undefined.
+Expected: FAIL - undefined.
 
 - [ ] **Step 3: Implement**
 
@@ -1312,7 +1312,7 @@ final class CadencePrefTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter CadencePrefTests`
-Expected: FAIL — keys/accessors undefined.
+Expected: FAIL - keys/accessors undefined.
 
 - [ ] **Step 3: Add the keys**
 
@@ -1362,7 +1362,7 @@ git commit -m "feat(completion): tone tune-up cadence + last-run preferences"
 **Files:**
 - Modify: `UI/CompletionTab.swift`
 
-UI — verify by build. Read the file first to match its section/row style; the snippet below is a self-contained `Section`/row that follows the SwiftUI `Form` idiom used there.
+UI - verify by build. Read the file first to match its section/row style; the snippet below is a self-contained `Section`/row that follows the SwiftUI `Form` idiom used there.
 
 - [ ] **Step 1: Add the picker**
 
@@ -1510,7 +1510,7 @@ git commit -m "chore(wren): gate no-model alert to post-onboarding"
 - O1 mode-gating → Tasks 2, 9. O2 Input Monitoring → Task 9 (step 1). O3 tone capture → Tasks 4–6, 8, 9. O4 background download → Tasks 7, 9. O5 live-demo/ready → Task 9 (ReadyStep). B1/B2 branding → Task 1. C2 prompt injection → Task 10. Recurring tune-up → Tasks 11–14. Scaffold extraction → Task 3. Optionality → Task 8 (Skip + optional sections). Curated case-spanning phrases → Task 6. Per-mode key → Task 2.
 - Edge cases: download fail → Task 9 ReadyStep `.failed`; Input Monitoring denied → Task 9 ReadyStep warning; already-installed model → Task 9 `prepareDownload` guard; skip → onComplete sets key; reopened idempotent → `seed` additive (existing) + coordinator no-restart (Task 7).
 
-**Type consistency:** `ModelDownloadCoordinator.Phase`, `.start(modelID:url:sha:)`, `ToneSeeder.learn(phraseCompletions:pastedText:store:)` / `.learn(fromFiles:store:)`, `ToneTuneUpCadence`, `TonePhrases.rotating(count:seed:)`, `OnboardingController.completionKey(for:)`, `CompletionLearningStore.recordStyleSample(from:)` — used consistently across tasks.
+**Type consistency:** `ModelDownloadCoordinator.Phase`, `.start(modelID:url:sha:)`, `ToneSeeder.learn(phraseCompletions:pastedText:store:)` / `.learn(fromFiles:store:)`, `ToneTuneUpCadence`, `TonePhrases.rotating(count:seed:)`, `OnboardingController.completionKey(for:)`, `CompletionLearningStore.recordStyleSample(from:)` - used consistently across tasks.
 
-**Open verification (flagged in-task, not placeholders):** PreferencesStore `string(_:fallback:)` / `set(_:for:)` signatures (Task 12 note); `CompletionTab` `prefs` reference + form idiom (Task 13 note); `kIOHIDAccessTypeGranted` constant name (used in `TabInterceptor.swift` — confirm exact spelling there). These are "match the existing code" checks, with the existing reference cited.
+**Open verification (flagged in-task, not placeholders):** PreferencesStore `string(_:fallback:)` / `set(_:for:)` signatures (Task 12 note); `CompletionTab` `prefs` reference + form idiom (Task 13 note); `kIOHIDAccessTypeGranted` constant name (used in `TabInterceptor.swift` - confirm exact spelling there). These are "match the existing code" checks, with the existing reference cited.
 </content>

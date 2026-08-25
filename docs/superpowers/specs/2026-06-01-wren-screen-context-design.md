@@ -1,4 +1,4 @@
-# Wren Screen Context — Design
+# Wren Screen Context - Design
 
 **Date:** 2026-06-01
 **Status:** Approved
@@ -6,7 +6,7 @@
 ## Goal
 
 Let Wren read the conversation / email / thread *above* the input field via on-device OCR, so
-completions fit the surrounding context — without the model re-reading its own output (the feedback
+completions fit the surrounding context - without the model re-reading its own output (the feedback
 loop that caused screen context to be disabled originally).
 
 ## Key idea: crop above the caret (anti-loop by construction)

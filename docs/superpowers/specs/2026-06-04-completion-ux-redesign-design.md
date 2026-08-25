@@ -1,7 +1,7 @@
-# Wren — Completion quality & responsiveness redesign
+# Wren - Completion quality & responsiveness redesign
 
 **Date:** 2026-06-04
-**Status:** Design — approved in brainstorming, pending written-spec review.
+**Status:** Design - approved in brainstorming, pending written-spec review.
 **Scope:** The inline-completion pipeline (helper generation + postprocessing + overlay + accept).
 Builds on the existing `HelperCompletionProvider` / `LlamaSession` / `CompletionController` /
 `CompletionPostprocessor` / `CompletionOverlayWindow` code already in `core/`.
@@ -11,15 +11,15 @@ Builds on the existing `HelperCompletionProvider` / `LlamaSession` / `Completion
 Running Wren with a local model, the user reported:
 
 1. **Incoherent / repeating suggestions.** Typing `1984 è un libro di ` suggested
-   `il 1984 è un libro di George Orwell` — the model **restated the sentence** then continued. The
+   `il 1984 è un libro di George Orwell` - the model **restated the sentence** then continued. The
    existing echo-strip only matches an *exact* prefix, so the restated-with-"il" case slips through.
 2. **Too slow / poor refresh rate.** Rapid `Tab` presses don't apply because the next suggestion
    isn't generated yet. The user wants it "quasi in tempo reale".
 3. **Wrong space** between typed text and the accepted suggestion (sometimes glued, sometimes double).
-4. **Language switching** (qwen drifts into Chinese). A blanket "reject CJK" is wrong — Wren must also
+4. **Language switching** (qwen drifts into Chinese). A blanket "reject CJK" is wrong - Wren must also
    serve Chinese users, so the filter must be *granular* (reject only unwanted language switches).
 5. **`_` / punctuation** shown instead of a word; occasional repetition of the last word.
-6. **Interruptions** — sometimes no suggestion appears.
+6. **Interruptions** - sometimes no suggestion appears.
 
 Root cause of most "empty/garbage" seen during testing was a **flawed manual test** (piping many
 requests at once triggered the helper's cross-process supersede, cancelling all but the last) plus the
@@ -36,23 +36,23 @@ coherent Italian + English. So the work here is **quality polish + responsivenes
 
 ## Non-goals (explicitly out of scope for this spec)
 
-- **Injected "preview" ghost text inside the host app's field** — rejected: cannot style foreign text,
+- **Injected "preview" ghost text inside the host app's field** - rejected: cannot style foreign text,
   removal on non-accept corrupts the field, fragile cross-app. We keep a floating overlay.
-- **Top-k / tree speculation over unknown future typing** — the not-accepted branch is an open input
+- **Top-k / tree speculation over unknown future typing** - the not-accepted branch is an open input
   space, not pre-computable as a single result. KV-cache warmth + mid-word mode cover the realistic
   gain. Revisit as v2 if needed.
-- **Chromium / AX-blind apps** — tracked separately; needs caret-bounds work.
+- **Chromium / AX-blind apps** - tracked separately; needs caret-bounds work.
 
 ---
 
-## A — Coherence / anti-repetition
+## A - Coherence / anti-repetition
 
 **Primary (deterministic, no latency):** fuzzy overlap strip in `CompletionPostprocessor`.
 
 - Normalize (lowercase, collapse runs of whitespace) both the **preContext tail** (last ~12 words) and
   the **suggestion**.
 - Find the longest suffix of the normalized preContext that occurs as a (near-)prefix of the
-  normalized suggestion — tolerating a small inserted leading token like "il". Cut the suggestion up
+  normalized suggestion - tolerating a small inserted leading token like "il". Cut the suggestion up
   to and including that overlap. `1984 è un libro di` + `il 1984 è un libro di George Orwell` →
   `George Orwell`.
 - If after stripping the remainder is empty → treat as "no useful suggestion" (see retry below).
@@ -60,21 +60,21 @@ coherent Italian + English. So the work here is **quality polish + responsivenes
 **Secondary (prevention):** keep the existing leading-meta / no-letter / repetition filters.
 
 **Fallback (rare, bounded):** the engine loop is `generate → clean/validate → show`. If after cleaning
-the result is empty/invalid, regenerate **at most once** (different seed). Never an unbounded loop —
+the result is empty/invalid, regenerate **at most once** (different seed). Never an unbounded loop -
 that would cost multiple inferences and break the latency goal.
 
 A prompt-level "don't repeat" instruction is **not** the primary mechanism (small models ignore it and
 it forces the slower instruct mode). The deterministic strip is the guarantee.
 
-## B — Responsiveness
+## B - Responsiveness
 
 ### B1. Mid-word vs word-boundary modal generation
 
-Decide generation length by the character before the caret (cheap, reliable — replaces the
+Decide generation length by the character before the caret (cheap, reliable - replaces the
 spell-check `isMidWord` heuristic for this purpose):
 
 - **Mid-word** (last char is a letter, no trailing space): generate **only the completion of the
-  current word** — few tokens, stop at the first space. Lightweight; matches "finish the word I'm on".
+  current word** - few tokens, stop at the first space. Lightweight; matches "finish the word I'm on".
 - **Word boundary** (last char is whitespace/punctuation): generate the **next word(s)/phrase** up to
   the word budget.
 
@@ -96,28 +96,28 @@ cache** keeps that path fast (only new characters are decoded).
 
 A shown suggestion stays valid for a short window (~300–500 ms) even if spurious AX
 value/selection-changed events fire, so rapid `Tab` doesn't lose it. (Word-by-word `Tab` already walks
-the same suggestion without re-generating — implemented.)
+the same suggestion without re-generating - implemented.)
 
-## C — Overlay rendering (kept floating, made better)
+## C - Overlay rendering (kept floating, made better)
 
 - **Font match:** read the focused field's font (family + size) via AX when available; render the ghost
   in the same font so it aligns with the text instead of looking like an external label. Fall back to
   the system font.
 - **Adaptive readability:** use a native blur material (`NSVisualEffectView`, e.g. `.hudWindow`) behind
-  the ghost so it reads on any background, light or dark — no Screen-Recording permission, no per-pixel
+  the ghost so it reads on any background, light or dark - no Screen-Recording permission, no per-pixel
   sampling. (Optional future: 1px background sampling for exact contrast.)
 - **Stable positioning:** anchor to the AX `caretRect`; reposition only when the suggestion text
   changes (no per-keystroke jitter).
 - **Atomic insert on accept:** insert the accepted text in one operation (AX `setValue`/paste-style)
-  with a char-by-char fallback for apps that don't support it — faster, cleaner than per-character.
+  with a char-by-char fallback for apps that don't support it - faster, cleaner than per-character.
 
 ### Style adaptation
 - **Now:** bias suggestions toward the user's voice using the existing `StyleProfiler` (learned from the
-  user's own history / accepted completions) — fast, private, no permission.
+  user's own history / accepted completions) - fast, private, no permission.
 - **Later (opt-in):** screen-context style learning (OCR the surrounding text per app, cached and
-  throttled — never per keystroke) behind a Screen-Recording opt-in.
+  throttled - never per keystroke) behind a Screen-Recording opt-in.
 
-## D — Granular language filter
+## D - Granular language filter
 
 - Detect the **dominant script** of the preContext (Latin / CJK / Cyrillic / …) via Unicode ranges.
 - Reject a suggestion only if it is **entirely** a *different* script than the context (e.g. Latin
@@ -162,14 +162,14 @@ Tab  → accept next word (walk S in memory, re-anchor)   ;  \ → accept full (
 - `CompletionPostprocessor` unit tests: fuzzy strip ("1984" case, "il"-prefixed restate), script-match
   reject (Latin vs CJK, mixed), repetition, spacing (mid-word/boundary/double-space).
 - `LlamaSession` mid-word vs phrase length (token budget + stop-at-space).
-- Manual: **one request at a time** (sequential) — never pipe many at once (triggers cross-process
+- Manual: **one request at a time** (sequential) - never pipe many at once (triggers cross-process
   supersede and mis-measures quality).
 
 ## Sequencing
 
-1. **A + D** (postprocessing: fuzzy strip, script match, logit-bias) — highest quality impact, low risk.
-2. **B1** (mid-word mode) — speed + relevance.
-3. **B2 + B3** (accepted-branch pre-compute + cache + TTL) — responsiveness.
-4. **C** (overlay font-match + blur + atomic insert) — native feel.
+1. **A + D** (postprocessing: fuzzy strip, script match, logit-bias) - highest quality impact, low risk.
+2. **B1** (mid-word mode) - speed + relevance.
+3. **B2 + B3** (accepted-branch pre-compute + cache + TTL) - responsiveness.
+4. **C** (overlay font-match + blur + atomic insert) - native feel.
 
 Each step independently testable and shippable.

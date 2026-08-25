@@ -4,7 +4,7 @@
 
 ### Hybrid Correction Engine
 - **RuleBasedEngine**: 13+ regole deterministiche per italiano (qual'è → qual è, un pò → un po', accenti, apostrofi, spaziatura multi-lingua)
-- **Harper CLI**: Integrazione per English — correzioni grammaticali istantanee senza LLM
+- **Harper CLI**: Integrazione per English - correzioni grammaticali istantanee senza LLM
 - **Pipeline ibrida**: RuleBased → Harper → LLM fallback. Correzioni istantanee quando possibile, AI quando serve
 - **Source badge**: ⚡ per regole deterministiche, 🤖 per LLM, 🔀 per ibrido
 

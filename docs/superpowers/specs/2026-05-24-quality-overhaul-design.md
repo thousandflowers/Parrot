@@ -1,4 +1,4 @@
-# Parrot — Quality Overhaul Design
+# Parrot - Quality Overhaul Design
 
 **Date:** 2026-05-24  
 **Goal:** Massima qualità correzione grammaticale per tutte le lingue, 100% offline, zero dati escono dalla macchina senza consenso esplicito.
@@ -122,7 +122,7 @@ actor LanguageToolEngine {
 }
 ```
 
-- Manages LT binary (commandline mode, not HTTP server — simpler for privacy)
+- Manages LT binary (commandline mode, not HTTP server - simpler for privacy)
 - Binary location: `Parrot.app/Contents/MacOS/languagetool` (GraalVM native) or JAR
 - Input via stdin, output via stdout (JSON)
 - Per-check subprocess spawn (simpler than daemon; ~200ms overhead acceptable)
@@ -234,26 +234,26 @@ Recommendation: Option A. Same pattern as model downloading (ModelManager alread
 
 ## Implementation Phases
 
-### Phase 1 — Immediate pipeline fixes (high impact, low risk)
+### Phase 1 - Immediate pipeline fixes (high impact, low risk)
 - Remove short-circuit (rules → always continue to LLM)
 - Remove language detection guard
 - Fix Apple Intelligence as priority backend
 - LLM JSON structured output
 - `NativeGrammarEngine` (NSSpellChecker.checkGrammar)
 
-### Phase 2 — CorrectionSpan data model
+### Phase 2 - CorrectionSpan data model
 - `CorrectionSpan` type
 - `SpanMerger`
 - All engines produce `[CorrectionSpan]`
 - Keep existing UI (full-text display from merged spans)
 
-### Phase 3 — LanguageTool integration
+### Phase 3 - LanguageTool integration
 - `LanguageToolEngine` actor
 - Download manager (reuse ModelManager pattern)
 - Language code mapping (25+ languages)
 - Integration into pipeline
 
-### Phase 4 — Span-based UI
+### Phase 4 - Span-based UI
 - `SpanSuggestionView`
 - Per-fix accept/reject
 - Keyboard navigation

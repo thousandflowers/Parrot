@@ -1,4 +1,4 @@
-# MLX Backend — Design Spec
+# MLX Backend - Design Spec
 
 Date: 2026-06-05
 Status: approved, ready for implementation plan
@@ -6,7 +6,7 @@ Scope: Add an on-device MLX inference backend (`MLXLLMService`) as a peer to the
 existing local (llama.cpp) / remote / ollama / openRouter / appleIntelligence
 backends, selectable in settings.
 
-> **Important constraint:** Inference cannot be verified headless in CI — it
+> **Important constraint:** Inference cannot be verified headless in CI - it
 > requires a Metal device and a multi-GB MLX model download. The implementation
 > session must build against the real MLXLLM API (slow Metal compiles) and the
 > user must smoke-test generation on-device. Only the plumbing (service type,
@@ -30,7 +30,7 @@ backends, so MLX is an additive backend, not a rewrite.
 - `LLMServiceFactory` (`Core/LLMServiceFactory.swift`): maps `ServiceType` → singleton service,
   resolves model id + fallback model id per type.
 - Shared helpers in `Core/LLMServiceExtension.swift`: `resolvedLanguage`, `resolveStyle()`,
-  `validateCorrection(original:corrected:isFluency:)` — used by every in-process service.
+  `validateCorrection(original:corrected:isFluency:)` - used by every in-process service.
 - `AppleIntelligenceService` (`Core/AppleIntelligenceService.swift`) is the closest
   template: an `actor` conforming to `LLMService` that builds prompts via `PromptEngine`,
   calls a `generate(_:)` primitive, and validates output.
@@ -44,7 +44,7 @@ backends, so MLX is an additive backend, not a rewrite.
 MLX core (`MLX`) only provides tensor ops; LLM generation + tokenizer + HF model
 download come from `MLXLLM`/`MLXLMCommon`. `LLMModelFactory` downloads the model
 from the HuggingFace Hub on first load with a progress callback, so Wren does not
-need to build a separate MLX download pipeline — model management reduces to
+need to build a separate MLX download pipeline - model management reduces to
 storing the selected repo id and surfacing load/download progress.
 
 ---
@@ -176,7 +176,7 @@ let output = try await container.perform { context in
 
 The exact symbol names (`UserInput`, `GenerateParameters`, `generate` signature,
 `container.perform`) MUST be confirmed against the resolved `MLXLMCommon` 1.18.2
-headers during implementation — the plan's first build step exists to surface and
+headers during implementation - the plan's first build step exists to surface and
 fix any API drift. Do not assume this snippet compiles verbatim.
 
 ---

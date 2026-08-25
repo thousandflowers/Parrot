@@ -14,10 +14,10 @@
 
 | File | Azione |
 |---|---|
-| `Infra/ModelManager.swift` | Modifica — aggiungi `sizeLabel` e `isOnboardingCandidate` a `ModelRecommendation`; semplifica `recommendedDefaultModel()` |
-| `Infra/ModelCatalog.swift` | Crea — catalogo statico e funzione `recommended(ramGB:language:)` |
-| `UI/OnboardingView.swift` | Modifica — aggiungi `availableModels` state, carica da catalogo, sostituisci testo statico con picker button |
-| `Tests/Tests.swift` | Modifica — aggiungi `ModelCatalogTests` |
+| `Infra/ModelManager.swift` | Modifica - aggiungi `sizeLabel` e `isOnboardingCandidate` a `ModelRecommendation`; semplifica `recommendedDefaultModel()` |
+| `Infra/ModelCatalog.swift` | Crea - catalogo statico e funzione `recommended(ramGB:language:)` |
+| `UI/OnboardingView.swift` | Modifica - aggiungi `availableModels` state, carica da catalogo, sostituisci testo statico con picker button |
+| `Tests/Tests.swift` | Modifica - aggiungi `ModelCatalogTests` |
 
 ---
 
@@ -55,7 +55,7 @@ final class ModelCatalogTests: XCTestCase {
 swift test --filter ModelCatalogTests 2>&1 | tail -20
 ```
 
-Atteso: errore di compilazione — `sizeLabel` e `isOnboardingCandidate` non esistono.
+Atteso: errore di compilazione - `sizeLabel` e `isOnboardingCandidate` non esistono.
 
 - [ ] **Step 3: Aggiungi i campi a `ModelRecommendation` in `Infra/ModelManager.swift`**
 
@@ -154,7 +154,7 @@ Aggiungi dentro `final class ModelCatalogTests` dopo il test esistente:
 swift test --filter ModelCatalogTests 2>&1 | tail -20
 ```
 
-Atteso: errore di compilazione — `ModelCatalog` non esiste.
+Atteso: errore di compilazione - `ModelCatalog` non esiste.
 
 - [ ] **Step 3: Crea `Infra/ModelCatalog.swift`**
 
@@ -250,7 +250,7 @@ func recommendedDefaultModel() -> ModelRecommendation? {
 }
 ```
 
-Rimuovi anche la funzione helper privata `makeRec` che era nidificata dentro `recommendedDefaultModel()` — viene eliminata insieme alla funzione originale.
+Rimuovi anche la funzione helper privata `makeRec` che era nidificata dentro `recommendedDefaultModel()` - viene eliminata insieme alla funzione originale.
 
 - [ ] **Step 2: Verifica che il build sia pulito**
 

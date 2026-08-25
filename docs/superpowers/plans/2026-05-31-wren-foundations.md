@@ -4,7 +4,7 @@
 
 **Goal:** Make Wren's inline completion work in every macOS app with a verifiable latency budget, no clipboard hacks, and no hardcoded bundle lists.
 
-**Architecture:** A `TextSurface` abstraction with three runtime-selected backends (NativeAX, ChromiumAX, Universal) chosen by a capability probe — never by app name. Pure helper units (LatencyTracer, SuggestionCache, TypedInputBuffer) are built and tested first, then the AX backends wrap the existing `AccessibilityBridge`, then `CompletionController` is rewired onto the abstraction with an adaptive-debounce + streaming latency pipeline and robustness invariants.
+**Architecture:** A `TextSurface` abstraction with three runtime-selected backends (NativeAX, ChromiumAX, Universal) chosen by a capability probe - never by app name. Pure helper units (LatencyTracer, SuggestionCache, TypedInputBuffer) are built and tested first, then the AX backends wrap the existing `AccessibilityBridge`, then `CompletionController` is rewired onto the abstraction with an adaptive-debounce + streaming latency pipeline and robustness invariants.
 
 **Tech Stack:** Swift 5.9+, SwiftPM, AppKit, ApplicationServices (AX API), CoreGraphics (CGEventTap), XCTest. Runs on macOS 14+.
 
@@ -17,23 +17,23 @@
 ## File Structure
 
 New files:
-- `Core/Completion/Surface/TextSurface.swift` — protocol + `SurfaceCapabilities` + `AXContext` value types
-- `Core/Completion/Surface/NativeAXSurface.swift` — AX Cocoa backend
-- `Core/Completion/Surface/ChromiumAXSurface.swift` — AXManualAccessibility flag + AX backend
-- `Core/Completion/Surface/UniversalSurface.swift` — typed-buffer + keystroke backend
-- `Core/Completion/Surface/SurfaceProbe.swift` — runtime backend selection
-- `Core/Completion/Surface/TypedInputBuffer.swift` — reconstructs context from typed keys
-- `Core/Completion/LatencyTracer.swift` — per-stage ms + p50/p95
-- `Core/Completion/SuggestionCache.swift` — in-memory LRU
-- `Tests/SurfaceTests/` — unit tests for the above
+- `Core/Completion/Surface/TextSurface.swift` - protocol + `SurfaceCapabilities` + `AXContext` value types
+- `Core/Completion/Surface/NativeAXSurface.swift` - AX Cocoa backend
+- `Core/Completion/Surface/ChromiumAXSurface.swift` - AXManualAccessibility flag + AX backend
+- `Core/Completion/Surface/UniversalSurface.swift` - typed-buffer + keystroke backend
+- `Core/Completion/Surface/SurfaceProbe.swift` - runtime backend selection
+- `Core/Completion/Surface/TypedInputBuffer.swift` - reconstructs context from typed keys
+- `Core/Completion/LatencyTracer.swift` - per-stage ms + p50/p95
+- `Core/Completion/SuggestionCache.swift` - in-memory LRU
+- `Tests/SurfaceTests/` - unit tests for the above
 
 Modified:
-- `Core/Completion/CompletionController.swift` — rewire onto `SurfaceProbe`, adaptive debounce, cache gate
-- `Accessibility/AccessibilityBridge.swift` — expose low-level AX read/insert used by the backends; add per-call timeout
-- `Shortcuts/TabInterceptor.swift` — feed typed keys to `TypedInputBuffer`
-- `Package.swift` — add the `SurfaceTests` test target if test targets are declared per-module
+- `Core/Completion/CompletionController.swift` - rewire onto `SurfaceProbe`, adaptive debounce, cache gate
+- `Accessibility/AccessibilityBridge.swift` - expose low-level AX read/insert used by the backends; add per-call timeout
+- `Shortcuts/TabInterceptor.swift` - feed typed keys to `TypedInputBuffer`
+- `Package.swift` - add the `SurfaceTests` test target if test targets are declared per-module
 
-> **Note for the implementer:** before writing tests, run `git grep -n "testTarget\|\.testTarget" Package.swift` and look at one existing file under `Tests/` to copy the project's exact XCTest import style and target layout. Match it. The test snippets below assume `import XCTest` and `@testable import <ModuleName>` — substitute the real module name.
+> **Note for the implementer:** before writing tests, run `git grep -n "testTarget\|\.testTarget" Package.swift` and look at one existing file under `Tests/` to copy the project's exact XCTest import style and target layout. Match it. The test snippets below assume `import XCTest` and `@testable import <ModuleName>` - substitute the real module name.
 
 ---
 
@@ -76,7 +76,7 @@ final class LatencyTracerTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter LatencyTracerTests`
-Expected: FAIL — `cannot find 'LatencyTracer' in scope`.
+Expected: FAIL - `cannot find 'LatencyTracer' in scope`.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -167,7 +167,7 @@ final class SuggestionCacheTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter SuggestionCacheTests`
-Expected: FAIL — `cannot find 'SuggestionCache' in scope`.
+Expected: FAIL - `cannot find 'SuggestionCache' in scope`.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -225,7 +225,7 @@ git commit -m "feat(completion): in-memory LRU SuggestionCache"
 ## Task 3: TypedInputBuffer
 
 Reconstructs the field's recent text from the keys the user types, for the `UniversalSurface`
-fallback. Pure logic — fed characters, produces a `pre` context string; reset on focus change
+fallback. Pure logic - fed characters, produces a `pre` context string; reset on focus change
 or navigation/edit keys.
 
 **Files:**
@@ -280,7 +280,7 @@ final class TypedInputBufferTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter TypedInputBufferTests`
-Expected: FAIL — `cannot find 'TypedInputBuffer' in scope`.
+Expected: FAIL - `cannot find 'TypedInputBuffer' in scope`.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -384,7 +384,7 @@ final class TextSurfaceContractTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter TextSurfaceContractTests`
-Expected: FAIL — `cannot find type 'TextSurface' in scope`.
+Expected: FAIL - `cannot find type 'TextSurface' in scope`.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -498,7 +498,7 @@ final class SurfaceProbeTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter SurfaceProbeTests`
-Expected: FAIL — `cannot find 'SurfaceProbe' in scope`.
+Expected: FAIL - `cannot find 'SurfaceProbe' in scope`.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -552,7 +552,7 @@ git commit -m "feat(completion): SurfaceProbe — capability-driven backend sele
 
 ---
 
-## Task 6: AccessibilityBridge — per-call AX timeout
+## Task 6: AccessibilityBridge - per-call AX timeout
 
 Add a timeout wrapper so a slow app can never hang the main actor; on expiry callers treat the
 field as AX-blind. This is the primitive the NativeAX/ChromiumAX backends rely on.
@@ -586,7 +586,7 @@ final class AXTimeoutTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter AXTimeoutTests`
-Expected: FAIL — `cannot find 'withAXTimeout' in scope`.
+Expected: FAIL - `cannot find 'withAXTimeout' in scope`.
 
 - [ ] **Step 3: Write minimal implementation** (add to `AccessibilityBridge.swift`, file scope)
 
@@ -680,7 +680,7 @@ final class NativeAXSurfaceTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter NativeAXSurfaceTests`
-Expected: FAIL — `cannot find 'NativeAXSurface' in scope`.
+Expected: FAIL - `cannot find 'NativeAXSurface' in scope`.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -777,7 +777,7 @@ final class ChromiumAXSurfaceTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter ChromiumAXSurfaceTests`
-Expected: FAIL — `cannot find 'ChromiumAXSurface' in scope`.
+Expected: FAIL - `cannot find 'ChromiumAXSurface' in scope`.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -898,7 +898,7 @@ final class UniversalSurfaceTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter UniversalSurfaceTests`
-Expected: FAIL — `cannot find 'UniversalSurface' in scope`.
+Expected: FAIL - `cannot find 'UniversalSurface' in scope`.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -961,15 +961,15 @@ git commit -m "feat(completion): UniversalSurface — typed-buffer read + keystr
 
 ---
 
-## Task 10: Production wiring — build the real SurfaceProbe
+## Task 10: Production wiring - build the real SurfaceProbe
 
 Assemble a `SurfaceProbe` whose factory closures are backed by the real `AccessibilityBridge`
 (behind `withAXTimeout`), the shared `TypedInputBuffer`, and `AppDetector.isChromium`. No new
-behavior is invented here — this connects tested units to AX. Verified by build + the existing
+behavior is invented here - this connects tested units to AX. Verified by build + the existing
 suite, plus one smoke test that the assembly returns a non-nil surface.
 
 **Files:**
-- Modify: `Accessibility/AppDetector.swift` (add `isChromium(bundleID:) -> Bool` if absent — by
+- Modify: `Accessibility/AppDetector.swift` (add `isChromium(bundleID:) -> Bool` if absent - by
   querying the running app's executable, not a hardcoded list; see note)
 - Create: `Core/Completion/Surface/SurfaceProbe+Live.swift`
 - Test: `Tests/SurfaceTests/SurfaceProbeLiveTests.swift`
@@ -998,7 +998,7 @@ final class SurfaceProbeLiveTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter SurfaceProbeLiveTests`
-Expected: FAIL — `type 'SurfaceProbe' has no member 'live'`.
+Expected: FAIL - `type 'SurfaceProbe' has no member 'live'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -1092,7 +1092,7 @@ final class AdaptiveDebounceTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter AdaptiveDebounceTests`
-Expected: FAIL — `cannot find 'AdaptiveDebounce' in scope`.
+Expected: FAIL - `cannot find 'AdaptiveDebounce' in scope`.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -1123,7 +1123,7 @@ struct AdaptiveDebounce {
 Run: `swift test --filter AdaptiveDebounceTests`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Wire into CompletionController (no new test — covered by integration)**
+- [ ] **Step 5: Wire into CompletionController (no new test - covered by integration)**
 
 In `CompletionController`, add `private var adaptive = AdaptiveDebounce()`, `private var lastKeystrokeAt = Date.distantPast`, `private let cache = SuggestionCache()`, `private let tracer = LatencyTracer()`. Replace the body of `textChanged()`:
 
@@ -1185,7 +1185,7 @@ deletes to a shared `TypedInputBuffer`, and reset it on focus/app change. This m
   `focusChanged()` from the focus observer)
 - Test: `Tests/SurfaceTests/TypedInputBufferTests.swift` (already covers the buffer; no AX test)
 
-- [ ] **Step 1: Add a shared buffer and wire the tap (no new unit test — buffer logic already tested)**
+- [ ] **Step 1: Add a shared buffer and wire the tap (no new unit test - buffer logic already tested)**
 
 In `CompletionController`: `let typedBuffer = TypedInputBuffer()`. In the focus-change observer (where `textChanged()` is triggered on focus switch), call `typedBuffer.focusChanged()`.
 
@@ -1223,7 +1223,7 @@ git commit -m "feat(completion): feed typed keys into TypedInputBuffer for unive
 
 ---
 
-## Task 13: Robustness — atomic insert verify + ghost cleanup
+## Task 13: Robustness - atomic insert verify + ghost cleanup
 
 Harden accept and dismissal per the spec's robustness section.
 
@@ -1254,7 +1254,7 @@ final class InsertVerifyTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter InsertVerifyTests`
-Expected: FAIL — `cannot find 'InsertVerifier' in scope`.
+Expected: FAIL - `cannot find 'InsertVerifier' in scope`.
 
 - [ ] **Step 3: Write minimal implementation** (add `InsertVerifier` enum, file scope in AccessibilityBridge.swift)
 
@@ -1278,7 +1278,7 @@ In `insertCompletion`, after the AX/keystroke insert, read the field once more a
 Run: `swift test --filter InsertVerifyTests`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Ghost cleanup on transitions (no new unit test — observer behavior)**
+- [ ] **Step 5: Ghost cleanup on transitions (no new unit test - observer behavior)**
 
 In `CompletionController`, ensure `dismiss()` is called from observers for: app deactivation
 (`NSWorkspace.didDeactivateApplicationNotification`), left-mouse-down and scroll (via the existing
@@ -1327,7 +1327,7 @@ final class CancelFlagTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter CancelFlagTests`
-Expected: FAIL — `cannot find 'CancelFlag' in scope`.
+Expected: FAIL - `cannot find 'CancelFlag' in scope`.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -1349,7 +1349,7 @@ final class CancelFlag: @unchecked Sendable {
 Run: `swift test --filter CancelFlagTests`
 Expected: PASS (2 tests).
 
-- [ ] **Step 5: Thread it through (no new unit test — wiring)**
+- [ ] **Step 5: Thread it through (no new unit test - wiring)**
 
 In `LlamaSession.complete(...)`, accept a `cancel: CancelFlag` parameter and add
 `if cancel.isCancelled { break }` at the top of the `for _ in 0..<maxTokens` loop. In
@@ -1470,7 +1470,7 @@ Step 3 are intentional scaffolding the same step's note replaces (factory signat
 **Type consistency:** `SurfaceContext`, `SurfaceCapabilities`, `NativeAXSurface.ReadResult`,
 `TextSurface`, `SurfaceProbe.select(pid:)`, `TypedInputBuffer`, `CancelFlag`, `AdaptiveDebounce`,
 `InsertVerifier`, `LatencyTracer.Stage` used consistently across tasks. One known refactor: Task 10
-changes `SurfaceProbe` factories from `() ->` to `(pid_t) ->` and updates Task 5's tests — called
+changes `SurfaceProbe` factories from `() ->` to `(pid_t) ->` and updates Task 5's tests - called
 out explicitly in Task 10 Step 3. ✅
 
 **Known integration assumptions to verify during execution** (not blockers):
@@ -1478,4 +1478,4 @@ out explicitly in Task 10 Step 3. ✅
   as `completionContext`. If only the async version exists, add a thin sync wrapper or make the
   probe async.
 - `CGEvent.unicodeString()` helper may need to be written (read `keyboardGetUnicodeString`).
-- Real module name for `@testable import` — confirm from `Package.swift` before Task 1.
+- Real module name for `@testable import` - confirm from `Package.swift` before Task 1.

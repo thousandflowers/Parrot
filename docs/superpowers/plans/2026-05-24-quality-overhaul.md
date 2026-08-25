@@ -1,8 +1,8 @@
-# Parrot Quality Overhaul — Implementation Plan
+# Parrot Quality Overhaul - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Massima qualità correzione grammaticale offline per tutte le lingue — 4 fasi: fix pipeline → span data model + NSSpellChecker + JSON LLM → LanguageTool → span UI.
+**Goal:** Massima qualità correzione grammaticale offline per tutte le lingue - 4 fasi: fix pipeline → span data model + NSSpellChecker + JSON LLM → LanguageTool → span UI.
 
 **Architecture:** Rule layers (NSSpellChecker + RuleBasedEngine + LanguageTool) produce `[CorrectionSpan]`, merged via `SpanMerger`. LLM (llama.cpp primary → Apple Intelligence fallback → Ollama → remote) outputs JSON corrections converted to spans. StyleProfiler learns user style from feedback. UI shows per-fix accept/reject. Browser URL detection for tone. Combined grammar+fluency mode.
 
@@ -31,7 +31,7 @@
 
 ---
 
-## PHASE 1 — Pipeline bug fixes (shippable alone)
+## PHASE 1 - Pipeline bug fixes (shippable alone)
 
 ### Task 1: Remove pipeline short-circuit
 
@@ -142,7 +142,7 @@ func testValidateCorrection_doesNotDiscardValidItalianCorrection() {
 ```bash
 cd ~/Desktop/RefineClone && swift test --filter testValidateCorrection_doesNotDiscardValidItalianCorrection
 ```
-Expected: **FAIL** — old guard may return `original` when language codes differ.
+Expected: **FAIL** - old guard may return `original` when language codes differ.
 
 - [ ] **Step 3: Remove the language detection guard**
 
@@ -268,7 +268,7 @@ cd ~/Desktop/RefineClone && git add Core/LLMServiceFactory.swift Tests/Tests.swi
 
 ---
 
-## PHASE 2 — CorrectionSpan model + NSSpellChecker + JSON LLM output
+## PHASE 2 - CorrectionSpan model + NSSpellChecker + JSON LLM output
 
 ### Task 4: CorrectionSpan data type
 
@@ -1034,7 +1034,7 @@ cd ~/Desktop/RefineClone && git add Core/TextCheckCoordinator.swift Tests/Tests.
 
 ---
 
-## PHASE 3 — LanguageTool integration
+## PHASE 3 - LanguageTool integration
 
 ### Task 9: LanguageTool installer
 
@@ -1330,7 +1330,7 @@ cd ~/Desktop/RefineClone && git add Core/TextCheckCoordinator.swift && git commi
 
 ---
 
-## PHASE 4 — Span-based UI (accept/reject per fix)
+## PHASE 4 - Span-based UI (accept/reject per fix)
 
 ### Task 12: SpanSuggestionView
 
@@ -1619,7 +1619,7 @@ cd ~/Desktop/RefineClone && git add UI/SpanSuggestionView.swift UI/SuggestionPan
 | LanguageToolEngine | Task 10 |
 | Wire LT into pipeline | Task 11 |
 | Span-based UI accept/reject | Task 12 |
-| Privacy: all processing local | All tasks — no external calls added |
+| Privacy: all processing local | All tasks - no external calls added |
 
 ### Type consistency check
 
@@ -1633,4 +1633,4 @@ cd ~/Desktop/RefineClone && git add UI/SpanSuggestionView.swift UI/SuggestionPan
 
 ### No placeholders
 
-Scanned — no TBD, TODO, or incomplete code blocks found.
+Scanned - no TBD, TODO, or incomplete code blocks found.

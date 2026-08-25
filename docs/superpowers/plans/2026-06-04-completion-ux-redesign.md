@@ -1,10 +1,10 @@
-# Completion Quality & Responsiveness — Implementation Plan
+# Completion Quality & Responsiveness - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make Wren's inline completion coherent (no restating), language-correct, fast (near real-time), and native-feeling — without changing the on-device model.
+**Goal:** Make Wren's inline completion coherent (no restating), language-correct, fast (near real-time), and native-feeling - without changing the on-device model.
 
-**Architecture:** Four independent, sequenced workstreams on the existing pipeline: (A) deterministic anti-repetition + (D) granular language filter in `CompletionPostprocessor`; (B1) mid-word vs phrase generation; (B2/B3) accepted-branch speculative pre-compute + activation TTL; (C) overlay font-match/blur + atomic insert. TDD for the pure postprocessing units; build + **sequential** helper tests for model/IO units (never pipe multiple requests at once — that triggers the helper's cross-process supersede).
+**Architecture:** Four independent, sequenced workstreams on the existing pipeline: (A) deterministic anti-repetition + (D) granular language filter in `CompletionPostprocessor`; (B1) mid-word vs phrase generation; (B2/B3) accepted-branch speculative pre-compute + activation TTL; (C) overlay font-match/blur + atomic insert. TDD for the pure postprocessing units; build + **sequential** helper tests for model/IO units (never pipe multiple requests at once - that triggers the helper's cross-process supersede).
 
 **Tech Stack:** Swift 5.10, SwiftPM (`swift test` → `ParrotTests`), llama.cpp via `CLlama`, AppKit (NSPanel/NSVisualEffectView), Accessibility (AXUIElement).
 
@@ -14,7 +14,7 @@
 
 ---
 
-## Phase A+D — Postprocessing (coherence + language). Pure, full TDD.
+## Phase A+D - Postprocessing (coherence + language). Pure, full TDD.
 
 ### Task 1: Fuzzy overlap strip (anti-repetition)
 
@@ -279,7 +279,7 @@ git commit -m "feat(completion): bounded single retry when a suggestion cleans t
 
 ---
 
-## Phase B1 — Mid-word vs phrase generation
+## Phase B1 - Mid-word vs phrase generation
 
 ### Task 4: Choose generation mode by last char + cap tokens mid-word
 
@@ -351,7 +351,7 @@ git commit -m "feat(completion): mid-word mode (finish the word, lighter compute
 
 ---
 
-## Phase D-prevention — Language logit-bias in the helper
+## Phase D-prevention - Language logit-bias in the helper
 
 ### Task 5: Bias against CJK tokens when context is Latin
 
@@ -417,7 +417,7 @@ dist sampler:
             }
         }
 ```
-(The `cjkBias` build scans the vocab once on first use, then is reused — negligible cost.)
+(The `cjkBias` build scans the vocab once on first use, then is reused - negligible cost.)
 
 - [ ] **Step 4: Build + sequential test**
 
@@ -434,7 +434,7 @@ git commit -m "feat(completion): logit-bias against CJK when the context is Lati
 
 ---
 
-## Phase B2/B3 — Speculative pre-compute + activation TTL
+## Phase B2/B3 - Speculative pre-compute + activation TTL
 
 ### Task 6: Accepted-branch pre-compute into the cache
 
@@ -481,8 +481,8 @@ pre-compute of the accepted branch (guard against recursion with a flag):
             }
         }
 ```
-Add `suggestForPrefetch` to `CompletionEngine` (a variant of `suggest` that does NOT bump `generation`
-— so it never cancels a live user request):
+Add `suggestForPrefetch` to `CompletionEngine` (a variant of `suggest` that does NOT bump `generation` -
+so it never cancels a live user request):
 ```swift
     func suggestForPrefetch(context: CompletionContext, maxWords: Int, allowCode: Bool) async -> CompletionSuggestion? {
         guard context.isUsable else { return nil }
@@ -496,7 +496,7 @@ Add `suggestForPrefetch` to `CompletionEngine` (a variant of `suggest` that does
 - [ ] **Step 4: Build + manual check**
 
 Run: `./build-wren.sh debug`, install/launch. Type a phrase, accept the whole suggestion with `\`,
-keep accepting — the next suggestion should appear with no visible wait (served from cache).
+keep accepting - the next suggestion should appear with no visible wait (served from cache).
 
 - [ ] **Step 5: Commit**
 
@@ -514,7 +514,7 @@ git commit -m "feat(completion): speculative accepted-branch pre-compute into ca
 
 Add a stored `private var shownAt = Date.distantPast` set right after `overlay.show(...)`. In
 `textChanged()`, if a suggestion is currently shown AND `Date().timeIntervalSince(shownAt) < 0.4`,
-do **not** clear/hide it (skip the dim/clear) — only reset the debounce. This keeps a just-shown
+do **not** clear/hide it (skip the dim/clear) - only reset the debounce. This keeps a just-shown
 suggestion alive for ~400 ms so a rapid `Tab` (or a spurious AXSelectedTextChanged) doesn't lose it.
 
 ```swift
@@ -537,7 +537,7 @@ suggestion alive for ~400 ms so a rapid `Tab` (or a spurious AXSelectedTextChang
 - [ ] **Step 2: Build + manual check**
 
 Run: `./build-wren.sh debug`, install/launch. Type a phrase, pause for the suggestion, then press
-`Tab` quickly several times — words should apply without the suggestion vanishing.
+`Tab` quickly several times - words should apply without the suggestion vanishing.
 
 - [ ] **Step 3: Commit**
 
@@ -548,7 +548,7 @@ git commit -m "feat(completion): ~400ms activation TTL so rapid Tab never loses 
 
 ---
 
-## Phase C — Overlay rendering + atomic insert
+## Phase C - Overlay rendering + atomic insert
 
 ### Task 8: Match the field font + native blur backdrop
 
@@ -610,7 +610,7 @@ Change `show` to take `fontName: String?, fontSize: CGFloat` and build `baseFont
         let baseFont = (fontName.flatMap { NSFont(name: $0, size: size) }) ?? NSFont.systemFont(ofSize: size)
 ```
 Update the call site in `CompletionController` to pass `ax.fontName, ax.fontSize`. Keep light text
-(white at 0.72/0.98) — it reads on the blur.
+(white at 0.72/0.98) - it reads on the blur.
 
 - [ ] **Step 3: Build + manual check**
 
@@ -658,7 +658,7 @@ present rather than the inline save/restore above.
 
 - [ ] **Step 2: Build + manual check**
 
-Run: `./build-wren.sh debug`, install/launch. Accept a multi-word suggestion with `\` — it should
+Run: `./build-wren.sh debug`, install/launch. Accept a multi-word suggestion with `\` - it should
 appear in one step (not typed letter-by-letter), and the clipboard should be unchanged afterward.
 
 - [ ] **Step 3: Commit**
@@ -670,7 +670,7 @@ git commit -m "feat(completion): atomic paste-based insert on accept (clipboard 
 
 ---
 
-## Appendix — build / run / sequential test commands
+## Appendix - build / run / sequential test commands
 
 **Build + install + launch the debug app:**
 ```bash
@@ -681,7 +681,7 @@ open /Applications/Wren.app
 ```
 DIAG logs (debug build): `~/Library/Logs/Parrot/debug.log`.
 
-**Sequential helper test (NEVER pipe many requests at once — that triggers cross-process supersede and
+**Sequential helper test (NEVER pipe many requests at once - that triggers cross-process supersede and
 mis-measures quality). One request, wait, next:**
 ```bash
 H=".build/arm64-apple-macosx/debug/ParrotCompletionHelper"
@@ -694,4 +694,4 @@ M="$HOME/Library/Application Support/Parrot/Models/qwen2.5-1.5b-instruct-q4_k_m.
 - Manual-test tasks (4,5,6,7,8,9) touch the model/UI and can't be pure-unit-tested; each has an exact
   build+observe step. Pure logic (1,2,3) is TDD.
 - `SuggestionCache` get/set signatures (Task 6) must be confirmed against the real file before writing
-  the test — noted in Step 2.
+  the test - noted in Step 2.

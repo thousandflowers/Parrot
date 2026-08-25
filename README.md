@@ -1,6 +1,6 @@
 # Parrot
 
-> ⚠️ Beta (v0.9.0-beta1) — usable, but expect rough edges.
+> ⚠️ Beta (v0.9.0-beta1) - usable, but expect rough edges.
 
 [![CI](https://github.com/thousandflowers/Parrot/actions/workflows/ci.yml/badge.svg)](https://github.com/thousandflowers/Parrot/actions) [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)](https://github.com/thousandflowers/Parrot) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Sponsor](https://img.shields.io/github/sponsors/thousandflowers?label=Sponsor)](https://github.com/sponsors/thousandflowers)
 
@@ -12,9 +12,9 @@
 
 Two reasons.
 
-My girlfriend is Chinese. She writes in Italian every day — emails, messages, university assignments. She knows what she wants to say; she just needs something to catch the grammar before she sends it. Every tool she tried either required an account, sent her text to a server she didn't choose, or simply didn't work in the app she was already using.
+My girlfriend is Chinese. She writes in Italian every day - emails, messages, university assignments. She knows what she wants to say; she just needs something to catch the grammar before she sends it. Every tool she tried either required an account, sent her text to a server she didn't choose, or simply didn't work in the app she was already using.
 
-I have dyslexia. Verb tenses, agreement, the small things that are supposed to be automatic — they're not, for me. I needed a correction layer that works everywhere I write: terminal, Xcode, a chat window, a commit message.
+I have dyslexia. Verb tenses, agreement, the small things that are supposed to be automatic - they're not, for me. I needed a correction layer that works everywhere I write: terminal, Xcode, a chat window, a commit message.
 
 We needed the same thing: something quiet, offline, that works in whatever app is already open, and disappears the moment you're done. Nothing we found did all of that. So I built it.
 
@@ -26,7 +26,7 @@ We needed the same thing: something quiet, offline, that works in whatever app i
 
 **First launch on macOS:** if you see "unidentified developer", right-click → Open. A notarized build is in progress.
 
-1. Launch Parrot — a small ✓ appears in your menu bar
+1. Launch Parrot - a small ✓ appears in your menu bar
 2. Grant Accessibility access when prompted (System Settings → Privacy & Security → Accessibility)
 3. Open Settings → Models → download `qwen2.5-1.5b` (~1 GB, fast on M1+)
 4. Open Notes, type `"i writed this yesterday"`, select it, press ⌘⇧E
@@ -37,7 +37,7 @@ Want inline autocomplete instead? Check out the sibling app: [Wren](https://gith
 
 ## How it works
 
-Parrot is a hybrid correction engine with 4 layers — fastest first, LLM only when needed:
+Parrot is a hybrid correction engine with 4 layers - fastest first, LLM only when needed:
 
 | Layer | What it does | Speed |
 |---|---|:---:|
@@ -84,23 +84,23 @@ No clipboard. No context switch. No copy-paste.
 
 ## Features
 
-**Correction modes** — Grammar, Fluency, Grammar+Fluency, Translate, Writing Coach, De-Slop (strips AI filler), AI Prompt Optimizer, and fully custom prompts. Bind any mode to a keyboard shortcut.
+**Correction modes** - Grammar, Fluency, Grammar+Fluency, Translate, Writing Coach, De-Slop (strips AI filler), AI Prompt Optimizer, and fully custom prompts. Bind any mode to a keyboard shortcut.
 
-**Span-based diff panel** — Accept or reject individual corrections instead of the whole suggestion. Each span shows a source badge (⚡ rule · 🔤 LanguageTool · 📖 Harper · 🤖 LLM) and an inline reason.
+**Span-based diff panel** - Accept or reject individual corrections instead of the whole suggestion. Each span shows a source badge (⚡ rule · 🔤 LanguageTool · 📖 Harper · 🤖 LLM) and an inline reason.
 
-**StyleProfiler** — Detects your writing style and tone from a URL or pasted text, then adapts suggestions to match it.
+**StyleProfiler** - Detects your writing style and tone from a URL or pasted text, then adapts suggestions to match it.
 
-**Learns your style — offline.** Every rejected correction is logged locally. After enough rejections it detects patterns and injects them as style notes into future prompts. No model retraining. No data leaves your Mac.
+**Learns your style - offline.** Every rejected correction is logged locally. After enough rejections it detects patterns and injects them as style notes into future prompts. No model retraining. No data leaves your Mac.
 
-**Smart Expand** — Turns draft notes and short email stubs into full messages. Learns contact names from macOS Contacts.
+**Smart Expand** - Turns draft notes and short email stubs into full messages. Learns contact names from macOS Contacts.
 
-**Inline annotations** — Real-time underlines as you pause typing, without triggering a shortcut. Hover to see the suggestion and apply with one click.
+**Inline annotations** - Real-time underlines as you pause typing, without triggering a shortcut. Hover to see the suggestion and apply with one click.
 
-**Flows** — Chain multiple steps into a single action: grammar → simplify → translate to French. Save and trigger with a shortcut.
+**Flows** - Chain multiple steps into a single action: grammar → simplify → translate to French. Save and trigger with a shortcut.
 
-**Knowledge Base** — Store style guides, glossaries, brand voice examples. Parrot finds the most relevant entries and injects them as context into LLM prompts.
+**Knowledge Base** - Store style guides, glossaries, brand voice examples. Parrot finds the most relevant entries and injects them as context into LLM prompts.
 
-**Per-app rules** — Different prompt, backend, or language per app, by bundle ID.
+**Per-app rules** - Different prompt, backend, or language per app, by bundle ID.
 
 ---
 
@@ -141,7 +141,7 @@ Current release: **v0.9.3 beta**
 
 ## Architecture
 
-Swift/SwiftUI with actor-based shared state (zero data races by construction). AI inference runs via a bundled `llama-server` subprocess — no Ollama dependency, no always-on daemon, no port conflicts. Text is read and written via `AXUIElement` APIs directly into the focused UI element.
+Swift/SwiftUI with actor-based shared state (zero data races by construction). AI inference runs via a bundled `llama-server` subprocess - no Ollama dependency, no always-on daemon, no port conflicts. Text is read and written via `AXUIElement` APIs directly into the focused UI element.
 
 See [`docs/architecture.md`](docs/architecture.md) for module structure, the macOS 26 constraint-loop fix, and design decisions.
 
@@ -172,4 +172,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).

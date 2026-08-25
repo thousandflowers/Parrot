@@ -6,7 +6,7 @@
 
 **Architecture:** New `actor MLXLLMService: LLMService` modeled on `AppleIntelligenceService`, loading a cached `ModelContainer` via `MLXLLM`/`MLXLMCommon` (HF Hub download on first use). All MLX calls are isolated inside `generate`; routing/prefs/prompts stay testable. `ServiceType.mlx` threads through factory, settings, and request queue.
 
-**Tech Stack:** Swift, `mlx-swift-examples` (MLXLLM, MLXLMCommon) → mlx-swift + swift-transformers. Build: `swift build` (slow — Metal kernels). Test: `swift test`. Run all commands from `core/`.
+**Tech Stack:** Swift, `mlx-swift-examples` (MLXLLM, MLXLMCommon) → mlx-swift + swift-transformers. Build: `swift build` (slow - Metal kernels). Test: `swift test`. Run all commands from `core/`.
 
 > **Reality check (from spec):** Inference needs a Metal device + multi-GB model
 > download. CI cannot verify generation. Tasks 1, 4 are unit-testable; Tasks 2, 3 are
@@ -17,17 +17,17 @@
 ## File Structure
 
 New:
-- `Core/MLXLLMService.swift` — the backend.
-- `Tests/MLXBackendTests.swift` — plumbing tests (enum, factory, prefs).
+- `Core/MLXLLMService.swift` - the backend.
+- `Tests/MLXBackendTests.swift` - plumbing tests (enum, factory, prefs).
 
 Modified:
-- `Package.swift` — dependency + target products.
-- `Core/LLMService.swift` — `ServiceType.mlx`.
-- `Core/LLMServiceFactory.swift` — make / resolveModelID / resolveFallbackModelID.
-- `Core/RequestQueue.swift` — model-id key switch.
-- `App/Constants.swift` — `mlxModelID`, `fallbackMlxModelID`.
-- `Infra/PreferencesStore.swift` — `mlxModel`.
-- `UI/MenuBarView.swift`, `UI/ServiceStep.swift` — engine picker label/icon + model field.
+- `Package.swift` - dependency + target products.
+- `Core/LLMService.swift` - `ServiceType.mlx`.
+- `Core/LLMServiceFactory.swift` - make / resolveModelID / resolveFallbackModelID.
+- `Core/RequestQueue.swift` - model-id key switch.
+- `App/Constants.swift` - `mlxModelID`, `fallbackMlxModelID`.
+- `Infra/PreferencesStore.swift` - `mlxModel`.
+- `UI/MenuBarView.swift`, `UI/ServiceStep.swift` - engine picker label/icon + model field.
 
 ---
 
@@ -72,7 +72,7 @@ final class MLXBackendTests: XCTestCase {
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `swift test --filter MLXBackendTests`
-Expected: FAIL — `.mlx` not a member / `mlxModelID` not found.
+Expected: FAIL - `.mlx` not a member / `mlxModelID` not found.
 
 - [ ] **Step 3: Add the enum case**
 
@@ -117,7 +117,7 @@ In `Infra/PreferencesStore.swift`, near the other model prefs:
 
 In `Core/LLMServiceFactory.swift`:
 
-`make(with:)` — add (temporary stub routing; real service in Task 3):
+`make(with:)` - add (temporary stub routing; real service in Task 3):
 ```swift
         case .mlx:
             // Real MLXLLMService wired in Task 3 once the dependency is added.
@@ -125,14 +125,14 @@ In `Core/LLMServiceFactory.swift`:
             return StubLLMService.shared
 ```
 
-`resolveModelID(for:)` — add:
+`resolveModelID(for:)` - add:
 ```swift
         case .mlx:
             return UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.mlxModelID)
                 ?? "mlx-community/Qwen2.5-1.5B-Instruct-4bit"
 ```
 
-`resolveFallbackModelID(for:)` — add to the switch:
+`resolveFallbackModelID(for:)` - add to the switch:
 ```swift
         case .mlx:     key = Constants.UserDefaultsKey.fallbackMlxModelID
 ```
@@ -196,7 +196,7 @@ In the `Parrot` `.executableTarget` `dependencies` array, add:
                 .product(name: "MLXLMCommon", package: "mlx-swift-examples"),
 ```
 
-- [ ] **Step 3: Resolve + build (slow — Metal kernels)**
+- [ ] **Step 3: Resolve + build (slow - Metal kernels)**
 
 Run: `swift package resolve`
 Expected: resolves mlx-swift-examples ~1.18.2, mlx-swift, swift-transformers.
@@ -224,7 +224,7 @@ The backend. MLX calls isolated here. Build-verified; generation is on-device sm
 - [ ] **Step 1: Write the service**
 
 Create `Core/MLXLLMService.swift`. Model it on `AppleIntelligenceService`. The MLX
-generation block is version-sensitive — Step 2 is a compile-and-fix pass to reconcile
+generation block is version-sensitive - Step 2 is a compile-and-fix pass to reconcile
 with the resolved `MLXLMCommon` API.
 
 ```swift
@@ -347,7 +347,7 @@ Expected: it MAY fail on the generation block (symbol/signature drift in
 `generateResult.output`). Fix against the resolved headers:
 `grep -r "func generate" ~/.../checkouts/mlx-swift-examples/Libraries/MLXLMCommon`
 and the `UserInput` / `ModelContext` definitions. Iterate until `Build complete!`.
-Keep all fixes inside `generate`/`loadContainerIfNeeded` — do not change the public surface.
+Keep all fixes inside `generate`/`loadContainerIfNeeded` - do not change the public surface.
 
 - [ ] **Step 3: Wire the factory to the real service**
 
@@ -409,7 +409,7 @@ git commit -m "feat(mlx): MLX model-id field in engine settings"
 Run: `swift test` → Expected: all pass, 0 failures.
 Run: `swift build` → Expected: `Build complete!`
 
-- [ ] **Step 2: On-device smoke test (user — record results)**
+- [ ] **Step 2: On-device smoke test (user - record results)**
 
 On an Apple Silicon Mac, launch the app:
 - Settings → engine → MLX; set model id to `mlx-community/Qwen2.5-1.5B-Instruct-4bit`.

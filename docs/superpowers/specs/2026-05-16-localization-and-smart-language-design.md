@@ -1,11 +1,11 @@
-# Localization & Smart Correction Language — Design Spec
+# Localization & Smart Correction Language - Design Spec
 
 ## Scope
 
 Two independent but related features delivered together:
 
-1. **UI Localization** — l'interfaccia dell'app segue la lingua di sistema del Mac
-2. **Smart Correction Language** — la lingua usata per correggere/tradurre il testo viene rilevata automaticamente dal testo selezionato, con override manuale
+1. **UI Localization** - l'interfaccia dell'app segue la lingua di sistema del Mac
+2. **Smart Correction Language** - la lingua usata per correggere/tradurre il testo viene rilevata automaticamente dal testo selezionato, con override manuale
 
 ---
 
@@ -45,8 +45,8 @@ Text(String(localized: "onboarding.welcome.title"))
 **Scope delle stringhe**: solo stringhe UI visibili all'utente. Escluse:
 - Stringhe nei test (`Tests/Tests.swift`)
 - Chiavi UserDefaults e identificatori interni
-- Testo nei prompt LLM (`PromptEngine.swift`) — quelli sono prompt tecnici, non UI
-- Descrizioni delle regole grammaticali in `RuleBasedEngine.swift` — queste sono contenuto, non UI
+- Testo nei prompt LLM (`PromptEngine.swift`) - quelli sono prompt tecnici, non UI
+- Descrizioni delle regole grammaticali in `RuleBasedEngine.swift` - queste sono contenuto, non UI
 
 ### File da modificare (UI strings)
 | File | Stringhe UI da localizzare |
@@ -123,7 +123,7 @@ return "auto"
 Le funzionalità di correzione (grammatica, fluidità) devono funzionare per qualsiasi lingua. Le regole semplici e universali si applicano a tutti i testi indipendentemente dalla lingua; le regole specifiche (italiano, inglese) si applicano solo quando la lingua è quella.
 
 ### Stato attuale
-`GrammarRule` ha `languages: Set<String>`. La doppio-spazio rule è taggata `["it", "en", "es", "fr", "de", "pt"]` — non si applica a cinese, danese, greco, croato ecc.
+`GrammarRule` ha `languages: Set<String>`. La doppio-spazio rule è taggata `["it", "en", "es", "fr", "de", "pt"]` - non si applica a cinese, danese, greco, croato ecc.
 
 ### Modifica: flag `isUniversal`
 
@@ -145,8 +145,8 @@ for (rule, regex) in compiledRules where rule.isUniversal || rule.languages.cont
 - `trailing-space` (spazio finale di riga)
 
 ### Regole che restano language-specific
-- Tutte le regole italiane (`it-qual-e`, `it-un-po`, ecc.) — `languages: ["it"]`, `isUniversal: false`
-- Regole inglesi (`en-their-theyre`, ecc.) — `languages: ["en"]`, `isUniversal: false`
+- Tutte le regole italiane (`it-qual-e`, `it-un-po`, ecc.) - `languages: ["it"]`, `isUniversal: false`
+- Regole inglesi (`en-their-theyre`, ecc.) - `languages: ["en"]`, `isUniversal: false`
 
 ### Pipeline completa per qualsiasi lingua
 ```
@@ -162,7 +162,7 @@ Il LLM gestisce grammatica e fluidità per qualsiasi lingua. Le regole sono solo
 ---
 
 ## Invarianti
-- `PromptEngine.swift` non cambia — riceve sempre una stringa lingua risolta, non sa nulla di "auto"
-- I test esistenti non cambiano — testano con lingue fisse
+- `PromptEngine.swift` non cambia - riceve sempre una stringa lingua risolta, non sa nulla di "auto"
+- I test esistenti non cambiano - testano con lingue fisse
 - Il picker manuale in Preferenze rimane completo (90+ lingue)
 - L'accessibilità AX e il rilevamento dell'app frontale non sono coinvolti

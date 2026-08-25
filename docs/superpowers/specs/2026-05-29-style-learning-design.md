@@ -1,4 +1,4 @@
-# Style Learning — Design Spec
+# Style Learning - Design Spec
 
 **Date:** 2026-05-29
 **Status:** Approved design, pre-implementation
@@ -14,7 +14,7 @@ via pasted samples or bulk text import. Imported facts (names/info) keep using t
 
 ### Non-goals
 - No cloud/network. Everything is on-device.
-- No style applied to **grammar** correction — grammar stays minimal-edit to avoid the
+- No style applied to **grammar** correction - grammar stays minimal-edit to avoid the
   over-correction problem already fixed for small models. Style applies to fluency / expand /
   combined rewrites only.
 - No LLM-generated style summaries. Features are deterministic; exemplars are verbatim user text.
@@ -26,7 +26,7 @@ via pasted samples or bulk text import. Imported facts (names/info) keep using t
 | Learning sources | Passive (accepted/written text) + explicit samples + bulk import |
 | Representation | Deterministic statistical features **+** 2–3 representative exemplars |
 | Recipient segmentation | Hierarchy: **contact → register → language** (fallback up the chain) |
-| Where style is applied | Fluency / Expand / Combined rewrites only — **never grammar** |
+| Where style is applied | Fluency / Expand / Combined rewrites only - **never grammar** |
 | Control & privacy | Auto-on, on-device, with a Settings tab to inspect / edit / reset / add samples / import |
 
 ## Data Model
@@ -71,27 +71,27 @@ Map to `StyleRegister`: `academic`/`technical`/`formal → .formal`, `informal �
 
 ## Components (isolated units)
 
-### 1. Models — `Core/Style/StyleModels.swift`
+### 1. Models - `Core/Style/StyleModels.swift`
 `StyleRecipient`, `StyleRegister`, `StyleScope`, `StyleFeatures`, `StyleProfile`. Pure value types.
 - *Does:* define the vocabulary of the feature.
 - *Depends on:* Foundation only.
 
-### 2. `StyleAnalyzer` — `Core/Style/StyleAnalyzer.swift` (enum, pure functions)
+### 2. `StyleAnalyzer` - `Core/Style/StyleAnalyzer.swift` (enum, pure functions)
 - `features(for text: String, language: String) -> StyleFeatures`
 - `register(for text: String, language: String) -> StyleRegister` (wraps `ToneDetector`)
-- `detectGreeting(...)`, `detectClosing(...)` — first/last line pattern match against a small
+- `detectGreeting(...)`, `detectClosing(...)` - first/last line pattern match against a small
   per-language opener/closer list (e.g. it: "Ciao", "Gentile", "Salve"; "Cordiali saluti", "A presto").
 - *Reuses:* `Lexicon` (informalWords, contractions, computeWordScores), `ToneDetector`, `LanguageFamily`.
 - *Depends on:* Models, Lexicon, ToneDetector. No state, no I/O.
 
-### 3. `StyleLearningStore` — `Infra/StyleLearningStore.swift` (actor)
+### 3. `StyleLearningStore` - `Infra/StyleLearningStore.swift` (actor)
 Persisted JSON at `Application Support/Parrot/style_profiles.json`.
-- `observe(text:language:recipient:) async` — skip if `< 3` words. Compute features via
+- `observe(text:language:recipient:) async` - skip if `< 3` words. Compute features via
   `StyleAnalyzer`, merge into the scope's profile with a **sample-count-weighted running average**
   (`new = (old*n + sample) / (n+1)`), merge greeting/closing counts, update exemplar reservoir,
   bump `sampleCount`, set `updatedAt`.
-- `importSamples(texts:[String], language:recipient:) async` — calls `observe` per text.
-- `profile(language:recipient:) async -> StyleProfile?` — resolves with fallback:
+- `importSamples(texts:[String], language:recipient:) async` - calls `observe` per text.
+- `profile(language:recipient:) async -> StyleProfile?` - resolves with fallback:
   `contact → register(of current text) → general`. Returns the first scope that has
   `sampleCount >= minSamplesForUse` (default 3); else nil.
 - UI surface: `allProfiles() -> [StyleProfile]`, `update(_:)`, `reset(scopeKey:)`, `deleteAll()`.
@@ -102,31 +102,31 @@ Keep ≤3 per profile. On `observe`, if the text length is in `20..300` chars, a
 replace the exemplar whose features are **farthest** from the updated profile centroid (keep the
 3 most representative). Deterministic, no randomness.
 
-### 4. `StyleHintBuilder` — `Core/Style/StyleHintBuilder.swift` (enum, pure)
+### 4. `StyleHintBuilder` - `Core/Style/StyleHintBuilder.swift` (enum, pure)
 `build(from profile: StyleProfile) -> (summary: String, examples: [String])`
 - `summary`: one line, e.g.
   `"User style: informal, short sentences (~12 words), frequent '!', greeting 'Ciao', closing 'A presto'. Match this voice; do not change meaning."`
 - `examples`: the profile's exemplars.
 - Only emits fields that are meaningful (skip zero-rate fields).
 
-### 5. Prompt injection — `Core/PromptEngine.swift`
+### 5. Prompt injection - `Core/PromptEngine.swift`
 Add an optional `styleProfile: StyleProfile?` to `buildFluencyPrompt`, `buildExpandPrompt`,
 `buildCombinedPrompt`. When present, append a `Match this writing style:` block (summary + examples
 as few-shot). **`buildGrammarPrompt` / `buildGrammarJSONPrompt` are untouched.**
 The existing `StyleProfiler.buildHint` (rejection-based) remains for grammar as today.
 
-### 6. Recipient resolution & ingestion wiring — `Core/TextCheckCoordinator.swift`
+### 6. Recipient resolution & ingestion wiring - `Core/TextCheckCoordinator.swift`
 - A helper `resolveRecipient(text:bundleID:) async -> StyleRecipient`:
   `ContactStore.findInText(text)` → `.contact(id)`; else `.register(StyleAnalyzer.register(...))`;
   else `.general`.
 - **Apply path (passive learning):** in `SuggestionPanel.applyCorrection()` and
-  `applyAndClose(result:)` — after `replaceSelectedText(with: result.correctedText)` succeeds,
+  `applyAndClose(result:)` - after `replaceSelectedText(with: result.correctedText)` succeeds,
   call `StyleLearningStore.shared.observe(text: result.correctedText, language:, recipient:)`.
   The accepted/applied text is the ground-truth style sample.
 - **Request path (use):** before building a fluency/expand/combined prompt, the coordinator fetches
   `StyleLearningStore.shared.profile(language:recipient:)` and threads it to `PromptEngine`.
 
-### 7. UI — `UI/StyleTab.swift` + `SettingsView` wiring
+### 7. UI - `UI/StyleTab.swift` + `SettingsView` wiring
 New `.style` case in `SettingsTab`, added to `dataTabs`, routed in `destination(...)`.
 - Profiles grouped by language → recipient. Each row shows metrics (sentence length, formality,
   emoji/!/? rates, greeting/closing) and exemplars.
@@ -169,12 +169,12 @@ User accepts result (SuggestionPanel.applyCorrection / applyAndClose)
 ## Implementation Phases
 - **Phase 1 (core value):** Models + `StyleAnalyzer` + `StyleLearningStore` + `StyleHintBuilder` +
   PromptEngine injection (fluency/expand/combined) + passive ingestion on apply + recipient resolution.
-- **Phase 2 (control):** `StyleTab` UI — inspect / edit / reset / add sample / import.
+- **Phase 2 (control):** `StyleTab` UI - inspect / edit / reset / add sample / import.
 - **Phase 3 (refinement):** exemplar selection tuning, register detection tuning, more languages
   for greeting/closing lists.
 
 ## Open Risks
 - Recipient detection accuracy depends on `ContactStore.findInText`; when wrong, falls back to
-  register — acceptable degradation.
+  register - acceptable degradation.
 - Exemplar privacy: snippets are user text stored locally; surfaced and resettable in the UI.
 - Style vs correctness tension: mitigated by excluding grammar entirely.
