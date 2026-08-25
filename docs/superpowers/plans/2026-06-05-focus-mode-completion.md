@@ -13,23 +13,23 @@
 ## File Structure
 
 New:
-- `Core/FocusWordCounter.swift` — word counting: pure `wordCount`, pure `processReading`, AX poll loop, lifecycle (start/pause/resumeCounting/stop).
-- `Tests/FocusModeTests.swift` — unit tests for the pure cores.
+- `Core/FocusWordCounter.swift` - word counting: pure `wordCount`, pure `processReading`, AX poll loop, lifecycle (start/pause/resumeCounting/stop).
+- `Tests/FocusModeTests.swift` - unit tests for the pure cores.
 
 Modified:
-- `Accessibility/AccessibilityBridge.swift` — add `focusedPlainText(pid:)`.
-- `Core/FocusTimer.swift` — fix resume, own the counter, `endEarly()`, `finish()` no longer celebrates.
-- `Core/FocusStatsStore.swift` — extract pure `computeStreak`, wire freeze preference.
-- `UI/FocusSessionView.swift` — correct recap/record/celebrate flow.
-- `UI/FocusTab.swift` — `FocusSessionPanel` singleton; disable P2 toggles.
-- `UI/MenuBarView.swift` — use `FocusSessionPanel.shared`.
-- `UI/FocusOverlayWindow.swift` — pause/resume toggle, X→`endEarly()`, auto-hide.
+- `Accessibility/AccessibilityBridge.swift` - add `focusedPlainText(pid:)`.
+- `Core/FocusTimer.swift` - fix resume, own the counter, `endEarly()`, `finish()` no longer celebrates.
+- `Core/FocusStatsStore.swift` - extract pure `computeStreak`, wire freeze preference.
+- `UI/FocusSessionView.swift` - correct recap/record/celebrate flow.
+- `UI/FocusTab.swift` - `FocusSessionPanel` singleton; disable P2 toggles.
+- `UI/MenuBarView.swift` - use `FocusSessionPanel.shared`.
+- `UI/FocusOverlayWindow.swift` - pause/resume toggle, X→`endEarly()`, auto-hide.
 
 ---
 
 ## Task 1: Word-count + delta pure cores
 
-Pure, synchronous, no AX — the heart of the counter, fully testable.
+Pure, synchronous, no AX - the heart of the counter, fully testable.
 
 **Files:**
 - Create: `Core/FocusWordCounter.swift`
@@ -109,7 +109,7 @@ final class FocusWordCountTests: XCTestCase {
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `swift test --filter FocusWordCountTests`
-Expected: FAIL — `FocusWordCounter` not found / no such members.
+Expected: FAIL - `FocusWordCounter` not found / no such members.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -276,7 +276,7 @@ Expected: `Build complete!` with no errors. (Warnings about unhandled resource f
 - [ ] **Step 4: Re-run Task 1 tests (no regression)**
 
 Run: `swift test --filter FocusWordCountTests`
-Expected: PASS (all 6 still green — pure core unchanged).
+Expected: PASS (all 6 still green - pure core unchanged).
 
 - [ ] **Step 5: Commit**
 
@@ -318,7 +318,7 @@ final class FocusTimerMathTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter FocusTimerMathTests`
-Expected: FAIL — `resumeStartTime` not found.
+Expected: FAIL - `resumeStartTime` not found.
 
 - [ ] **Step 3: Rewrite FocusTimer**
 
@@ -469,7 +469,7 @@ Expected: PASS.
 - [ ] **Step 5: Verify build**
 
 Run: `swift build`
-Expected: `Build complete!` (FocusSessionPanel.shared resolves after Task 5 — if this task is implemented before Task 5, the build will fail on `FocusSessionPanel.shared`. Implement Task 5 in the same batch, or temporarily comment the two `FocusSessionPanel.shared.show()` lines and restore them in Task 5. Prefer batching Tasks 3+5.)
+Expected: `Build complete!` (FocusSessionPanel.shared resolves after Task 5 - if this task is implemented before Task 5, the build will fail on `FocusSessionPanel.shared`. Implement Task 5 in the same batch, or temporarily comment the two `FocusSessionPanel.shared.show()` lines and restore them in Task 5. Prefer batching Tasks 3+5.)
 
 - [ ] **Step 6: Commit**
 
@@ -480,7 +480,7 @@ git commit -m "fix(focus): resume preserves remaining; integrate word counter; r
 
 ---
 
-## Task 4: FocusStatsStore — pure streak + freeze preference
+## Task 4: FocusStatsStore - pure streak + freeze preference
 
 Extract streak computation to a pure function and respect the configurable freeze.
 
@@ -531,7 +531,7 @@ final class FocusStreakTests: XCTestCase {
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `swift test --filter FocusStreakTests`
-Expected: FAIL — `computeStreak` not found.
+Expected: FAIL - `computeStreak` not found.
 
 - [ ] **Step 3: Extract the pure function and wire the preference**
 
@@ -724,7 +724,7 @@ with:
 - [ ] **Step 4: Verify build**
 
 Run: `swift build`
-Expected: `Build complete!` (Tasks 3, 4, 5 together now compile — `FocusSessionPanel.shared`, `timer.wordsWritten`, `timer.endEarly()` all resolve.)
+Expected: `Build complete!` (Tasks 3, 4, 5 together now compile - `FocusSessionPanel.shared`, `timer.wordsWritten`, `timer.endEarly()` all resolve.)
 
 - [ ] **Step 5: Commit**
 
@@ -841,7 +841,7 @@ with:
                         .disabled(true)
 ```
 
-(The `Stepper` for streak freeze stays enabled — it is now wired in Task 4.)
+(The `Stepper` for streak freeze stays enabled - it is now wired in Task 4.)
 
 - [ ] **Step 2: Verify build**
 
@@ -895,10 +895,10 @@ git commit -m "test(focus): manual smoke verification fixes"
 
 - Run every command from `core/` (the submodule directory), not the outer `Wren` repo.
 - Pre-existing build warnings about unhandled resource files and invalid excludes are
-  unrelated to this work — ignore them.
+  unrelated to this work - ignore them.
 - Tasks 3 and 5 are interdependent (`FocusSessionPanel.shared` and `timer.endEarly()` /
   `timer.wordsWritten`). Implement and build them together; do not expect a green build
   after Task 3 alone.
 - The outer `Wren` repo's `core` submodule pointer will move when you commit inside
   `core`. Per the user's instruction, do NOT commit the submodule-pointer bump in the
-  outer repo yet — that happens at the end once everything works.
+  outer repo yet - that happens at the end once everything works.

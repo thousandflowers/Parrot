@@ -1,4 +1,4 @@
-# Audit Improvements — Parrot
+# Audit Improvements - Parrot
 
 ## TL;DR
 
@@ -13,7 +13,7 @@
 > - Pattern Task standardizzato: `[weak self]` consistente, `do/catch` dove mancante
 >
 > **Estimated Effort**: Medium (3-4h)
-> **Parallel Execution**: YES — 4 waves
+> **Parallel Execution**: YES - 4 waves
 > **Critical Path**: T1 → T2 → T4/T5 → T6
 
 ---
@@ -103,9 +103,9 @@ T1 → T2 → T4/T5 → T6
 
 ## TODOs
 
-### Wave 1 — Foundation
+### Wave 1 - Foundation
 
-- [x] 1. /colorize — Creare token di colore semantici e sostituire 15+ hard-coded
+- [x] 1. /colorize - Creare token di colore semantici e sostituire 15+ hard-coded
 
   **What to do**:
   - Creare `UI/DesignTokens.swift` con estensione `Color`:
@@ -129,7 +129,7 @@ T1 → T2 → T4/T5 → T6
   **Must NOT do**:
   - NON cambiare la semantica: `.green` per "server attivo" deve rimanere verde
   - NON toccare colori in file `Core/` o `Infra/`
-  - NON creare palette completa — solo i 7 token necessari
+  - NON creare palette completa - solo i 7 token necessari
 
   **Recommended Agent Profile**:
   - **Category**: `visual-engineering`
@@ -138,11 +138,11 @@ T1 → T2 → T4/T5 → T6
   **Parallelization**: Wave 1, Blocks T2-T6
 
   **References**:
-  - `UI/SettingsView.swift:127` — `Color.green/.red` per stato server
-  - `UI/MenuBarView.swift:25,33` — `.green`, `.orange`
-  - `UI/OnboardingView.swift:83,99,123` — `.green`, `.orange`, `.blue`
-  - `UI/SuggestionView.swift:54,96,99,102,115,161` — colori multipli
-  - `UI/RealtimeIndicator.swift:91,96,105` — colori stato
+  - `UI/SettingsView.swift:127` - `Color.green/.red` per stato server
+  - `UI/MenuBarView.swift:25,33` - `.green`, `.orange`
+  - `UI/OnboardingView.swift:83,99,123` - `.green`, `.orange`, `.blue`
+  - `UI/SuggestionView.swift:54,96,99,102,115,161` - colori multipli
+  - `UI/RealtimeIndicator.swift:91,96,105` - colori stato
   - Apple HIG Color: semantic colors in macOS
 
   **Acceptance Criteria**:
@@ -175,18 +175,18 @@ T1 → T2 → T4/T5 → T6
 
 ---
 
-### Wave 2 — MAX PARALLEL (after T1)
+### Wave 2 - MAX PARALLEL (after T1)
 
-- [x] 2. /distill — Decomporre SettingsView.swift (608 linee) in 6 file tab separati
+- [x] 2. /distill - Decomporre SettingsView.swift (608 linee) in 6 file tab separati
 
   **What to do**:
   - Creare nuovi file in `UI/`:
-    - `GeneralTab.swift` — estrarre `GeneralTab` struct (linee ~65-137)
-    - `ModelsTab.swift` — estrarre `ModelsTab` struct + `ModelRow` + `ExternalModelRow` (linee ~139-580)
-    - `PromptTab.swift` — estrarre `PromptTab` struct
-    - `AppRulesTab.swift` — estrarre `AppRulesTab` struct
-    - `ExclusionsTab.swift` — estrarre `ExclusionsTab` struct
-    - `AdvancedTab.swift` — estrarre `AdvancedTab` struct (già indipendente)
+    - `GeneralTab.swift` - estrarre `GeneralTab` struct (linee ~65-137)
+    - `ModelsTab.swift` - estrarre `ModelsTab` struct + `ModelRow` + `ExternalModelRow` (linee ~139-580)
+    - `PromptTab.swift` - estrarre `PromptTab` struct
+    - `AppRulesTab.swift` - estrarre `AppRulesTab` struct
+    - `ExclusionsTab.swift` - estrarre `ExclusionsTab` struct
+    - `AdvancedTab.swift` - estrarre `AdvancedTab` struct (già indipendente)
   - Mantenere `SettingsView.swift` solo con la `TabView` shell e i binding (linee 1-63)
   - Ogni nuovo file importa `SwiftUI`. `@Bindable var prefs: PreferencesStore` preservato
   - Verificare che `Package.swift` non richieda modifiche (target path copre `UI/`)
@@ -208,9 +208,9 @@ T1 → T2 → T4/T5 → T6
   - **Blocked By**: T1
 
   **References**:
-  - `UI/SettingsView.swift` — file completo da decomporre
-  - `UI/MenuBarView.swift` — esempio di view standalone ben strutturata
-  - `Package.swift:10-23` — target configuration
+  - `UI/SettingsView.swift` - file completo da decomporre
+  - `UI/MenuBarView.swift` - esempio di view standalone ben strutturata
+  - `Package.swift:10-23` - target configuration
 
   **Acceptance Criteria**:
   - [ ] `swift build` → 0 errori
@@ -238,7 +238,7 @@ T1 → T2 → T4/T5 → T6
 
   **Commit**: YES (`refactor: decompose SettingsView into 6 tab files`)
 
-- [x] 3. /distill — Decomporre PreferencesStore.swift (449 linee) estraendo SeedDataProvider e PreferencesCache
+- [x] 3. /distill - Decomporre PreferencesStore.swift (449 linee) estraendo SeedDataProvider e PreferencesCache
 
   **What to do**:
   - Creare `Infra/SeedDataProvider.swift` con `seedDefaults()`, `seedPromptPresets()`, `seedSecurityExclusions()`
@@ -262,10 +262,10 @@ T1 → T2 → T4/T5 → T6
   - **Blocked By**: T1
 
   **References**:
-  - `Infra/PreferencesStore.swift:28-43` — seedDefaults
-  - `Infra/PreferencesStore.swift:45-67` — seedPromptPresets
-  - `Infra/PreferencesStore.swift:81-84` — seedSecurityExclusions
-  - `Infra/PreferencesStore.swift:10-20` — cache properties
+  - `Infra/PreferencesStore.swift:28-43` - seedDefaults
+  - `Infra/PreferencesStore.swift:45-67` - seedPromptPresets
+  - `Infra/PreferencesStore.swift:81-84` - seedSecurityExclusions
+  - `Infra/PreferencesStore.swift:10-20` - cache properties
 
   **Acceptance Criteria**:
   - [ ] `swift build` → 0 errori
@@ -288,9 +288,9 @@ T1 → T2 → T4/T5 → T6
 
 ---
 
-### Wave 3 — MAX PARALLEL (after T2, T3)
+### Wave 3 - MAX PARALLEL (after T2, T3)
 
-- [x] 4. /typeset — Sostituire font fissi in OnboardingView con semantic styles
+- [x] 4. /typeset - Sostituire font fissi in OnboardingView con semantic styles
 
   **What to do**:
   - `OnboardingView.swift:82`: `.font(.system(size: 64))` → `.font(.largeTitle)`
@@ -314,8 +314,8 @@ T1 → T2 → T4/T5 → T6
   - **Blocked By**: T1
 
   **References**:
-  - `UI/OnboardingView.swift:82` — `.system(size: 64)` icon emoji
-  - `UI/OnboardingView.swift:98,122` — `.system(size: 48)` icon emoji
+  - `UI/OnboardingView.swift:82` - `.system(size: 64)` icon emoji
+  - `UI/OnboardingView.swift:98,122` - `.system(size: 48)` icon emoji
 
   **Acceptance Criteria**:
   - [ ] `grep -rn 'system(size:' UI/OnboardingView.swift` → 0 risultati
@@ -335,7 +335,7 @@ T1 → T2 → T4/T5 → T6
 
   **Commit**: YES (`refactor: use semantic font styles in OnboardingView for Dynamic Type`)
 
-- [x] 5. /clarify — Aggiungere accessibility labels ai pulsanti FloatingEditor
+- [x] 5. /clarify - Aggiungere accessibility labels ai pulsanti FloatingEditor
 
   **What to do**:
   - `FloatingEditor.swift:145`: Button "Riprova" → `.accessibilityLabel("Riprova controllo")` + `.accessibilityHint("Riesegue il controllo grammaticale")`
@@ -361,8 +361,8 @@ T1 → T2 → T4/T5 → T6
   - **Blocked By**: T1
 
   **References**:
-  - `UI/FloatingEditor.swift:140-166` — pulsanti nell'editor
-  - `UI/MenuBarView.swift:66-90` — esempio di accessibility labels ben fatte
+  - `UI/FloatingEditor.swift:140-166` - pulsanti nell'editor
+  - `UI/MenuBarView.swift:66-90` - esempio di accessibility labels ben fatte
 
   **Acceptance Criteria**:
   - [ ] `grep -c 'accessibilityLabel' UI/FloatingEditor.swift` → >= 6
@@ -385,9 +385,9 @@ T1 → T2 → T4/T5 → T6
 
 ---
 
-### Wave 4 — Polish Finale (after T4, T5)
+### Wave 4 - Polish Finale (after T4, T5)
 
-- [x] 6. /polish — Standardizzare pattern Task async in UI/
+- [x] 6. /polish - Standardizzare pattern Task async in UI/
 
   **What to do**:
   - Aggiungere `[weak self]` a TUTTI i `Task {` in classi/actor (FloatingEditorController, SuggestionPanelController, RealtimeIndicatorController) che catturano `self`. NON necessario per SwiftUI struct (SettingsView, OnboardingView, etc.) dove self e un value type
@@ -412,11 +412,11 @@ T1 → T2 → T4/T5 → T6
   - **Blocked By**: T1, T4, T5
 
   **References**:
-  - `UI/SuggestionPanel.swift:170` — esempio corretto: `Task { [weak self] in`
-  - `UI/FloatingEditor.swift:201` — esempio corretto: `Task { @MainActor in`
-  - `UI/SettingsView.swift:224` — Task senza weak self (da fixare)
-  - `UI/RealtimeIndicator.swift:17` — Task pattern da verificare
-  - `UI/SuggestionPanel.swift:156` — Task senza weak self (da fixare)
+  - `UI/SuggestionPanel.swift:170` - esempio corretto: `Task { [weak self] in`
+  - `UI/FloatingEditor.swift:201` - esempio corretto: `Task { @MainActor in`
+  - `UI/SettingsView.swift:224` - Task senza weak self (da fixare)
+  - `UI/RealtimeIndicator.swift:17` - Task pattern da verificare
+  - `UI/SuggestionPanel.swift:156` - Task senza weak self (da fixare)
 
   **Acceptance Criteria**:
   - [ ] `grep -rn 'Task {' UI/SuggestionPanel.swift UI/FloatingEditor.swift UI/RealtimeIndicator.swift | grep -v 'weak self'` → 0 Task che catturano self senza weak
@@ -446,13 +446,13 @@ T1 → T2 → T4/T5 → T6
 
 ## Final Verification Wave
 
-- [x] F1. **Plan Compliance Audit** — `oracle`
+- [x] F1. **Plan Compliance Audit** - `oracle`
   Verifica che tutti i "Must Have" siano implementati e tutti i "Must NOT Have" siano assenti. Controlla `grep` per colori hard-coded, `system(size:)`, file decomposti.
 
-- [x] F2. **Build + Test** — `quick`
+- [x] F2. **Build + Test** - `quick`
   `swift build && swift test`. Deve passare 67/67.
 
-- [x] F3. **Re-audit Score** — `quick`
+- [x] F3. **Re-audit Score** - `quick`
   Rilancia i check dell'audit originale: conta colori hard-coded, verifica font dinamici, controlla accessibility labels, verifica decomposizione. Stima il nuovo score.
 
 ---

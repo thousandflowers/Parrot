@@ -49,7 +49,7 @@ Parrot/
 - Create a branch: `git checkout -b feat/your-feature`
 - Follow existing code style (Swift 5.10, actors for shared state)
 - Add tests for new functionality
-- Keep changes focused — one feature/fix per PR
+- Keep changes focused - one feature/fix per PR
 
 ### 3. Submit a PR
 - Open a pull request against `main`

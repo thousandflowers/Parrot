@@ -14,31 +14,31 @@
 
 | File | Azione |
 |---|---|
-| `Core/RuleBasedEngine.swift` | Modifica — `isUniversal: Bool` su `GrammarRule`; filtro OR; mark double-space + space-before-punctuation |
-| `Infra/PreferencesStore.swift` | Modifica — `localeDefault()` ritorna `"auto"` |
-| `Core/TextCheckCoordinator.swift` | Modifica — risolve `"auto"` via `LanguageDetector` prima di passare la lingua alle regole e all'LLM |
-| `UI/GeneralTab.swift` | Modifica — `Text("Automatico...").tag("auto")` come prima voce del Picker + sezione label localized |
-| `Resources/en.lproj/Localizable.strings` | Crea — English base strings (41 chiavi) |
-| `Resources/it.lproj/Localizable.strings` | Crea — Italian translations |
-| `Resources/zh-Hans.lproj/Localizable.strings` | Crea — Chinese Simplified |
-| `Resources/hr.lproj/Localizable.strings` | Crea — Croatian |
-| `Resources/da.lproj/Localizable.strings` | Crea — Danish |
-| `Resources/nb.lproj/Localizable.strings` | Crea — Norwegian Bokmål |
-| `Resources/el.lproj/Localizable.strings` | Crea — Greek |
-| `build-app.sh` | Modifica — copia `Resources/*.lproj` in `Contents/Resources/` |
-| `Package.swift` | Modifica — aggiunge .lproj all'exclude list |
-| `UI/OnboardingView.swift` | Modifica — ~13 stringhe localizzate |
-| `UI/MenuBarView.swift` | Modifica — ~7 stringhe localizzate |
-| `UI/SuggestionView.swift` | Modifica — ~7 stringhe localizzate |
-| `UI/FloatingEditor.swift` | Modifica — ~4 stringhe localizzate |
-| `UI/GeneralTab.swift` | Modifica — ~4 stringhe localizzate (sezioni, stato server) |
-| `App/AppDelegate.swift` | Modifica — ~3 stringhe alert localizzate |
-| `Infra/ModelCatalog.swift` | Modifica — 3 reason strings localizzate |
-| `Tests/Tests.swift` | Modifica — aggiungi `RuleBasedEngineUniversalTests` + `LanguageAutoDetectionTests` |
+| `Core/RuleBasedEngine.swift` | Modifica - `isUniversal: Bool` su `GrammarRule`; filtro OR; mark double-space + space-before-punctuation |
+| `Infra/PreferencesStore.swift` | Modifica - `localeDefault()` ritorna `"auto"` |
+| `Core/TextCheckCoordinator.swift` | Modifica - risolve `"auto"` via `LanguageDetector` prima di passare la lingua alle regole e all'LLM |
+| `UI/GeneralTab.swift` | Modifica - `Text("Automatico...").tag("auto")` come prima voce del Picker + sezione label localized |
+| `Resources/en.lproj/Localizable.strings` | Crea - English base strings (41 chiavi) |
+| `Resources/it.lproj/Localizable.strings` | Crea - Italian translations |
+| `Resources/zh-Hans.lproj/Localizable.strings` | Crea - Chinese Simplified |
+| `Resources/hr.lproj/Localizable.strings` | Crea - Croatian |
+| `Resources/da.lproj/Localizable.strings` | Crea - Danish |
+| `Resources/nb.lproj/Localizable.strings` | Crea - Norwegian Bokmål |
+| `Resources/el.lproj/Localizable.strings` | Crea - Greek |
+| `build-app.sh` | Modifica - copia `Resources/*.lproj` in `Contents/Resources/` |
+| `Package.swift` | Modifica - aggiunge .lproj all'exclude list |
+| `UI/OnboardingView.swift` | Modifica - ~13 stringhe localizzate |
+| `UI/MenuBarView.swift` | Modifica - ~7 stringhe localizzate |
+| `UI/SuggestionView.swift` | Modifica - ~7 stringhe localizzate |
+| `UI/FloatingEditor.swift` | Modifica - ~4 stringhe localizzate |
+| `UI/GeneralTab.swift` | Modifica - ~4 stringhe localizzate (sezioni, stato server) |
+| `App/AppDelegate.swift` | Modifica - ~3 stringhe alert localizzate |
+| `Infra/ModelCatalog.swift` | Modifica - 3 reason strings localizzate |
+| `Tests/Tests.swift` | Modifica - aggiungi `RuleBasedEngineUniversalTests` + `LanguageAutoDetectionTests` |
 
 ---
 
-## Task 1: Universal Rule Engine — flag `isUniversal`
+## Task 1: Universal Rule Engine - flag `isUniversal`
 
 **Files:**
 - Modify: `Core/RuleBasedEngine.swift` (struct GrammarRule righe 17-24; check() riga 46; makeRules() righe 145-165)
@@ -116,7 +116,7 @@ con:
         for (rule, regex) in compiledRules where rule.isUniversal || rule.languages.contains(language) {
 ```
 
-- [ ] **Step 5: Aggiorna `makeRules()` — aggiungi `isUniversal` a tutte le regole**
+- [ ] **Step 5: Aggiorna `makeRules()` - aggiungi `isUniversal` a tutte le regole**
 
 In `Core/RuleBasedEngine.swift`, sostituisci l'intera funzione `makeRules()` (righe 69-187):
 
@@ -276,7 +276,7 @@ git commit -m "feat: universal rules — double-space and space-before-punctuati
 
 ---
 
-## Task 2: "auto" sentinel — rilevamento automatico della lingua
+## Task 2: "auto" sentinel - rilevamento automatico della lingua
 
 **Files:**
 - Modify: `Infra/PreferencesStore.swift` (riga 309-311, funzione `localeDefault()`)
@@ -338,7 +338,7 @@ Nota: `PreferencesStore.localeDefaultForTesting()` è un metodo `internal` che a
 swift test --filter LanguageAutoDetectionTests 2>&1 | tail -20
 ```
 
-Atteso: errore di compilazione — `localeDefaultForTesting` non esiste.
+Atteso: errore di compilazione - `localeDefaultForTesting` non esiste.
 
 - [ ] **Step 3: Modifica `localeDefault()` in `PreferencesStore.swift`**
 
@@ -428,7 +428,7 @@ In `UI/GeneralTab.swift`, dentro `Section("Lingua")`, trova `Picker("Lingua", se
 
 Sostituisci solo la riga `Picker("Lingua", selection: $prefs.language) {` con il blocco che include la prima voce aggiunta sopra (il resto del Picker rimane identico).
 
-La modifica esatta — in `UI/GeneralTab.swift`, riga 87, sostituisci:
+La modifica esatta - in `UI/GeneralTab.swift`, riga 87, sostituisci:
 
 ```swift
                 Picker("Lingua", selection: $prefs.language) {
@@ -1383,7 +1383,7 @@ con:
                     downloadError = String(localized: "onboarding.nav.downloading").isEmpty ? "Download failed: \(error.localizedDescription)" : "Download failed: \(error.localizedDescription)"
 ```
 
-Wait — questa stringa di errore non ha una chiave dedicata nel dizionario. Lasciala in inglese:
+Wait - questa stringa di errore non ha una chiave dedicata nel dizionario. Lasciala in inglese:
 
 ```swift
                     downloadError = "Download failed: \(error.localizedDescription)"
@@ -1727,7 +1727,7 @@ git commit -m "feat(l10n): localize SuggestionView, FloatingEditor, GeneralTab, 
 
 ---
 
-## Task 6: Test finale di integrazione — build .app con localizzazione
+## Task 6: Test finale di integrazione - build .app con localizzazione
 
 **Files:**
 - Nessun file di codice nuovo

@@ -1,4 +1,4 @@
-# Parrot — Report QA Completo v2
+# Parrot - Report QA Completo v2
 
 > **Data**: 13 Maggio 2026  
 > **Build**: Release (SwiftPM 5.10)  
@@ -9,7 +9,7 @@
 
 ## 🔴 CRITICAL
 
-### 1. Modelli off-screen — NON completamente risolto
+### 1. Modelli off-screen - NON completamente risolto
 **File**: `UI/SettingsView.swift` → ModelsTab  
 **Evidenza**: Screenshot `/tmp/parrot_modelli_final.png`, `/tmp/parrot_modelli_scrolled.png`
 
@@ -27,7 +27,7 @@ Il `List` con `.listStyle(.inset)` e il `VStack` esterno potrebbero non calcolar
 **File**: `Core/StubLLMService.swift`  
 **Evidenza**: Screenshot `/tmp/parrot_fluency.png`
 
-In modalità Fluidità, lo Stub restituisce `[CORRETTO-STUB: Errori grammaticali corretti]` — lo stesso output della modalità Grammatica. Il servizio non differenzia i due tipi di check.
+In modalità Fluidità, lo Stub restituisce `[CORRETTO-STUB: Errori grammaticali corretti]` - lo stesso output della modalità Grammatica. Il servizio non differenzia i due tipi di check.
 
 **Impatto**: Test e demo della funzionalità fluidità sono impossibili con Stub.
 
@@ -114,9 +114,9 @@ Per verificare i pulsanti T7 bisognerebbe switchare a servizio "Locale" senza se
 
 ---
 
-## 🎯 TEST GRAMMAR/FLUENCY — FUNZIONA?
+## 🎯 TEST GRAMMAR/FLUENCY - FUNZIONA?
 
-**SÌ** — La correzione grammatica e fluidità **funziona** con il servizio Stub:
+**SÌ** - La correzione grammatica e fluidità **funziona** con il servizio Stub:
 - Testo inserito nell'Editor (29 parole) ✅
 - Click "Controlla" → output prodotto nel pannello "Corretto" ✅
 - Modalità "Fluidità" → check eseguito ✅

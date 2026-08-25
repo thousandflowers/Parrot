@@ -1,4 +1,4 @@
-# Focus Mode Completion — Design Spec
+# Focus Mode Completion - Design Spec
 
 Date: 2026-06-05
 Status: approved, ready for implementation plan
@@ -16,13 +16,13 @@ daily streak with celebration feedback.
 
 Existing files (already compile, on branch `feat/wren-onboarding`, uncommitted):
 
-- `Core/FocusMode.swift` — state machine (off / rawDraft / session). OK.
-- `Core/FocusTimer.swift` — 1 Hz countdown. Has a resume bug.
-- `Core/FocusStatsStore.swift` — JSON-persisted stats + streak. Streak freeze hardcoded.
-- `UI/FocusOverlayWindow.swift` — floating timer overlay. Stop/pause wiring broken.
-- `UI/FocusSessionView.swift` — setup / active / recap panel content. Record flow circular.
-- `UI/FocusTab.swift` — settings + `FocusSessionPanel`. Panel ownership fragile.
-- `UI/FocusCelebration.swift` — toast / sound / streak milestone. OK; called at wrong time.
+- `Core/FocusMode.swift` - state machine (off / rawDraft / session). OK.
+- `Core/FocusTimer.swift` - 1 Hz countdown. Has a resume bug.
+- `Core/FocusStatsStore.swift` - JSON-persisted stats + streak. Streak freeze hardcoded.
+- `UI/FocusOverlayWindow.swift` - floating timer overlay. Stop/pause wiring broken.
+- `UI/FocusSessionView.swift` - setup / active / recap panel content. Record flow circular.
+- `UI/FocusTab.swift` - settings + `FocusSessionPanel`. Panel ownership fragile.
+- `UI/FocusCelebration.swift` - toast / sound / streak milestone. OK; called at wrong time.
 - Modified: `App/Constants.swift`, `Infra/PreferencesStore.swift`,
   `Core/Completion/CompletionController.swift`, `Core/RealtimeMonitor.swift`,
   `UI/MenuBarView.swift`, `UI/DashboardTab.swift`, `UI/SettingsView.swift`.
@@ -30,14 +30,14 @@ Existing files (already compile, on branch `feat/wren-onboarding`, uncommitted):
 ### Defects this spec fixes
 
 1. **Word counting does not exist.** `recordSession(words: stats.todayWords, …)` is
-   circular — always records 0. Nothing measures words typed during a session. The
+   circular - always records 0. Nothing measures words typed during a session. The
    headline metric ("words in focus"), heatmap, and celebration are all dead.
 2. **`FocusTimer.resume()` restarts the full duration.** It rebuilds `.running` with
    `startTime: .now` and `dur = elapsed + remaining` (= original duration), so after
    resume the timer runs the entire original duration again from zero.
 3. **Overlay X button** calls `FocusOverlayWindow.shared.hide()` but not `timer.stop()`,
    so the timer keeps ticking in the background after the overlay is dismissed.
-4. **Overlay pause button** has no resume state — always shows the pause icon.
+4. **Overlay pause button** has no resume state - always shows the pause icon.
 5. **Recording flow is wrong.** `finish()` fires `FocusCelebration` with `words=0`
    before the user records anything; recap's "Record & continue" then records
    `todayWords` (still 0). Double / incorrect.
@@ -81,9 +81,9 @@ State:
 - `private var pollTask: Task<Void, Never>?`
 
 API:
-- `func start()` — capture baseline, begin polling.
-- `func stop()` — cancel polling. `wordsWritten` retains its final value.
-- `func reset()` — zero everything (called by `start`).
+- `func start()` - capture baseline, begin polling.
+- `func stop()` - cancel polling. `wordsWritten` retains its final value.
+- `func reset()` - zero everything (called by `start`).
 
 Behavior:
 - On `start()`: read the focused element's plain text via the AX bridge, set
@@ -93,7 +93,7 @@ Behavior:
   - `delta = newCount - lastCount`
   - if `delta > 0` → `wordsWritten += delta`; `lastCount = newCount` (user wrote)
   - if `-REBASE_THRESHOLD <= delta <= 0` → `lastCount = newCount` (backspace / small edit, no subtraction)
-  - if `delta < -REBASE_THRESHOLD` → `lastCount = newCount` (field/app switch — rebase, do not subtract)
+  - if `delta < -REBASE_THRESHOLD` → `lastCount = newCount` (field/app switch - rebase, do not subtract)
   - `REBASE_THRESHOLD = 5` words.
 - If a poll read fails (no focused element / no AX value), skip that tick without
   changing state.
@@ -121,7 +121,7 @@ Reads the focused element of `pid` (reuse `withFocusedElement`) and returns its
 `extractText(from:)` logic; expose via the actor's isolated API. Add the signature to
 `AXBridgeProtocol` only if the protocol is used to reach this call site; otherwise call
 the concrete `AccessibilityBridge.shared` directly (the counter is MainActor, the bridge
-is an actor — call is `await`).
+is an actor - call is `await`).
 
 ### `FocusTimer` changes
 

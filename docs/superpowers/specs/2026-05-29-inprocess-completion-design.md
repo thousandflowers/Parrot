@@ -1,4 +1,4 @@
-# In-Process Completion Engine — Design Spec
+# In-Process Completion Engine - Design Spec
 
 **Date:** 2026-05-29
 **Status:** Approved direction (user chose full in-process rework), pre-implementation
@@ -19,7 +19,7 @@ with a warm KV cache and a curated model. This spec adopts that approach for Par
 - **Isolated/solid**: an inference crash must not take down Parrot.
 
 ## Non-goals
-- Replacing the **correction** path (stays on `llama-server` — on-demand, isolation, instruct model).
+- Replacing the **correction** path (stays on `llama-server` - on-demand, isolation, instruct model).
 - Cloud anything. All on-device.
 
 ## Architecture
@@ -30,7 +30,7 @@ A separate **XPC service** (`ParrotCompletionService`) links libllama and owns t
 - **Speed**: XPC is fast local IPC (no HTTP, no JSON-over-TCP); the helper keeps the model + KV cache
   warm and streams tokens back.
 - **8 GB**: one process, one small model, direct control over context size / KV.
-- (Alternative considered: in-app libllama like Cotypist — slightly less RAM overhead but no crash
+- (Alternative considered: in-app libllama like Cotypist - slightly less RAM overhead but no crash
   isolation. Rejected for solidity. If XPC proves too heavy, revisit.)
 
 ### libllama bridge
@@ -62,7 +62,7 @@ A separate **XPC service** (`ParrotCompletionService`) links libllama and owns t
 
 ## Integration (clean, minimal blast radius)
 - `CompletionEngine` already depends on the `CompletionProviding` protocol. The new engine is
-  `XPCCompletionProvider: CompletionProviding` — swap `CompletionEngine.shared`'s provider. Controller,
+  `XPCCompletionProvider: CompletionProviding` - swap `CompletionEngine.shared`'s provider. Controller,
   overlay, `TabInterceptor`, `CompletionPostprocessor`, settings UI all stay unchanged.
 - Feature-flag the provider: fall back to the current `LlamaCompletionClient` (server) if the helper is
   unavailable, so nothing regresses.

@@ -1,4 +1,4 @@
-# Wren Onboarding & Tone Capture — Design
+# Wren Onboarding & Tone Capture - Design
 
 **Date:** 2026-06-05
 **Status:** Approved (brainstorming) → ready for implementation plan
@@ -10,7 +10,7 @@ Parrot and Wren ship from one codebase as two apps, selected by bundle id via `A
 Settings (`SettingsView`) and the menu bar (`MenuBarView`/`MenuBarParrot`) are already mode-gated.
 **The onboarding is not.** `AppDelegate.applicationDidFinishLaunching` calls
 `OnboardingController.shared.showIfNeeded()` unconditionally, and `OnboardingView` is 100% Parrot:
-window title "Initial Setup — Parrot", 🦜 emoji, "Welcome to Parrot", grammar features, grammar
+window title "Initial Setup - Parrot", 🦜 emoji, "Welcome to Parrot", grammar features, grammar
 shortcuts (⌘⇧E), a fake hardcoded grammar demo, and an Accessibility permission step.
 
 A Wren user therefore sees the wrong product. Concretely (audit findings):
@@ -42,22 +42,22 @@ A Wren-native first-run flow that:
 ## Non-goals
 
 - Splitting the shared core into two repos (deliberately shared: mmap weights, single fix surface).
-- Reworking the completion engine, model catalog, or learning store internals — all reused as-is.
+- Reworking the completion engine, model catalog, or learning store internals - all reused as-is.
 - Touching the Parrot onboarding behavior (only extracted/renamed, not redesigned).
 
 ## Key existing plumbing (reused, not rebuilt)
 
-- `CorpusLearner.learn(from: String)` — extracts `(context-key → continuation)` pairs from user text
+- `CorpusLearner.learn(from: String)` - extracts `(context-key → continuation)` pairs from user text
   and seeds them confident. Also `learn(fromFiles:)`.
-- `CompletionLearningStore.seed(entries, accepts:)` — idempotent, additive (`accepts = max`),
+- `CompletionLearningStore.seed(entries, accepts:)` - idempotent, additive (`accepts = max`),
   variable-order n-gram keys; serves learned completions instantly with no model call.
-- `StyleProfile` (in `CompletionLearningStore`) — writing fingerprint; `.descriptor` is a ~2-line
+- `StyleProfile` (in `CompletionLearningStore`) - writing fingerprint; `.descriptor` is a ~2-line
   prompt hint (`styleDescriptor()`), gated at `totalSentences >= 3`.
 - `ModelManager.recommendedModels()` + `downloadModelWithProgress(from:expectedSHA256:)`
   (`AsyncThrowingStream<DownloadProgress, Error>`).
-- `ModelCatalog.recommended(ramGB:language:)` — RAM-aware model recommendation.
+- `ModelCatalog.recommended(ramGB:language:)` - RAM-aware model recommendation.
 - Input Monitoring: `IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)` (check),
-  `IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)` (request) — already used in
+  `IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)` (request) - already used in
   `Shortcuts/TabInterceptor.swift:35-38`.
 
 ## Architecture (Approach 2: separate view + shared scaffold)
@@ -91,17 +91,17 @@ Decisions:
 
 | Step | Content | Download | Permission |
 |------|---------|----------|------------|
-| 0 Welcome | Wren identity (no 🦜/grammar): "inline completion, Tab to accept". RAM-detect → `ModelCatalog.recommended`. **Kick off background download.** | starts | — |
+| 0 Welcome | Wren identity (no 🦜/grammar): "inline completion, Tab to accept". RAM-detect → `ModelCatalog.recommended`. **Kick off background download.** | starts | - |
 | 1 Permission | Explain + `IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)`. Poll `IOHIDCheckAccess` to auto-advance (same pattern as the existing `AccessibilityStep`). | continues | Input Monitoring |
-| 2 Tone | Guided examples (default) + expandable "or paste your own text" → instant CPU seed. Skippable. | continues | — |
+| 2 Tone | Guided examples (default) + expandable "or paste your own text" → instant CPU seed. Skippable. | continues | - |
 | 3 Screen context (optional) | Explain reading context above the caret; button requests Screen Recording. Skippable. | continues | Screen Recording (optional) |
-| 4 Ready | If download done → **live completion demo** (type, see ghost text). Else → progress bar + "you can start, ready soon". | finishes / continues in bg | — |
+| 4 Ready | If download done → **live completion demo** (type, see ghost text). Else → progress bar + "you can start, ready soon". | finishes / continues in bg | - |
 
 - The download progress bar is **always visible** in the scaffold footer until complete.
 - "Finish" is never blocked by the download: if unfinished, the window closes on completion and the
   download proceeds in `ModelManager` (not tied to the window lifetime).
 
-## Tone capture (step 2) — detail
+## Tone capture (step 2) - detail
 
 **Fully optional.** All three inputs (finish-the-phrases, paste text, upload document) are
 independent and skippable; none blocks onboarding completion. A user can do one, all, or none.
@@ -112,7 +112,7 @@ Three inputs in one step, finish-the-phrases as the default visible mode:
 - A small **curated set of specific, case-spanning phrases** shown in editable fields; the user
   finishes each in their own voice (cursor at the end of each opener).
 - The phrases are deliberately specific (not neutral fillers) so each one probes a distinct register
-  the model needs to learn — e.g. formal email, casual message, work/technical, narrative, polite
+  the model needs to learn - e.g. formal email, casual message, work/technical, narrative, polite
   request. This breadth lets the app understand the user's tone per context, not as one average.
 - **Design note on [[feedback_no_hardcoded_lists]]:** that preference (avoid hardcoded example
   lists/long if/else as logic) is here **explicitly overridden by Eugenio**: he wants specific,
@@ -135,7 +135,7 @@ Three inputs in one step, finish-the-phrases as the default visible mode:
 - `StyleProfile` updated → `descriptor` injected into the model prompt.
 - Honest UI feedback: "Learned N patterns from your style" where N is the return of `seed`/`learn`.
   If N=0: "I'll use this as a hint" with no number (no false claims).
-- Step has a Skip — tone capture is a bonus, never blocks.
+- Step has a Skip - tone capture is a bonus, never blocks.
 
 ## Recurring tone tune-up (ongoing personalization)
 
@@ -145,13 +145,13 @@ asked to "complete a few phrases every day/week" to refine constantly.
 - **Setting** (Settings → Completion): cadence = Off (default) / Daily / Weekly. Stored in
   `PreferencesStore`.
 - **Mechanism:** a lightweight scheduler checks "is a tune-up due?" (last-run timestamp + cadence) on
-  launch / front-app-idle; when due and enabled, surfaces a gentle, non-intrusive prompt — a menu-bar
-  badge + an optional local notification — never a modal that interrupts typing.
+  launch / front-app-idle; when due and enabled, surfaces a gentle, non-intrusive prompt - a menu-bar
+  badge + an optional local notification - never a modal that interrupts typing.
 - **Content:** reuses the same curated case-spanning phrases (rotating subset each time so it stays
   fresh and covers more registers over weeks). User finishes 2–3 phrases → same
   `CorpusLearner.learn`/`StyleProfile` pipeline.
 - **Reuse:** the phrases UI is the same component as step 2 (a `TonePracticeView`), shown either in
-  onboarding or on its own from the menu bar — one unit, two entry points.
+  onboarding or on its own from the menu bar - one unit, two entry points.
 - **Honest + skippable:** dismissible every time; cadence fully user-controlled; default Off so it is
   opt-in, not nagging.
 
@@ -161,7 +161,7 @@ asked to "complete a few phrases every day/week" to refine constantly.
 - **Gap C2 (StyleProfile not injected into completion prompt):** during planning, locate where
   `CompletionEngine`/`PromptEngine` builds the completion prompt and ensure
   `CompletionLearningStore.styleDescriptor()` is included when non-empty. If missing, add it (part of
-  O3). Confirm by reading the prompt builder — do not assume.
+  O3). Confirm by reading the prompt builder - do not assume.
 - **Background download:** `ModelDownloadCoordinator` calls
   `ModelManager.shared.downloadModelWithProgress(...)`; on `.complete` sets
   `PreferencesStore.completionModelID` + `serviceType = .local` and triggers
@@ -172,8 +172,8 @@ asked to "complete a few phrases every day/week" to refine constantly.
 
 ## Error handling & edge cases
 
-- **Download fails (network/SHA):** Coordinator exposes `errorMessage`; Ready shows "Download failed
-  — retry / download later from Settings → Models". App usable; completion off until a model exists
+- **Download fails (network/SHA):** Coordinator exposes `errorMessage`; Ready shows "Download failed -
+  retry / download later from Settings → Models". App usable; completion off until a model exists
   (existing `NSAlert` kept only as a fallback if the user skips everything).
 - **Input Monitoring denied:** step does not block; Ready warns "Wren needs Input Monitoring to work,
   enable it in System Settings" with a direct link. Onboarding still completes.
@@ -193,7 +193,7 @@ asked to "complete a few phrases every day/week" to refine constantly.
   hardcoded "Parrot".
 - Onboarding window title → `AppMode.current.displayName`.
 
-## Testing (TDD, pure/injectable units — same discipline as Phase 0)
+## Testing (TDD, pure/injectable units - same discipline as Phase 0)
 
 - `ModelDownloadCoordinator` with a stub `ModelManager`/fake stream → states
   downloading→verifying→complete→error, cancel, no-restart-when-present.
@@ -206,7 +206,7 @@ asked to "complete a few phrases every day/week" to refine constantly.
   non-empty.
 - `ToneTuneUpScheduler` (pure): given last-run timestamp + cadence + now → due / not due; Off never
   due; respects per-cadence interval. Injectable clock.
-- Views: smoke only (not logic) — no fragile snapshots.
+- Views: smoke only (not logic) - no fragile snapshots.
 
 ## Out of scope / follow-ups (from the wider audit)
 

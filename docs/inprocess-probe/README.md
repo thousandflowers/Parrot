@@ -1,4 +1,4 @@
-# In-Process libllama Probe (Phase 1 feasibility — PASSED 2026-05-29)
+# In-Process libllama Probe (Phase 1 feasibility - PASSED 2026-05-29)
 
 Proves the Swift↔libllama binding for the in-process completion engine
 (see `../specs/2026-05-29-inprocess-completion-design.md`).

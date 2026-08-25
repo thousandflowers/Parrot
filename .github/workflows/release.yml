@@ -32,7 +32,7 @@ permissions:
 #                             (Security → App-Specific Passwords → Generate)
 #
 #   SPARKLE_PRIVATE_KEY       EdDSA private key from Sparkle's generate_keys tool
-#                             (already in use — keep as-is)
+#                             (already in use - keep as-is)
 #
 # Without the APPLE_* secrets the workflow builds an ad-hoc signed DMG.
 # Users of that build must right-click → Open on first launch.
@@ -60,10 +60,10 @@ jobs:
         run: brew install llama.cpp || brew upgrade llama.cpp || true
 
       # ── Build ──────────────────────────────────────────────────────────────
-      - name: Swift build — arm64
+      - name: Swift build - arm64
         run: swift build -c release --arch arm64
 
-      - name: Swift build — x86_64 (best-effort)
+      - name: Swift build - x86_64 (best-effort)
         run: swift build -c release --arch x86_64 2>/dev/null || echo "[i] x86_64 unavailable"
 
       # ── Certificate import ─────────────────────────────────────────────────
@@ -73,9 +73,9 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
           # The `secrets` context is not allowed in step-level `if:` (it makes the whole
-          # workflow file invalid — every push shows an instant 0s failure). Gate in-script.
+          # workflow file invalid - every push shows an instant 0s failure). Gate in-script.
           if [ -z "$APPLE_CERTIFICATE" ]; then
-            echo "[i] APPLE_CERTIFICATE not set — skipping import (ad-hoc signing)"
+            echo "[i] APPLE_CERTIFICATE not set - skipping import (ad-hoc signing)"
             exit 0
           fi
           KEYCHAIN_PASS=$(openssl rand -base64 30)
@@ -118,7 +118,7 @@ jobs:
             echo "[✓] Signing identity: ${ID}"
           else
             echo "value=-" >> $GITHUB_OUTPUT
-            echo "[!] No Developer ID — building ad-hoc. Users must right-click → Open."
+            echo "[!] No Developer ID - building ad-hoc. Users must right-click → Open."
           fi
 
       # ── Build .app + DMG (sign + optionally notarize) ─────────────────────
@@ -173,7 +173,7 @@ jobs:
           done
 
           if [ -z "$SIGN_UPDATE" ]; then
-            echo "[!] sign_update not found — no Sparkle signature"
+            echo "[!] sign_update not found - no Sparkle signature"
             exit 0
           fi
 
@@ -240,7 +240,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add appcast.xml Casks/parrot.rb Casks/wren.rb 2>/dev/null || true
           git diff --staged --quiet && echo "[i] Nothing to commit" && exit 0
-          git commit -m "chore: release ${{ github.ref_name }} — appcast + cask"
+          git commit -m "chore: release ${{ github.ref_name }} - appcast + cask"
           git push origin HEAD:main
 
       # ── GitHub Release ─────────────────────────────────────────────────────

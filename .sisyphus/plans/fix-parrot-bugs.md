@@ -1,4 +1,4 @@
-# Fix 7 Bug Parrot — Piano di Lavoro
+# Fix 7 Bug Parrot - Piano di Lavoro
 
 ## TL;DR
 
@@ -14,7 +14,7 @@
 > - FloatingEditor: pulsanti azione nel messaggio errore AI
 >
 > **Estimated Effort**: Short (2h)
-> **Parallel Execution**: YES — 2 waves
+> **Parallel Execution**: YES - 2 waves
 > **Critical Path**: T1 → T3 → T4
 
 ---
@@ -108,19 +108,19 @@ T1 → T3 → (nessuna dipendenza bloccante per Wave 2)
 
 ## TODOs
 
-### Wave 1 (PARALLEL — 5 task indipendenti)
+### Wave 1 (PARALLEL - 5 task indipendenti)
 
 ---
 
-### T1 [CRITICAL] Fix ModelsTab — Modelli Off-Screen + HStack Duplicato
+### T1 [CRITICAL] Fix ModelsTab - Modelli Off-Screen + HStack Duplicato
 
 **File**: `UI/SettingsView.swift` (ModelsTab, ModelRow, ExternalModelRow)
 
 **Problema Root**: Il `List` in ModelsTab non calcola correttamente l'altezza del contenuto per tutti i modelli. Gli ultimi 2 (Phi-3.5 Mini, Gemma 4 E2B IT) sono a y=982, fuori dal viewport scroll (y=926). Inoltre, c'è un HStack duplicato alle linee 148-161 e 165-178.
 
 **TDD Steps**:
-1. **RED**: Scrivi test `testModelsTab_allModelsVisible()` — crea una `ModelsTab` con dati mock, verifica che tutti i modelli abbiano `frame.height > 0` e `frame.minY < scrollContentHeight`
-2. **GREEN**: Fix — probabilmente il `VStack(alignment: .leading, spacing: 0)` contiene un doppio header che consuma spazio. Rimuovere il duplicato HStack (linee 165-178). Aggiungere `.frame(minHeight:)` o usare `ScrollView` invece di `List` se necessario.
+1. **RED**: Scrivi test `testModelsTab_allModelsVisible()` - crea una `ModelsTab` con dati mock, verifica che tutti i modelli abbiano `frame.height > 0` e `frame.minY < scrollContentHeight`
+2. **GREEN**: Fix - probabilmente il `VStack(alignment: .leading, spacing: 0)` contiene un doppio header che consuma spazio. Rimuovere il duplicato HStack (linee 165-178). Aggiungere `.frame(minHeight:)` o usare `ScrollView` invece di `List` se necessario.
 3. **REFACTOR**: Estrarre l'header server status in una sub-view per evitare duplicazione futura.
 
 **QA Scenario**:
@@ -141,7 +141,7 @@ Verifica: macos-ui find_elements_in_app → AX position.y < 926 per tutti i mode
 **Problema Root**: Il `MenuBarExtra` di SwiftUI non espone automaticamente i suoi elementi all'albero AX. Gli elementi del dropdown sono figli di SystemUIServer, non del processo app.
 
 **TDD Steps**:
-1. **RED**: Scrivi test `testMenuBarView_hasAccessibilityLabels()` — verifica che ogni elemento interattivo abbia `.accessibilityLabel()` e `.accessibilityHint()` non nil
+1. **RED**: Scrivi test `testMenuBarView_hasAccessibilityLabels()` - verifica che ogni elemento interattivo abbia `.accessibilityLabel()` e `.accessibilityHint()` non nil
 2. **GREEN**: Aggiungi modificatori `.accessibilityLabel()`, `.accessibilityHint()`, `.accessibilityAddTraits()` a ogni elemento interattivo in `MenuBarView`:
    - Toggle "Controllo Automatico" → `.accessibilityLabel("Controllo automatico")`
    - Button "Controlla Grammatica" → `.accessibilityLabel("Controlla grammatica")`
@@ -170,7 +170,7 @@ Atteso: Ogni bottone ha una label accessibile
 **Problema Root**: I componenti interni dello scroll (track, thumb, frecce) di SwiftUI `ScrollView`/`List` trapelano nell'albero AX come AXButton con size (0, 0). Questo è un comportamento noto di SwiftUI su macOS.
 
 **TDD Steps**:
-1. **RED**: Scrivi test `testSettingsTabs_noZeroSizeAXElements()` — verifica che nessun AXButton abbia `width: 0 AND height: 0` nei tab Generale, Avanzate (quelli con ScrollView/Form)
+1. **RED**: Scrivi test `testSettingsTabs_noZeroSizeAXElements()` - verifica che nessun AXButton abbia `width: 0 AND height: 0` nei tab Generale, Avanzate (quelli con ScrollView/Form)
 2. **GREEN**: Aggiungi `.accessibilityHidden(true)` agli `ScrollView` e `List` wrapper quando contengono solo sub-elementi che sono già accessibili. Oppure usa l'approccio `NSView` con `setAccessibilityElement(false)` sugli scroll interni.
 3. In alternativa: avvolgi ogni contenuto di tab in un `Group` con `.accessibilityElement(children: .combine)` per impedire la propagazione degli elementi interni.
 4. **REFACTOR**: Creare un ViewModifier riutilizzabile `.cleanAccessibilityTree()` da applicare ai container con scroll.
@@ -193,7 +193,7 @@ Atteso: Nessun elemento con size=(0,0) nei risultati
 **Problema Root**: Il `Picker("Servizio", selection: $prefs.serviceType)` potrebbe non propagare il cambiamento a `PreferencesStore` se il binding non è configurato correttamente. Possibile causa: `@Bindable` su un `@Observable` class che ha `serviceType` come computed property invece che stored.
 
 **TDD Steps**:
-1. **RED**: Scrivi test `testServiceTypePicker_changesPreferencesStore()` — simula la selezione di un nuovo valore e verifica che `prefs.serviceType` sia aggiornato
+1. **RED**: Scrivi test `testServiceTypePicker_changesPreferencesStore()` - simula la selezione di un nuovo valore e verifica che `prefs.serviceType` sia aggiornato
 2. **GREEN**: Verificare che `PreferencesStore.serviceType` sia una stored property (var, non computed). Se è computed, convertire in stored con `didSet` per UserDefaults sync.
 3. Se il problema è nel `.tag()`: verificare che `ServiceType` sia `Hashable` e che il `.tag()` corrisponda esattamente al tipo.
 4. **REFACTOR**: Nessuno necessario
@@ -215,7 +215,7 @@ Atteso: Il picker mostra "Stub (test)"
 **Problema Root**: La checkbox "Controllo in tempo reale" non cambiava stato con i click via coordinate. Due possibilità: (a) problema di coordinate nel test automation, (b) il Toggle non è correttamente bindato.
 
 **TDD Steps**:
-1. **RED**: Scrivi test `testRealtimeToggle_changesValue()` — verifica che il toggle cambi il valore di `prefs.realtimeEnabled` (o la chiave UserDefaults corrispondente)
+1. **RED**: Scrivi test `testRealtimeToggle_changesValue()` - verifica che il toggle cambi il valore di `prefs.realtimeEnabled` (o la chiave UserDefaults corrispondente)
 2. **GREEN**: Verificare che il Toggle sia bindato a `$prefs.realtimeEnabled` (o `UserDefaults.standard.bool(forKey: "realtimeEnabled")`). Se usa `@AppStorage`, assicurarsi che la chiave sia corretta.
 3. Controllare che `realtimeEnabled` esista in `PreferencesStore` come `@Observable` property.
 4. **REFACTOR**: Nessuno necessario
@@ -231,7 +231,7 @@ Atteso: value cambia tra 0 e 1 ad ogni click
 
 ---
 
-### Wave 2 (PARALLEL — dopo Wave 1)
+### Wave 2 (PARALLEL - dopo Wave 1)
 
 ---
 
@@ -242,8 +242,8 @@ Atteso: value cambia tra 0 e 1 ad ogni click
 **Problema Root**: L'alert appare sempre al primo avvio perché `AXIsProcessTrustedWithOptions` restituisce false per app non firmate, anche quando il sistema ha l'accessibilità abilitata globalmente.
 
 **TDD Steps**:
-1. **RED**: Scrivi test `testAccessibilityAlert_onlyShowsWhenNotTrusted()` — mock `AXIsProcessTrustedWithOptions` per restituire true, verifica che l'alert non venga mostrato
-2. **GREEN**: Aggiungere un check aggiuntivo: dopo `AXIsProcessTrustedWithOptions`, verificare anche se il sistema ha accessibilità enabled tramite `AXIsProcessTrusted()` (senza options — senza prompt). Se `AXIsProcessTrusted()` è true ma `AXIsProcessTrustedWithOptions` è false, mostrare un alert più soft o saltare.
+1. **RED**: Scrivi test `testAccessibilityAlert_onlyShowsWhenNotTrusted()` - mock `AXIsProcessTrustedWithOptions` per restituire true, verifica che l'alert non venga mostrato
+2. **GREEN**: Aggiungere un check aggiuntivo: dopo `AXIsProcessTrustedWithOptions`, verificare anche se il sistema ha accessibilità enabled tramite `AXIsProcessTrusted()` (senza options - senza prompt). Se `AXIsProcessTrusted()` è true ma `AXIsProcessTrustedWithOptions` è false, mostrare un alert più soft o saltare.
 3. Aggiungere un flag UserDefaults `hasAcknowledgedAccessibilityWarning` per non ripetere l'alert.
 4. **REFACTOR**: Estrarre la logica in un metodo `shouldShowAccessibilityWarning() -> Bool`
 
@@ -264,7 +264,7 @@ Atteso: Nessun alert (o un alert solo informativo, non bloccante)
 **Problema Root**: Il messaggio "Il motore AI non è ancora pronto. Attendi qualche secondo e riprova." non offre azioni all'utente.
 
 **TDD Steps**:
-1. **RED**: Scrivi test `testAIErrorMessage_hasActionButtons()` — verifica che la view di errore contenga almeno un pulsante d'azione
+1. **RED**: Scrivi test `testAIErrorMessage_hasActionButtons()` - verifica che la view di errore contenga almeno un pulsante d'azione
 2. **GREEN**: Modificare la view dell'errore per includere:
    - Pulsante "Riprova" che ri-esegue il check
    - Pulsante "Usa Stub" che switcha temporaneamente a StubLLMService

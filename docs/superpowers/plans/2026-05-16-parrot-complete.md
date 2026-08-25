@@ -1,8 +1,8 @@
-# Parrot — Piano Completo di Miglioramento
+# Parrot - Piano Completo di Miglioramento
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Risolvere tutti i bug confermati, aggiungere le feature mancanti critiche, migliorare la qualità del codice, e preparare il progetto al lancio — ordinato dal cambiamento più semplice al più complesso.
+**Goal:** Risolvere tutti i bug confermati, aggiungere le feature mancanti critiche, migliorare la qualità del codice, e preparare il progetto al lancio - ordinato dal cambiamento più semplice al più complesso.
 
 **Architecture:** App macOS menubar. 6 layer: App → Shortcuts → Accessibility → Core → Infra → UI. Swift actors per shared state, SwiftUI per le views, SPM come build system.
 
@@ -35,17 +35,17 @@
 | `Core/PromptEngine.swift` | Aggiungere template traduzione |
 | `UI/ModelsTab.swift` | Aggiungere stato modello mancante |
 | `UI/AppRulesTab.swift` | Migliorare per-app settings UI |
-| `Core/HistoryStore.swift` | Nuovo file — persistenza storia correzioni |
-| `UI/HistoryTab.swift` | Nuovo file — tab storia |
+| `Core/HistoryStore.swift` | Nuovo file - persistenza storia correzioni |
+| `UI/HistoryTab.swift` | Nuovo file - tab storia |
 | `UI/SettingsView.swift` | Aggiungere HistoryTab |
-| `.github/workflows/ci.yml` | Nuovo — GitHub Actions CI |
+| `.github/workflows/ci.yml` | Nuovo - GitHub Actions CI |
 | `.github/ISSUE_TEMPLATE/bug_report.md` | Nuovo |
 | `.github/ISSUE_TEMPLATE/feature_request.md` | Nuovo |
 | `Tests/Tests.swift` | Nuovi test per ogni task |
 
 ---
 
-## GRUPPO 1 — Trivial Fixes (< 5 min ciascuno)
+## GRUPPO 1 - Trivial Fixes (< 5 min ciascuno)
 
 ---
 
@@ -148,7 +148,7 @@ var currentMemoryBytesForTesting: Int { currentMemoryBytes }
 ```bash
 cd /Users/eugeniozamengopontrelli/Desktop/Parrot && swift test --filter ResultCacheTests/testSet_updatingExistingKey_doesNotDoublecountMemory 2>&1 | tail -5
 ```
-Expected: FAIL — `currentMemoryBytes` viene sommato due volte.
+Expected: FAIL - `currentMemoryBytes` viene sommato due volte.
 
 - [ ] **Step 4: Applicare il fix**
 
@@ -266,7 +266,7 @@ git commit -m "fix: add OpenAI API key field to GeneralTab — remote mode was u
 
 ---
 
-## GRUPPO 2 — Simple State/Logic Fixes
+## GRUPPO 2 - Simple State/Logic Fixes
 
 ---
 
@@ -382,7 +382,7 @@ git commit -m "fix: remove stale 60s API key cache from OpenRouterService — us
 
 **File:** tutti i file con `os_log`
 
-Attualmente: `os_log(.debug, "message")` — nessun subsystem, impossibile filtrare in Console.app.
+Attualmente: `os_log(.debug, "message")` - nessun subsystem, impossibile filtrare in Console.app.
 Fix: usare `Logger` (iOS 14+ / macOS 11+) con subsystem `com.thousandflowers.parrot` e categoria per file.
 
 - [ ] **Step 1: Aggiungere file di helper Logger**
@@ -441,11 +441,11 @@ git commit -m "refactor: replace os_log with structured Logger(subsystem:categor
 
 ---
 
-## GRUPPO 3 — Medium Complexity
+## GRUPPO 3 - Medium Complexity
 
 ---
 
-### Task 7: FeedbackLogger — rotazione file
+### Task 7: FeedbackLogger - rotazione file
 
 **File:** `Core/FeedbackLogger.swift`
 
@@ -544,7 +544,7 @@ git commit -m "fix: add FeedbackLogger rotation (10MB limit, 500 char truncation
 
 ---
 
-### Task 8: ServerHealthMonitor — restart non-bloccante
+### Task 8: ServerHealthMonitor - restart non-bloccante
 
 **File:** `Infra/ServerHealthMonitor.swift:54-64`
 
@@ -589,7 +589,7 @@ git commit -m "fix: run server restart in background Task — unblocks request q
 
 ---
 
-### Task 9: Onboarding — verifica permessi reale
+### Task 9: Onboarding - verifica permessi reale
 
 **File:** `UI/OnboardingView.swift`
 
@@ -769,11 +769,11 @@ git commit -m "ci: add GitHub Actions CI workflow and issue templates"
 
 ---
 
-## GRUPPO 4 — Complex Multi-File
+## GRUPPO 4 - Complex Multi-File
 
 ---
 
-### Task 11: Fix computeDiff — offset errati con spazi consecutivi
+### Task 11: Fix computeDiff - offset errati con spazi consecutivi
 
 **File:** `Core/CorrectionResult.swift:60-96`
 
@@ -804,7 +804,7 @@ func testComputeDiff_consecutiveSpaces_correctOffsets() {
 ```bash
 cd /Users/eugeniozamengopontrelli/Desktop/Parrot && swift test --filter CorrectionResultTests/testComputeDiff_consecutiveSpaces_correctOffsets 2>&1 | tail -5
 ```
-Expected: FAIL — offset calcolato erroneamente.
+Expected: FAIL - offset calcolato erroneamente.
 
 - [ ] **Step 3: Sostituire computeDiff con tokenizer che preserva posizioni**
 
@@ -872,7 +872,7 @@ git commit -m "fix: computeDiff uses char-by-char tokenizer to correctly handle 
 
 ---
 
-### Task 12: AccessibilityBridge — fix clipboard race condition
+### Task 12: AccessibilityBridge - fix clipboard race condition
 
 **File:** `Accessibility/AccessibilityBridge.swift:245-296`
 
@@ -1066,7 +1066,7 @@ Nel `headerTitle`:
 case .applied: return "Testo applicato"
 ```
 
-Nel `contentView` — aggiungere:
+Nel `contentView` - aggiungere:
 ```swift
 case .applied:
     VStack(spacing: 8) {
@@ -1080,7 +1080,7 @@ case .applied:
     .frame(height: 80)
 ```
 
-Nel `footerView` — aggiungere:
+Nel `footerView` - aggiungere:
 ```swift
 case .applied:
     Spacer()
@@ -1185,7 +1185,7 @@ git commit -m "feat: show model-missing state with CTA instead of generic error 
 
 ---
 
-## GRUPPO 5 — Complex Architectural Changes
+## GRUPPO 5 - Complex Architectural Changes
 
 ---
 
@@ -1393,7 +1393,7 @@ func buildLLMRequest(url: URL, apiKey: String?, model: String, messages: [ChatMe
 
 Verificare in `LocalLLMService.swift`, `RemoteLLMService.swift`, `OllamaService.swift`, `OpenRouterService.swift` ogni chiamata a `buildLLMRequest` o costruzione manuale del body e aggiornare alla nuova firma.
 
-Verificare anche `performOpenAIRequest(body: [String: Any], ...)` — aggiornare per accettare un `ChatRequest` direttamente o rimuovere il parametro `body` per costruirlo internamente.
+Verificare anche `performOpenAIRequest(body: [String: Any], ...)` - aggiornare per accettare un `ChatRequest` direttamente o rimuovere il parametro `body` per costruirlo internamente.
 
 - [ ] **Step 7: Build + test**
 ```bash
@@ -1903,7 +1903,7 @@ git commit -m "feat: correction history — last 200 corrections stored and brow
 
 ---
 
-## GRUPPO 6 — Lancio
+## GRUPPO 6 - Lancio
 
 ---
 
@@ -2179,7 +2179,7 @@ git commit -m "feat: per-app settings UI — service type and prompt selector pe
 - Landing page (progetto separato)
 - Blog post tecnici (contenuto, non codice)
 - Benchmark README (richiede misurazioni manuali)
-- ARCH2: @unchecked Sendable migration (Swift 6 — dipende da timeline migrazione)
+- ARCH2: @unchecked Sendable migration (Swift 6 - dipende da timeline migrazione)
 - ARCH5: Consolidare 5 servizi LLM (refactor rischioso senza un test suite di integrazione più ampio)
 - LOGIC1-5: problemi logici non critici (polling AX, rate limiting, ToneDetector, formattazione, ModelManager dedup)
 

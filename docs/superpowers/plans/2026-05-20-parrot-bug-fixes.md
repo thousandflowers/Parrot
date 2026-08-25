@@ -32,7 +32,7 @@
 
 ## Task 1: Fix lost `source` field and hardcoded deadline
 
-**Problem 1:** `TextCheckCoordinator.performCheck` reconstructs `CorrectionResult` at lines 194–205 but omits `source:`, causing all corrections to be tagged `.llm` in history—even rule-based ones.
+**Problem 1:** `TextCheckCoordinator.performCheck` reconstructs `CorrectionResult` at lines 194–205 but omits `source:`, causing all corrections to be tagged `.llm` in history - even rule-based ones.
 
 **Problem 2:** `RequestQueue.enqueue` hardcodes `60` seconds instead of using `Constants.queueTimeout`.
 
@@ -86,7 +86,7 @@ final class CorrectionResultSourceTests: XCTestCase {
 ```bash
 swift test --filter CorrectionResultSourceTests 2>&1 | tail -20
 ```
-Expected: 2 tests pass (the rebuilt source tests work because CorrectionResult.init has `source` parameter), 1 passes trivially. All pass even before the fix. **The real fix below is in TextCheckCoordinator — verify with a manual check.**
+Expected: 2 tests pass (the rebuilt source tests work because CorrectionResult.init has `source` parameter), 1 passes trivially. All pass even before the fix. **The real fix below is in TextCheckCoordinator - verify with a manual check.**
 
 - [ ] **Step 3: Fix the `source` field in `TextCheckCoordinator.swift`**
 
@@ -191,7 +191,7 @@ final class StreamingModelIDTests: XCTestCase {
 ```bash
 swift test --filter StreamingModelIDTests 2>&1 | tail -10
 ```
-Expected: PASS — the cache handles this correctly, the issue is only in `checkStreaming` not calling it.
+Expected: PASS - the cache handles this correctly, the issue is only in `checkStreaming` not calling it.
 
 - [ ] **Step 3: Rewrite `checkStreaming()` in `Core/TextCheckCoordinator+CheckFlows.swift`**
 
@@ -286,7 +286,7 @@ git commit -m "fix: checkStreaming uses real modelID, checks cache, detects tone
 - Modify: `Core/RequestQueue.swift` (delegate to factory)
 - Modify: `Tests/Tests.swift` (add tests)
 
-> **Do this before Task 2** — Task 2 depends on `LLMServiceFactory.resolveModelID(for:)`.
+> **Do this before Task 2** - Task 2 depends on `LLMServiceFactory.resolveModelID(for:)`.
 
 - [ ] **Step 1: Write failing tests**
 
@@ -321,7 +321,7 @@ final class LLMServiceFactoryModelIDTests: XCTestCase {
 ```bash
 swift test --filter LLMServiceFactoryModelIDTests 2>&1 | tail -10
 ```
-Expected: FAIL — `LLMServiceFactory.resolveModelID` does not exist yet.
+Expected: FAIL - `LLMServiceFactory.resolveModelID` does not exist yet.
 
 - [ ] **Step 3: Add `resolveModelID(for:)` to `Core/LLMServiceFactory.swift`**
 
@@ -378,7 +378,7 @@ git commit -m "refactor: extract resolveModelID to LLMServiceFactory, DRY up Req
 
 ---
 
-## Task 4: SSEStreamingEngine — session reuse and retry
+## Task 4: SSEStreamingEngine - session reuse and retry
 
 **Problem 1:** Each `stream()` call creates a new `URLSession`, which has allocation overhead.
 
@@ -575,7 +575,7 @@ git commit -m "chore: remove unused lightweightMode UserDefaults key"
 
 ## Task 6: NSLock → OSAllocatedUnfairLock in AppDelegate
 
-**Problem:** `applicationShouldTerminate` uses `NSLock` + `nonisolated(unsafe) var` — a pattern explicitly flagged in the codebase comment as needing Swift 6 migration. `OSAllocatedUnfairLock` is already used in the project (see `TextCheckCoordinator.swift`).
+**Problem:** `applicationShouldTerminate` uses `NSLock` + `nonisolated(unsafe) var` - a pattern explicitly flagged in the codebase comment as needing Swift 6 migration. `OSAllocatedUnfairLock` is already used in the project (see `TextCheckCoordinator.swift`).
 
 **Files:**
 - Modify: `App/AppDelegate.swift:32–56`
@@ -668,7 +668,7 @@ git commit -m "fix: replace NSLock+nonisolated(unsafe) with OSAllocatedUnfairLoc
 
 **Problem 2:** `Lexicon` only has informal/academic/technical words for EN, IT, FR, HR, DA. Adding DE, ES, PT improves detection for those languages.
 
-**Approach:** Add `Lexicon.computeWordScores(words:rawWords:text:)` — a pure shared computation. Both `ToneDetector` and `ContextAnalyzer` call this. Each still has its own thresholds and regex patterns.
+**Approach:** Add `Lexicon.computeWordScores(words:rawWords:text:)` - a pure shared computation. Both `ToneDetector` and `ContextAnalyzer` call this. Each still has its own thresholds and regex patterns.
 
 **Files:**
 - Modify: `Core/Lexicon.swift`
@@ -722,7 +722,7 @@ final class LexiconTests: XCTestCase {
 ```bash
 swift test --filter LexiconTests 2>&1 | tail -10
 ```
-Expected: FAIL — `Lexicon.computeWordScores` and DE/ES words don't exist yet.
+Expected: FAIL - `Lexicon.computeWordScores` and DE/ES words don't exist yet.
 
 - [ ] **Step 3: Update `Core/Lexicon.swift`**
 
@@ -1029,7 +1029,7 @@ final class CorrectionCacheDiskTests: XCTestCase {
 ```bash
 swift test --filter CorrectionCacheDiskTests 2>&1 | tail -10
 ```
-Expected: FAIL — `saveToDisk`, `loadFromDisk`, `deleteCacheFile`, `cacheFileURL` don't exist.
+Expected: FAIL - `saveToDisk`, `loadFromDisk`, `deleteCacheFile`, `cacheFileURL` don't exist.
 
 - [ ] **Step 3: Rewrite `Infra/CorrectionCache.swift`**
 
@@ -1221,7 +1221,7 @@ git commit -m "feat: CorrectionCache persists to disk, loads on launch, debounce
 
 ---
 
-## Task 9: Expand Lexicon (German, Spanish, Portuguese) — done as part of Task 7
+## Task 9: Expand Lexicon (German, Spanish, Portuguese) - done as part of Task 7
 
 > This task was folded into **Task 7** (Lexicon unification). The DE/ES/PT words are added there. No separate task needed.
 

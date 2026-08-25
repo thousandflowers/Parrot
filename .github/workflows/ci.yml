@@ -33,6 +33,6 @@ jobs:
           if command -v swiftformat &> /dev/null; then
             swiftformat --lint . --reporter github-actions-log
           else
-            echo "SwiftFormat not installed — skipping lint"
+            echo "SwiftFormat not installed - skipping lint"
           fi
         continue-on-error: true
