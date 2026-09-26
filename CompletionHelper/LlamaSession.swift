@@ -12,6 +12,13 @@ final class LlamaSession {
     private var cached: [llama_token] = []   // tokens currently resident in the KV cache (seq 0)
 
     init(modelPath: String, contextSize: Int32 = 2048) throws {
+        // ggml >= 0.23 loads its compute backends (Metal, CPU, BLAS) as plugins. Search ONLY next to
+        // this executable: the library also carries a compiled-in Homebrew path whose plugins exist
+        // on dev machines but carry a foreign signature the hardened runtime rejects, and the loader
+        // stops at the first existing candidate instead of falling through to the next directory.
+        if let exeDir = Bundle.main.executableURL?.deletingLastPathComponent().path {
+            ggml_backend_load_all_from_path(exeDir)
+        }
         llama_backend_init()
         var mparams = llama_model_default_params()
         mparams.n_gpu_layers = 999   // offload ALL layers to the Metal GPU (don't rely on the default)
@@ -182,7 +189,8 @@ final class LlamaSession {
         llama_sampler_chain_add(smpl, llama_sampler_init_top_p(0.9, 1))
         llama_sampler_chain_add(smpl, llama_sampler_init_min_p(0.05, 1))
         llama_sampler_chain_add(smpl, llama_sampler_init_temp(temperature))
-        llama_sampler_chain_add(smpl, llama_sampler_init_penalties(512, repeatPenalty, 0.0, 0.0))
+        // llama.cpp >= 0.4.0 (Homebrew) re-added n_vocab as the first parameter.
+        llama_sampler_chain_add(smpl, llama_sampler_init_penalties(llama_vocab_n_tokens(vocab), 512, repeatPenalty, 0.0, 0.0))
         llama_sampler_chain_add(smpl, llama_sampler_init_dist(seed))
         defer { llama_sampler_free(smpl) }
 
