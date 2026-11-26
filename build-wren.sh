@@ -112,6 +112,10 @@ sed \
   || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Wren" "${PLIST_DST}"
 /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "${PLIST_DST}" 2>/dev/null \
   || /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile AppIcon" "${PLIST_DST}"
+# The shared Info.plist claims the parrot:// scheme for PopClip/deep-link corrections. Wren doesn't
+# correct, and when both apps are installed Launch Services may hand parrot:// links to Wren, so
+# Parrot never receives them. Wren must not claim it.
+/usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes" "${PLIST_DST}" 2>/dev/null || true
 # Release builds stamp the tag version (Info.plist carries Parrot's version otherwise).
 if [ -n "${APP_VERSION:-}" ]; then
     /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" "${PLIST_DST}"
