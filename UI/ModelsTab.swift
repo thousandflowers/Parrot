@@ -72,7 +72,7 @@ struct ModelsTab: View {
                 }
 
                 if prefs.serviceType == .remote {
-                    OpenAIKeyField(prefs: prefs)
+                    APIKeyField(title: "API Key OpenAI", provider: "openai", key: \.openAIAPIKey, prefs: prefs)
                     TextField("Base URL", text: $prefs.openAIBaseURL)
                         .textFieldStyle(.roundedBorder)
                         .accessibilityLabel("Base URL")
@@ -107,7 +107,7 @@ struct ModelsTab: View {
                 }
 
                 if prefs.serviceType == .openRouter {
-                    OpenRouterKeyField(prefs: prefs)
+                    APIKeyField(title: "API Key OpenRouter", provider: "openrouter", key: \.openRouterAPIKey, prefs: prefs)
                     TextField("Model (e.g. openai/gpt-4o-mini)", text: $prefs.openRouterModel)
                         .textFieldStyle(.roundedBorder)
                         .accessibilityLabel("OpenRouter model")
@@ -244,7 +244,7 @@ struct ModelsTab: View {
                         TextField("Backup model (if primary fails)", text: $prefs.fallbackLocalModelID)
                             .textFieldStyle(.roundedBorder)
                             .accessibilityLabel("Fallback model")
-                        Text("Optional. If the selected model fails to load, Parrot will try this one instead. Enter a model ID from the list above.")
+                        Text("Optional. If the selected model fails to load, \(AppMode.current.displayName) will try this one instead. Enter a model ID from the list above.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -583,7 +583,7 @@ private struct LlamaInstallerSection: View {
                     Label("llama-server not found", systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(Color.statusWarning)
                         .font(.callout.weight(.medium))
-                    Text("The local AI engine is not installed. Parrot can install it automatically via Homebrew, or download a prebuilt binary from GitHub.")
+                    Text("The local AI engine is not installed. \(AppMode.current.displayName) can install it automatically via Homebrew, or download a prebuilt binary from GitHub.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Button("Install llama-server") { installer.install() }
@@ -650,29 +650,29 @@ private struct LlamaInstallerSection: View {
 
 // MARK: - Key Fields
 
-private struct OpenAIKeyField: View {
+/// SecureField bound to a Keychain-backed key. Shows the Keychain error when a save fails:
+/// a failed save is not cached, so without this the key silently reads back empty.
+private struct APIKeyField: View {
+    let title: String
+    let provider: String
+    let key: ReferenceWritableKeyPath<PreferencesStore, String>
     let prefs: PreferencesStore
     @State private var localKey: String = ""
 
     var body: some View {
-        SecureField("API Key OpenAI", text: $localKey)
-            .onAppear { localKey = prefs.openAIAPIKey }
-            .onSubmit { prefs.openAIAPIKey = localKey }
-            .onDisappear { prefs.openAIAPIKey = localKey }
-            .accessibilityLabel("OpenAI API Key")
-    }
-}
-
-private struct OpenRouterKeyField: View {
-    let prefs: PreferencesStore
-    @State private var localKey: String = ""
-
-    var body: some View {
-        SecureField("API Key OpenRouter", text: $localKey)
-            .onAppear { localKey = prefs.openRouterAPIKey }
-            .onSubmit { prefs.openRouterAPIKey = localKey }
-            .onDisappear { prefs.openRouterAPIKey = localKey }
-            .accessibilityLabel("OpenRouter API Key")
+        VStack(alignment: .leading, spacing: 4) {
+            SecureField(title, text: $localKey)
+                .onAppear { localKey = prefs[keyPath: key] }
+                .onSubmit { prefs[keyPath: key] = localKey }
+                .onDisappear { prefs[keyPath: key] = localKey }
+                .accessibilityLabel(title)
+            if let error = prefs.apiKeySaveErrors[provider] {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .accessibilityLabel("Error: \(error)")
+            }
+        }
     }
 }
 

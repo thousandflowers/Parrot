@@ -27,7 +27,7 @@ struct CompletionTab: View {
             } header: {
                 Label("Inline completion", systemImage: "text.append")
             } footer: {
-                Text("As you type in any app, Parrot suggests a continuation in grey. Press Tab to accept. On-device.")
+                Text("As you type in any app, \(AppMode.current.displayName) suggests a continuation in grey. Press Tab to accept. On-device.")
                     .foregroundStyle(.secondary)
             }
 
