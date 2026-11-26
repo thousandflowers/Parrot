@@ -24,9 +24,9 @@ enum CrashLogger {
         try? FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
         NSSetUncaughtExceptionHandler(_exceptionHandler)
 
-        crashFD = open(crashLogURL.path, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+        crashFD = LogRotation.openAppendFD(at: crashLogURL, maxBytes: Constants.logRotationMaxBytes)
         debugLock.lock()
-        debugFD = open(debugLogURL.path, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+        debugFD = LogRotation.openAppendFD(at: debugLogURL, maxBytes: Constants.logRotationMaxBytes)
         debugLock.unlock()
 
         let fatalSignals: [Int32] = [SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGTRAP]

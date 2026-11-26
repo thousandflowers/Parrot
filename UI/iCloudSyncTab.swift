@@ -1,9 +1,10 @@
 import SwiftUI
 
 struct iCloudSyncTab: View {
-    @State private var selectedSections: Set<String> = ["preferences", "customRules"]
+    @State private var selectedSections: Set<iCloudSyncSection> = [.preferences, .customRules]
     @State private var isAvailable = false
     @State private var syncMessage: String?
+    @State private var syncFailures: [String] = []
     @State private var syncTask: Task<Void, Never>?
 
     var body: some View {
@@ -31,11 +32,10 @@ struct iCloudSyncTab: View {
             Section {
                 ForEach(iCloudSyncSection.allCases) { section in
                     Toggle(isOn: Binding(
-                        get: { selectedSections.contains(section.id.lowercased()) },
+                        get: { selectedSections.contains(section) },
                         set: { isSelected in
-                            let key = section.id.lowercased()
-                            if isSelected { selectedSections.insert(key) }
-                            else { selectedSections.remove(key) }
+                            if isSelected { selectedSections.insert(section) }
+                            else { selectedSections.remove(section) }
                         }
                     )) {
                         Label(section.label, systemImage: section.icon)
@@ -75,6 +75,13 @@ struct iCloudSyncTab: View {
                     }
                 }
                 .animation(.easeOut(duration: 0.2), value: syncMessage != nil)
+
+                ForEach(syncFailures, id: \.self) { failure in
+                    Label(failure, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(Color.statusWarning)
+                        .accessibilityLabel("Not uploaded: \(failure)")
+                }
             } header: {
                 Text("Actions")
             }
@@ -87,11 +94,14 @@ struct iCloudSyncTab: View {
 
     private func syncToCloud() {
         syncTask?.cancel()
+        syncFailures = []
         syncTask = Task {
-            await iCloudSyncManager.shared.syncToCloud(selectedSections: selectedSections)
+            let report = await iCloudSyncManager.shared.syncToCloud(selectedSections: selectedSections)
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                syncMessage = "Uploaded \(selectedSections.count) sections to iCloud"
+                syncMessage = report.uploaded.isEmpty ? nil : "Uploaded \(report.uploaded.count) item(s) to iCloud"
+                // Failures stay visible until the next sync: the user must notice data that did not sync.
+                syncFailures = report.failed.map { "\($0.key.replacingOccurrences(of: "sync.", with: "")): \($0.reason)" }
             }
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }
@@ -101,6 +111,7 @@ struct iCloudSyncTab: View {
 
     private func syncFromCloud() {
         syncTask?.cancel()
+        syncFailures = []
         syncTask = Task {
             let imported = await iCloudSyncManager.shared.syncFromCloud(selectedSections: selectedSections)
             guard !Task.isCancelled else { return }

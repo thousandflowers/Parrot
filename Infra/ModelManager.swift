@@ -37,10 +37,14 @@ actor ModelManager: Sendable {
 
     private var _cachedModelPath: String?
     private var _lastCacheTime: Date = .distantPast
-    private var _activeDownloadSession: URLSession?
+    /// One URLSession per file being downloaded (cancelled together by cancelActiveDownload).
+    private var activeDownloadSessions: [String: URLSession] = [:]
+    /// In-flight downloads by filename: a second request for the same file joins the first
+    /// instead of appending to the same `.partial`.
+    private var inFlightDownloads: [String: Task<URL, Error>] = [:]
 
     private let modelsDir: URL = {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+        guard let appSupport = AppPaths.applicationSupport else {
             Logger.infra.error("Cannot locate Application Support directory")
             return FileManager.default.temporaryDirectory.appendingPathComponent("Parrot/Models")
         }
@@ -78,12 +82,14 @@ actor ModelManager: Sendable {
     }
 
     func cancelActiveDownload() {
-        _activeDownloadSession?.invalidateAndCancel()
-        _activeDownloadSession = nil
+        activeDownloadSessions.values.forEach { $0.invalidateAndCancel() }
+        activeDownloadSessions = [:]
+        inFlightDownloads.values.forEach { $0.cancel() }
+        inFlightDownloads = [:]
     }
 
     nonisolated var modelsDirPath: String {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let appSupport = AppPaths.applicationSupport
             ?? FileManager.default.temporaryDirectory
         return appSupport.appendingPathComponent("Parrot/Models").path(percentEncoded: false)
     }
@@ -101,10 +107,7 @@ actor ModelManager: Sendable {
                 }
             }
             // Case-insensitive check of external/adopted paths
-            let external = adoptedModelPaths().first {
-                let filename = ($0 as NSString).lastPathComponent
-                return filename.lowercased() == "\(cleanID.lowercased()).gguf" || $0.lowercased().contains(cleanID.lowercased())
-            }
+            let external = adoptedModelPaths().first { Self.adoptedPath($0, matchesModelID: id) }
             if let ext = external, FileManager.default.fileExists(atPath: ext) {
                 return ext
             }
@@ -121,9 +124,10 @@ actor ModelManager: Sendable {
         UserDefaults.standard.stringArray(forKey: Constants.UserDefaultsKey.externalModelPaths) ?? []
     }
 
-    /// Removes a downloaded model by ID. Deletes the file from the models directory
-    /// and removes any matching adopted model paths.
-    /// - Parameter id: The model ID (without .gguf extension).
+    /// Removes a downloaded model by ID. Deletes the file from the models directory and
+    /// un-adopts exactly-matching adopted paths. Adopted files outside the app's models dir
+    /// (LM Studio, Ollama, user folders) are never deleted — only forgotten.
+    /// - Parameter id: The model ID (with or without .gguf extension).
     func removeModel(id: String) {
         let cleanID = id.hasSuffix(".gguf") ? String(id.dropLast(5)) : id
         let dirPath = modelsDir.path(percentEncoded: false)
@@ -136,18 +140,10 @@ actor ModelManager: Sendable {
             }
         }
 
-        var adopted = adoptedModelPaths()
-        let toRemove = adopted.filter { path in
-            let filename = (path as NSString).lastPathComponent
-            let idLower = cleanID.lowercased()
-            return filename.hasSuffix(".gguf") && (filename.lowercased() == "\(idLower).gguf" || filename.lowercased().contains(idLower))
-        }
-        adopted.removeAll { toRemove.contains($0) }
-        UserDefaults.standard.set(adopted, forKey: Constants.UserDefaultsKey.externalModelPaths)
-        for path in toRemove {
-            try? FileManager.default.removeItem(atPath: path)
-            Logger.infra.debug("ModelManager: deleted adopted model \(path)")
-        }
+        let adopted = adoptedModelPaths()
+        let toRemove = adopted.filter { Self.adoptedPath($0, matchesModelID: id) }
+        UserDefaults.standard.set(adopted.filter { !toRemove.contains($0) }, forKey: Constants.UserDefaultsKey.externalModelPaths)
+        toRemove.forEach(deleteIfInsideModelsDir)
 
         invalidateCache()
     }
@@ -155,16 +151,46 @@ actor ModelManager: Sendable {
     /// Removes a discovered local model by its path.
     /// - Parameter model: The DiscoveredModel to delete.
     func removeLocalModel(_ model: DiscoveredModel) {
-        if model.path.contains(modelsDir.path(percentEncoded: false)) {
+        if Self.isPath(model.path, inside: modelsDir.path(percentEncoded: false)) {
             removeModel(id: model.id)
             return
         }
-        var adopted = adoptedModelPaths()
-        adopted.removeAll { $0 == model.path }
-        UserDefaults.standard.set(adopted, forKey: Constants.UserDefaultsKey.externalModelPaths)
-        try? FileManager.default.removeItem(atPath: model.path)
-        Logger.infra.debug("ModelManager: deleted adopted model at \(model.path)")
+        // External file: un-adopt only. It belongs to the user / another app.
+        let adopted = adoptedModelPaths()
+        UserDefaults.standard.set(adopted.filter { $0 != model.path }, forKey: Constants.UserDefaultsKey.externalModelPaths)
+        Logger.infra.info("ModelManager: un-adopted external model (file kept) at \(model.path, privacy: .public)")
         invalidateCache()
+    }
+
+    private func deleteIfInsideModelsDir(_ path: String) {
+        guard Self.isPath(path, inside: modelsDir.path(percentEncoded: false)) else {
+            Logger.infra.info("ModelManager: un-adopted external model (file kept) at \(path, privacy: .public)")
+            return
+        }
+        do {
+            try FileManager.default.removeItem(atPath: path)
+        } catch {
+            Logger.infra.error("ModelManager: failed to delete \(path, privacy: .public) — \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Exact match of an adopted path against a model id: same filename (case-insensitive,
+    /// `.gguf` optional) or the full path itself (discovered models use the path as id).
+    static func adoptedPath(_ path: String, matchesModelID id: String) -> Bool {
+        let cleanID = id.lowercased().hasSuffix(".gguf") ? String(id.dropLast(5)) : id
+        guard !cleanID.isEmpty else { return false }
+        let lowerPath = path.lowercased()
+        let filename = (lowerPath as NSString).lastPathComponent
+        let lowerID = cleanID.lowercased()
+        return filename == "\(lowerID).gguf" || lowerPath == lowerID || lowerPath == "\(lowerID).gguf"
+    }
+
+    /// True when `path` (after resolving `..`) lies inside directory `dir`.
+    static func isPath(_ path: String, inside dir: String) -> Bool {
+        let file = URL(fileURLWithPath: path).standardizedFileURL.path
+        let base = URL(fileURLWithPath: dir).standardizedFileURL.path
+        let prefix = base.hasSuffix("/") ? base : base + "/"
+        return file.hasPrefix(prefix)
     }
 
     func adoptModel(path: String) {
@@ -263,8 +289,13 @@ actor ModelManager: Sendable {
         }
         // Migrate legacy UserDefaults token to Keychain on first read
         if let legacy = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.hfToken), !legacy.isEmpty {
-            try? KeychainService.shared.save(key: legacy, for: "hftoken")
-            UserDefaults.standard.removeObject(forKey: Constants.UserDefaultsKey.hfToken)
+            do {
+                try KeychainService.shared.save(key: legacy, for: "hftoken")
+                UserDefaults.standard.removeObject(forKey: Constants.UserDefaultsKey.hfToken)
+            } catch {
+                // Keep the legacy copy: deleting it now would lose the token.
+                Logger.infra.error("ModelManager: HF token migration to Keychain failed — \(error.localizedDescription, privacy: .public)")
+            }
             return legacy
         }
         return nil
@@ -285,6 +316,8 @@ actor ModelManager: Sendable {
             return try await downloadWithResume(from: url, progressHandler: progressHandler, token: token)
         } catch let error as CorrectionError {
             throw error
+        } catch let error as ModelDownloadError {
+            throw error
         } catch {
             guard let mirror = mirrorURL(for: url) else {
                 throw CorrectionError.modelDownloadFailed(url: url)
@@ -298,16 +331,16 @@ actor ModelManager: Sendable {
         }
     }
 
-    private func downloadWithResume(from url: URL, progressHandler: ((Double) -> Void)?, token: String?) async throws -> URL {
+    /// Downloads `url` into the models dir, resuming a `.partial` with a Range request.
+    /// `allowResume: false` discards any partial and starts over (used after a 416 or a
+    /// Content-Range that does not continue the partial).
+    private func downloadWithResume(from url: URL, progressHandler: ((Double) -> Void)?, token: String?,
+                                    allowResume: Bool = true) async throws -> URL {
         let filename = url.lastPathComponent
         let destURL = modelsDir.appendingPathComponent(filename)
         let partialURL = modelsDir.appendingPathComponent("\(filename).partial")
-
-        let existingSize: Int64 = {
-            guard let attrs = try? FileManager.default.attributesOfItem(atPath: partialURL.path(percentEncoded: false)),
-                  let size = attrs[.size] as? Int64, size > 0 else { return 0 }
-            return size
-        }()
+        if !allowResume { removePartial(partialURL) }
+        let existingSize = Self.fileSize(atPath: partialURL.path(percentEncoded: false))
 
         var request = URLRequest(url: url)
         request.timeoutInterval = 120
@@ -320,9 +353,9 @@ actor ModelManager: Sendable {
         }
 
         let session = downloadSession()
-        _activeDownloadSession = session
+        activeDownloadSessions[filename] = session
         defer {
-            _activeDownloadSession = nil
+            if activeDownloadSessions[filename] === session { activeDownloadSessions[filename] = nil }
             session.invalidateAndCancel()
         }
 
@@ -331,60 +364,166 @@ actor ModelManager: Sendable {
             throw URLError(.badServerResponse)
         }
 
-        guard httpResponse.statusCode == 200 || httpResponse.statusCode == 206 else {
-            switch httpResponse.statusCode {
-            case 401, 403:
-                Logger.infra.error("Model download: auth required (HTTP \(httpResponse.statusCode, privacy: .public)). Set HF token in Settings > Advanced.")
-                throw CorrectionError.modelDownloadFailed(url: url)
-            case 404:
-                Logger.infra.error("Model file not found (HTTP 404): \(url.absoluteString, privacy: .public)")
-                throw CorrectionError.modelDownloadFailed(url: url)
-            default:
-                Logger.infra.error("Model download failed: HTTP \(httpResponse.statusCode, privacy: .public) for \(url.absoluteString, privacy: .public)")
-                throw URLError(.badServerResponse)
-            }
-        }
+        let decision = Self.resumeDecision(
+            statusCode: httpResponse.statusCode, existingSize: existingSize,
+            contentRange: httpResponse.value(forHTTPHeaderField: "Content-Range"),
+            expectedContentLength: httpResponse.expectedContentLength)
 
         let totalExpected: Int64
-        let isResume = (httpResponse.statusCode == 206)
-        if isResume {
-            totalExpected = existingSize + (httpResponse.expectedContentLength > 0 ? httpResponse.expectedContentLength : 0)
-        } else {
-            totalExpected = httpResponse.expectedContentLength
-            if FileManager.default.fileExists(atPath: partialURL.path(percentEncoded: false)) {
-                do {
-                    try FileManager.default.removeItem(at: partialURL)
-                } catch {
-                    Logger.infra.error("ModelManager: failed to remove stale partial file — \(error.localizedDescription, privacy: .public)")
-                }
+        let startOffset: Int64
+        switch decision {
+        case .alreadyComplete:
+            Logger.infra.info("ModelManager: \(filename, privacy: .public).partial is already complete (HTTP 416)")
+            return try finalizePartial(partialURL, to: destURL, expectedTotal: existingSize)
+        case .restartWithoutRange:
+            guard allowResume else {
+                Logger.infra.error("Model download: unusable response (HTTP \(httpResponse.statusCode, privacy: .public)) even without Range")
+                throw URLError(.badServerResponse)
             }
+            Logger.infra.info("ModelManager: partial for \(filename, privacy: .public) not resumable (HTTP \(httpResponse.statusCode, privacy: .public)) — restarting")
+            return try await downloadWithResume(from: url, progressHandler: progressHandler, token: token, allowResume: false)
+        case .fail:
+            throw downloadFailure(statusCode: httpResponse.statusCode, url: url)
+        case .fresh(let total):
+            removePartial(partialURL)
+            totalExpected = total
+            startOffset = 0
+        case .append(let total):
+            totalExpected = total
+            startOffset = existingSize
         }
 
         try FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
+        try ensureFreeSpace(needed: totalExpected > 0 ? totalExpected - startOffset : 0)
 
-        let fileHandle: FileHandle
-        if let fh = FileHandle(forWritingAtPath: partialURL.path(percentEncoded: false)) {
-            fileHandle = fh
-            try fileHandle.seekToEnd()
-        } else {
-            FileManager.default.createFile(atPath: partialURL.path(percentEncoded: false), contents: nil)
-            guard let fh = FileHandle(forWritingAtPath: partialURL.path(percentEncoded: false)) else {
-                throw URLError(.cannotCreateFile)
-            }
-            fileHandle = fh
+        let partialPath = partialURL.path(percentEncoded: false)
+        if !FileManager.default.fileExists(atPath: partialPath) {
+            FileManager.default.createFile(atPath: partialPath, contents: nil)
+        }
+        guard let fileHandle = FileHandle(forWritingAtPath: partialPath) else {
+            throw URLError(.cannotCreateFile)
         }
         defer { try? fileHandle.close() }
+        try fileHandle.seekToEnd()
 
         try await writeChunked(from: asyncBytes, to: fileHandle,
-                               startOffset: existingSize, totalExpected: totalExpected,
+                               startOffset: startOffset, totalExpected: totalExpected,
                                progressHandler: progressHandler)
-        progressHandler?(1.0)
         try fileHandle.synchronize()
+        progressHandler?(1.0)
 
-        try? FileManager.default.removeItem(at: destURL)
+        return try finalizePartial(partialURL, to: destURL, expectedTotal: totalExpected)
+    }
+
+    /// Moves a finished `.partial` into place after checking its size against the expected total.
+    private func finalizePartial(_ partialURL: URL, to destURL: URL, expectedTotal: Int64) throws -> URL {
+        let actual = Self.fileSize(atPath: partialURL.path(percentEncoded: false))
+        if expectedTotal > 0, actual != expectedTotal {
+            Logger.infra.error("ModelManager: \(partialURL.lastPathComponent, privacy: .public) is \(actual, privacy: .public) bytes, expected \(expectedTotal, privacy: .public)")
+            guard actual < expectedTotal else {
+                removePartial(partialURL)
+                throw ModelDownloadError.sizeMismatch(expected: expectedTotal, actual: actual)
+            }
+            // Connection ended early: keep the partial so the next attempt resumes it.
+            throw URLError(.networkConnectionLost)
+        }
+        let destPath = destURL.path(percentEncoded: false)
+        if FileManager.default.fileExists(atPath: destPath) {
+            try FileManager.default.removeItem(at: destURL)
+        }
         try FileManager.default.moveItem(at: partialURL, to: destURL)
-        Logger.infra.debug("ModelManager: downloaded model to \(destURL.path(percentEncoded: false))")
+        Logger.infra.debug("ModelManager: downloaded model to \(destPath)")
         return destURL
+    }
+
+    private func downloadFailure(statusCode: Int, url: URL) -> Error {
+        switch statusCode {
+        case 401, 403:
+            Logger.infra.error("Model download: auth required (HTTP \(statusCode, privacy: .public)). Set HF token in Settings > Advanced.")
+            return CorrectionError.modelDownloadFailed(url: url)
+        case 404:
+            Logger.infra.error("Model file not found (HTTP 404): \(url.absoluteString, privacy: .public)")
+            return CorrectionError.modelDownloadFailed(url: url)
+        default:
+            Logger.infra.error("Model download failed: HTTP \(statusCode, privacy: .public) for \(url.absoluteString, privacy: .public)")
+            return URLError(.badServerResponse)
+        }
+    }
+
+    private func ensureFreeSpace(needed: Int64) throws {
+        let values = try? modelsDir.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        let available = values?.volumeAvailableCapacityForImportantUsage
+        guard Self.hasEnoughSpace(available: available, needed: needed, margin: Constants.downloadFreeSpaceMarginBytes) else {
+            throw ModelDownloadError.insufficientDiskSpace(needed: needed + Constants.downloadFreeSpaceMarginBytes,
+                                                           available: available ?? 0)
+        }
+    }
+
+    private func removePartial(_ partialURL: URL) {
+        guard FileManager.default.fileExists(atPath: partialURL.path(percentEncoded: false)) else { return }
+        do {
+            try FileManager.default.removeItem(at: partialURL)
+        } catch {
+            Logger.infra.error("ModelManager: failed to remove partial file — \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    // MARK: - Resume logic (pure, testable)
+
+    struct ContentRange: Equatable {
+        let start: Int64?   // nil for "bytes */total"
+        let total: Int64?   // nil for ".../*"
+    }
+
+    enum DownloadResumeDecision: Equatable {
+        case fresh(total: Int64)       // 200: write from byte 0 (0 = length unknown)
+        case append(total: Int64)      // 206 continuing exactly at the partial's end
+        case alreadyComplete           // 416 and the partial already has every byte
+        case restartWithoutRange       // 416 / 206 that does not continue the partial
+        case fail
+    }
+
+    static func parseContentRange(_ header: String) -> ContentRange? {
+        let trimmed = header.trimmingCharacters(in: .whitespaces)
+        guard trimmed.lowercased().hasPrefix("bytes ") else { return nil }
+        let parts = trimmed.dropFirst("bytes ".count).split(separator: "/", maxSplits: 1)
+        guard parts.count == 2 else { return nil }
+        let total = Int64(parts[1].trimmingCharacters(in: .whitespaces))
+        let range = parts[0].trimmingCharacters(in: .whitespaces)
+        if range == "*" { return ContentRange(start: nil, total: total) }
+        let bounds = range.split(separator: "-")
+        guard bounds.count == 2, let start = Int64(bounds[0]), Int64(bounds[1]) != nil else { return nil }
+        return ContentRange(start: start, total: total)
+    }
+
+    static func resumeDecision(statusCode: Int, existingSize: Int64, contentRange: String?,
+                               expectedContentLength: Int64) -> DownloadResumeDecision {
+        let length = max(0, expectedContentLength)
+        let range = contentRange.flatMap(parseContentRange)
+        switch statusCode {
+        case 200:
+            return .fresh(total: length)
+        case 206:
+            guard let range, range.start == existingSize else { return .restartWithoutRange }
+            return .append(total: range.total ?? (length > 0 ? existingSize + length : 0))
+        case 416:
+            guard existingSize > 0, let total = range?.total, total == existingSize else { return .restartWithoutRange }
+            return .alreadyComplete
+        default:
+            return .fail
+        }
+    }
+
+    /// Unknown capacity or unknown length never blocks a download.
+    static func hasEnoughSpace(available: Int64?, needed: Int64, margin: Int64) -> Bool {
+        guard needed > 0, let available else { return true }
+        return available >= needed + margin
+    }
+
+    private static func fileSize(atPath path: String) -> Int64 {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+              let size = attrs[.size] as? Int64, size > 0 else { return 0 }
+        return size
     }
 
     private func writeChunked(
@@ -418,6 +557,26 @@ actor ModelManager: Sendable {
     }
 
     func downloadModel(from url: URL, expectedSHA256: String? = nil, progressHandler: ((Double) -> Void)? = nil, verificationHandler: ((Double) -> Void)? = nil) async throws -> URL {
+        let key = url.lastPathComponent
+        if let existing = inFlightDownloads[key] {
+            Logger.infra.info("ModelManager: joining in-flight download of \(key, privacy: .public)")
+            return try await existing.value
+        }
+        let task = Task {
+            try await self.performDownload(from: url, expectedSHA256: expectedSHA256,
+                                           progressHandler: progressHandler, verificationHandler: verificationHandler)
+        }
+        inFlightDownloads[key] = task
+        defer { if inFlightDownloads[key] == task { inFlightDownloads[key] = nil } }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func performDownload(from url: URL, expectedSHA256: String?, progressHandler: ((Double) -> Void)?,
+                                 verificationHandler: ((Double) -> Void)?) async throws -> URL {
         try FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
 
         let destURL = try await downloadFile(from: url, progressHandler: progressHandler)
@@ -451,10 +610,7 @@ actor ModelManager: Sendable {
             }
         }
 
-        let partialURL = modelsDir.appendingPathComponent("\(destURL.lastPathComponent).partial")
-        do { try FileManager.default.removeItem(at: partialURL) }
-        catch { Logger.infra.error("ModelManager: failed to remove partial file — \(error.localizedDescription, privacy: .public)") }
-
+        removePartial(modelsDir.appendingPathComponent("\(destURL.lastPathComponent).partial"))
         return destURL
     }
 
@@ -494,6 +650,21 @@ actor ModelManager: Sendable {
             continuation.onTermination = { _ in
                 task.cancel()
             }
+        }
+    }
+}
+
+enum ModelDownloadError: LocalizedError, Equatable {
+    case insufficientDiskSpace(needed: Int64, available: Int64)
+    case sizeMismatch(expected: Int64, actual: Int64)
+
+    var errorDescription: String? {
+        let fmt = { (bytes: Int64) in ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
+        switch self {
+        case .insufficientDiskSpace(let needed, let available):
+            return "Not enough disk space for this model: needs \(fmt(needed)), \(fmt(available)) free. Free up space and try again."
+        case .sizeMismatch(let expected, let actual):
+            return "The downloaded model has the wrong size (\(fmt(actual)) instead of \(fmt(expected))). Please download it again."
         }
     }
 }

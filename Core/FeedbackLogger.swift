@@ -11,7 +11,7 @@ struct FeedbackEntry: Codable {
 
 enum FeedbackLogger {
     private static let feedbackDir: URL = {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+        guard let appSupport = AppPaths.applicationSupport else {
             Logger.feedback.error("Cannot access Application Support directory")
             return FileManager.default.temporaryDirectory
         }
@@ -75,20 +75,31 @@ enum FeedbackLogger {
         }
     }
 
+    /// Reads the whole (≤ ~10 MB) log once and keeps the newest whole lines within half the
+    /// cap, so rotation runs rarely and never splits a line or a UTF-8 sequence.
     private static func rotateLog() {
-        guard let handle = try? FileHandle(forReadingFrom: feedbackURL) else { return }
-        defer { try? handle.close() }
-
-        var lines: [String] = []
-        while let lineData = try? handle.read(upToCount: 4096), !lineData.isEmpty {
-            if let chunk = String(data: lineData, encoding: .utf8) {
-                let chunkLines = chunk.components(separatedBy: "\n").filter { !$0.isEmpty }
-                lines.append(contentsOf: chunkLines)
-            }
+        do {
+            let data = try Data(contentsOf: feedbackURL, options: .mappedIfSafe)
+            let kept = trimmedLog(data, keepingAtMostBytes: maxFileBytes / 2)
+            try kept.write(to: feedbackURL, atomically: true, encoding: .utf8)
+            Logger.feedback.info("FeedbackLogger: rotated log \(data.count, privacy: .public) → \(kept.utf8.count, privacy: .public) bytes")
+        } catch {
+            Logger.feedback.error("FeedbackLogger: rotation failed — \(error.localizedDescription, privacy: .public)")
         }
-        guard lines.count > 200 else { return }
-        let kept = lines.suffix(lines.count - 200).joined(separator: "\n") + "\n"
-        try? kept.write(to: feedbackURL, atomically: true, encoding: .utf8)
-        Logger.feedback.info("FeedbackLogger: rotated log, removed 200 oldest entries")
+    }
+
+    /// Newest complete lines of `data` whose total size (with newlines) fits `budget` bytes.
+    static func trimmedLog(_ data: Data, keepingAtMostBytes budget: Int) -> String {
+        let lines = String(decoding: data, as: UTF8.self).split(separator: "\n", omittingEmptySubsequences: true)
+        var kept: [Substring] = []
+        var total = 0
+        for line in lines.reversed() {
+            let cost = line.utf8.count + 1
+            guard total + cost <= budget else { break }
+            kept.append(line)
+            total += cost
+        }
+        guard !kept.isEmpty else { return "" }
+        return kept.reversed().joined(separator: "\n") + "\n"
     }
 }

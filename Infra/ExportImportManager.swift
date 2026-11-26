@@ -128,32 +128,38 @@ final class ExportImportManager {
         }
         if let prefData = payload.sections["preferences"],
            let preferences = try? JSONDecoder().decode(PreferencesExport.self, from: prefData) {
-            prefs.selectedModelID = preferences.selectedModelID
-            prefs.language = preferences.language
-            prefs.style = preferences.style
-            prefs.autoCheckEnabled = preferences.autoCheckEnabled
-            prefs.realtimeEnabled = preferences.realtimeEnabled
-            prefs.openAIModel = preferences.openAIModel
-            prefs.ollamaModel = preferences.ollamaModel
-            prefs.openRouterModel = preferences.openRouterModel
-            prefs.translationLanguage = preferences.translationLanguage
-            prefs.excludedBundleIDs = preferences.excludedBundleIDs
-            prefs.inlineAnnotationsHoverOnly = preferences.inlineAnnotationsHoverOnly
-            prefs.aiPromptAutoDetect = preferences.aiPromptAutoDetect
-            // SECURITY: serviceType + endpoint URLs from an imported file can silently
-            // repoint the LLM backend at an attacker server, exfiltrating the user's
-            // text and API key. Validate the URLs and confirm before switching backends.
-            Self.applyRemoteConfig(from: preferences, into: prefs)
+            Self.applyPreferences(preferences, into: prefs, source: "settings file")
             imported.append("preferences")
         }
 
         return imported
     }
 
+    /// Applies imported preferences (file import and iCloud download share this path).
+    /// SECURITY: serviceType + endpoint URLs from outside can silently repoint the LLM backend
+    /// at an attacker server, exfiltrating the user's text and API key — they always go through
+    /// `applyRemoteConfig` (URL validation + confirmation), never straight into the store.
+    static func applyPreferences(_ preferences: PreferencesExport, into prefs: PreferencesStore, source: String) {
+        prefs.selectedModelID = preferences.selectedModelID
+        prefs.language = preferences.language
+        prefs.style = preferences.style
+        prefs.autoCheckEnabled = preferences.autoCheckEnabled
+        prefs.realtimeEnabled = preferences.realtimeEnabled
+        prefs.openAIModel = preferences.openAIModel
+        prefs.ollamaModel = preferences.ollamaModel
+        prefs.openRouterModel = preferences.openRouterModel
+        prefs.translationLanguage = preferences.translationLanguage
+        prefs.excludedBundleIDs = preferences.excludedBundleIDs
+        prefs.inlineAnnotationsHoverOnly = preferences.inlineAnnotationsHoverOnly
+        prefs.aiPromptAutoDetect = preferences.aiPromptAutoDetect
+        applyRemoteConfig(from: preferences, into: prefs, source: source)
+    }
+
     /// Validates and applies serviceType + endpoint URLs from an imported config.
     /// Rejects non-https remote endpoints and asks the user to confirm before
     /// switching the LLM backend to an external server (exfiltration guard).
-    static func applyRemoteConfig(from preferences: PreferencesExport, into prefs: PreferencesStore) {
+    static func applyRemoteConfig(from preferences: PreferencesExport, into prefs: PreferencesStore,
+                                  source: String = "settings file") {
         let openAIValid = isValidRemoteURL(preferences.openAIBaseURL, allowLoopbackHTTP: false)
         let ollamaValid = isValidRemoteURL(preferences.ollamaBaseURL, allowLoopbackHTTP: true)
 
@@ -184,7 +190,7 @@ final class ExportImportManager {
         let loopback: Set<String> = ["localhost", "127.0.0.1", "::1"]
         if loopback.contains(host.lowercased()) {
             prefs.serviceType = target
-        } else if confirmRemoteSwitch(service: target.rawValue, host: host) {
+        } else if confirmRemoteSwitch(service: target.rawValue, host: host, source: source) {
             prefs.serviceType = target
         } else {
             Logger.infra.error("Import: user declined switch to external endpoint")
@@ -206,10 +212,10 @@ final class ExportImportManager {
         return false
     }
 
-    private static func confirmRemoteSwitch(service: String, host: String) -> Bool {
+    private static func confirmRemoteSwitch(service: String, host: String, source: String) -> Bool {
         let alert = NSAlert()
-        alert.messageText = "Allow this settings file to change your AI backend?"
-        alert.informativeText = "It will send the text you correct (and your API key) to “\(host)” using the \(service) backend. Only continue if you trust the source of this file."
+        alert.messageText = "Allow this \(source) to change your AI backend?"
+        alert.informativeText = "It will send the text you correct (and your API key) to “\(host)” using the \(service) backend. Only continue if you trust where this \(source) came from."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Allow")
         alert.addButton(withTitle: "Keep current")

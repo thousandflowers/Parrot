@@ -76,6 +76,23 @@ enum Constants {
     static let serverHealthAttempts = 20
     static let candidateServerPorts = [8080, 11435]
     static let serverStopTimeout: TimeInterval = 5
+    /// Health probe timeout. Under swap on 8 GB Macs a busy llama-server can take several
+    /// seconds to answer /health mid-generation; a timeout is NOT counted as a failure.
+    static let healthCheckTimeout: TimeInterval = 10
+    /// Consecutive hard failures (connection refused / process dead) before a restart.
+    static let healthMaxConsecutiveFailures = 3
+    /// Size cap for app-written logs (llama-server.log, debug.log, crash.log); rotated to `.1` at open.
+    static let logRotationMaxBytes = 5 * 1024 * 1024
+    /// Extra free space required beyond a model's size before a download starts.
+    static let downloadFreeSpaceMarginBytes: Int64 = 512 * 1024 * 1024
+    /// NSUbiquitousKeyValueStore limit: 1 MB per value and 1 MB for the whole store.
+    static let iCloudKVSMaxBytes = 1_000_000
+    /// KnowledgeBase relevance: tokens shorter than this never count as shared terms.
+    static let knowledgeMinTermLength = 4
+    /// KnowledgeBase relevance: distinct shared terms needed (fewer if the text has fewer).
+    static let knowledgeMinSharedTerms = 2
+    /// Max characters kept in one auto-learned KnowledgeBase document (oldest lines dropped).
+    static let knowledgeAutoLearnedMaxChars = 4_000
     static let queueTimeout: TimeInterval = 60
     static let downloadTimeout: TimeInterval = 3600
     static let downloadProgressMinInterval: TimeInterval = 0.1

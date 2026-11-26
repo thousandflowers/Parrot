@@ -37,22 +37,52 @@ actor ServerHealthMonitor: Sendable {
         }
 
         guard let url = URL(string: "http://127.0.0.1:\(port)/health") else { return }
+        var statusCode: Int?
+        var probeError: Error?
         do {
             var healthRequest = URLRequest(url: url)
-            healthRequest.timeoutInterval = 2.0
+            healthRequest.timeoutInterval = Constants.healthCheckTimeout
             let (_, response) = try await URLSession.shared.data(for: healthRequest)
-            if (response as? HTTPURLResponse)?.statusCode == 200 {
-                consecutiveFailures = 0
-                return
-            }
+            statusCode = (response as? HTTPURLResponse)?.statusCode
         } catch {
-            Logger.server.debug("Health check failed: \(error.localizedDescription, privacy: .public)")
+            probeError = error
         }
+        let processAlive = await ServerManager.shared.ownProcessAlive()
 
-        consecutiveFailures += 1
-        guard consecutiveFailures <= 3 else {
-            await restartServer()
-            return
+        switch Self.classify(statusCode: statusCode, error: probeError, processAlive: processAlive) {
+        case .healthy:
+            consecutiveFailures = 0
+        case .busy:
+            // Slow answer (swap, long generation, model loading): not a failure — killing the
+            // server here would abort the user's in-flight request.
+            Logger.server.debug("Health check slow/busy (status \(statusCode ?? -1, privacy: .public)): \(probeError?.localizedDescription ?? "-", privacy: .public)")
+        case .down:
+            consecutiveFailures += 1
+            Logger.server.info("Health check failed (\(self.consecutiveFailures, privacy: .public)/\(Constants.healthMaxConsecutiveFailures, privacy: .public)): \(probeError?.localizedDescription ?? "process not running", privacy: .public)")
+            if consecutiveFailures > Constants.healthMaxConsecutiveFailures {
+                await restartServer()
+            }
+        }
+    }
+
+    enum ProbeOutcome: Equatable {
+        case healthy   // 200
+        case busy      // alive but slow / loading — never counted
+        case down      // connection refused or our process is dead — counted
+    }
+
+    /// Only evidence that the server is gone counts as a failure: a dead own process, or a
+    /// refused / dropped connection. Timeouts and non-200 answers mean "alive but busy".
+    static func classify(statusCode: Int?, error: Error?, processAlive: Bool?) -> ProbeOutcome {
+        if processAlive == false { return .down }
+        if statusCode == 200 { return .healthy }
+        if statusCode != nil { return .busy }
+        guard let urlError = error as? URLError else { return .busy }
+        switch urlError.code {
+        case .cannotConnectToHost, .networkConnectionLost, .cannotFindHost, .notConnectedToInternet:
+            return .down
+        default:
+            return .busy
         }
     }
 

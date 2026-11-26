@@ -11,7 +11,7 @@ actor SnippetStore {
     private var loaded = false
 
     private static var fileURL: URL {
-        let dir = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let dir = (AppPaths.applicationSupport
             ?? FileManager.default.temporaryDirectory).appendingPathComponent("Parrot")
         return dir.appendingPathComponent("snippets.json")
     }
@@ -19,10 +19,7 @@ actor SnippetStore {
     private func loadIfNeeded() {
         guard !loaded else { return }
         loaded = true
-        if let data = try? Data(contentsOf: Self.fileURL),
-           let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
-            map = decoded
-        }
+        map = PersistentJSON.load([String: String].self, from: Self.fileURL) ?? [:]
     }
 
     /// Returns the expansion for an exact abbreviation match, or nil.

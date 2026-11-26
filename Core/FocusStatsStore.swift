@@ -41,7 +41,7 @@ final class FocusStatsStore: ObservableObject {
     }
 
     private static var fileURL: URL {
-        let dir = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let dir = (AppPaths.applicationSupport
             ?? FileManager.default.temporaryDirectory).appendingPathComponent("Parrot")
         return dir.appendingPathComponent("focus_stats.json")
     }
@@ -143,8 +143,7 @@ final class FocusStatsStore: ObservableObject {
     func loadIfNeeded() {
         guard !loaded else { return }
         loaded = true
-        guard let d = try? Data(contentsOf: Self.fileURL),
-              let decoded = try? JSONDecoder().decode(Persisted.self, from: d) else { return }
+        guard let decoded = PersistentJSON.load(Persisted.self, from: Self.fileURL) else { return }
         totalSessions = decoded.totalSessions
         totalMinutes = decoded.totalMinutes
         totalWordsWritten = decoded.totalWordsWritten
@@ -164,10 +163,14 @@ final class FocusStatsStore: ObservableObject {
             lastSessionDate: lastSessionDate,
             dailyLog: dailyLog
         )
-        guard let d = try? JSONEncoder().encode(persisted) else { return }
-        try? FileManager.default.createDirectory(at: Self.fileURL.deletingLastPathComponent(),
-                                                  withIntermediateDirectories: true)
-        try? d.write(to: Self.fileURL, options: .atomic)
+        do {
+            let d = try JSONEncoder().encode(persisted)
+            try FileManager.default.createDirectory(at: Self.fileURL.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            try d.write(to: Self.fileURL, options: .atomic)
+        } catch {
+            Logger.core.error("FocusStatsStore: save failed — \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private func dateKey(_ date: Date) -> String {
