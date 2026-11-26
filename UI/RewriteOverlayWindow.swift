@@ -66,7 +66,7 @@ final class RewriteOverlayWindow {
 
         var origin = CGPoint(x: rect.minX, y: rect.minY - padY)
         let caretPoint = CGPoint(x: rect.midX, y: rect.midY)
-        let screen = NSScreen.screens.first { $0.frame.contains(caretPoint) } ?? NSScreen.main
+        let screen = ScreenGeometry.screen(containing: caretPoint)
         if let vf = screen?.visibleFrame {
             if origin.x + panelW > vf.maxX { origin.x = max(vf.minX, vf.maxX - panelW) }
             if origin.x < vf.minX { origin.x = vf.minX }

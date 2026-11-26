@@ -24,7 +24,9 @@ final class RealtimeIndicatorController {
 
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let bounds = await AccessibilityBridge.shared.lastSelectionBounds
+            // The bridge stores AX coordinates (top-left origin); convert before positioning.
+            let axBounds = await AccessibilityBridge.shared.lastSelectionBounds
+            let bounds = axBounds == .zero ? CGRect.zero : ScreenGeometry.appKitRect(fromAX: axBounds)
             let mousePoint = NSEvent.mouseLocation
             let x: CGFloat
             let y: CGFloat

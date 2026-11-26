@@ -92,9 +92,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupPopover()
         CrashLogger.log("launch: popover ready")
 
-        checkAccessibilityPermissions()
-        CrashLogger.log("launch: accessibility checked")
-
         hotkeyManager = GlobalHotkeyManager()
         hotkeyManager?.registerHotkeys()
         CrashLogger.log("launch: hotkeys registered")
@@ -130,6 +127,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         CrashLogger.log("DIAG completion: mode=\(mode.displayName) completionOn=\(completionOn) axTrusted=\(AXIsProcessTrusted()) inputMon=\(IOHIDCheckAccess(kIOHIDRequestTypeListenEvent).rawValue)")
 
         CrashLogger.log("launch: serviceType=\(serviceType.rawValue)")
+
+        // Permission alert runs only AFTER every launch step above (hotkeys, onboarding, completion)
+        // is in place, on the next main-loop turn, so a modal can never hold up setup.
+        DispatchQueue.main.async { [weak self] in
+            self?.checkAccessibilityPermissions()
+            CrashLogger.log("launch: accessibility checked")
+        }
         CrashLogger.log("launch: complete")
     }
 
@@ -253,7 +257,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         Task {
             await RealtimeMonitor.shared.stop()
-            await ServerManager.shared.stop()
+            // Both llama-servers (correction + dedicated completion): a leftover one keeps its
+            // model in RAM after quit.
+            await ServerManager.stopAll()
             await ServerHealthMonitor.shared.stopMonitoring()
             timeoutTask.cancel()
             replyOnce()
@@ -276,23 +282,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleDeepLink(_ url: URL) {
-        guard url.scheme == "parrot", url.host == "correct" else { return }
-
-        if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-           let queryItems = components.queryItems,
-           let encoded = queryItems.first(where: { $0.name == "text" })?.value,
-           let decoded = encoded.removingPercentEncoding,
-           !decoded.isEmpty {
-            let mode = queryItems.first(where: { $0.name == "mode" })?.value
-            let promptType: PromptType
-            switch mode {
-            case "fluency": promptType = .fluency
-            case "translate": promptType = .translation(targetLanguage: "en")
-            default: promptType = .grammar
-            }
+        // Correction is a Parrot feature; Wren shares the codebase but must not run it.
+        guard AppMode.current.showsCorrection else {
+            os.Logger.ui.info("deep link ignored: correction is not available in \(AppMode.current.displayName, privacy: .public)")
+            return
+        }
+        do {
+            let link = try CorrectionDeepLink.parse(url)
             Task { @MainActor in
-                TextCheckCoordinator.shared.correctText(decoded, mode: promptType)
+                TextCheckCoordinator.shared.correctText(link.text, mode: link.promptType)
             }
+        } catch {
+            os.Logger.ui.error("deep link ignored: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -308,28 +309,45 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Accessibility
 
+    private static let accessibilitySystemPromptShownKey = "hasShownAccessibilitySystemPrompt"
+
     private func checkAccessibilityPermissions() {
         guard shouldShowAccessibilityWarning() else { return }
+        // The mode's onboarding has its own Accessibility step: don't stack prompts over it.
+        let onboardingPending = !UserDefaults.standard.bool(forKey: OnboardingController.completionKey(for: .current))
+        if AppMode.current.onboardingCoversAccessibility && onboardingPending { return }
 
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-        let enabled = AXIsProcessTrustedWithOptions(options as CFDictionary)
+        // First time: only the system prompt (it has its own "Open System Settings"). Showing our
+        // alert in the same launch would put two dialogs on screen fighting for focus.
+        guard UserDefaults.standard.bool(forKey: Self.accessibilitySystemPromptShownKey) else {
+            UserDefaults.standard.set(true, forKey: Self.accessibilitySystemPromptShownKey)
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+            _ = AXIsProcessTrustedWithOptions(options as CFDictionary)
+            return
+        }
 
-        if !enabled {
-            let alert = NSAlert()
-            alert.messageText = String(localized: "alert.accessibility.title")
-            alert.informativeText = String(localized: "alert.accessibility.body")
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: String(localized: "alert.accessibility.open_settings"))
-            alert.addButton(withTitle: String(localized: "alert.accessibility.ignore"))
-            alert.addButton(withTitle: String(localized: "alert.ok"))
-            let response = alert.runModal()
-            if response == .alertFirstButtonReturn {
-                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                    NSWorkspace.shared.open(url)
-                }
-            } else if response == .alertSecondButtonReturn {
-                UserDefaults.standard.set(true, forKey: "hasAcknowledgedAccessibilityWarning")
+        let appName = AppMode.current.displayName
+        let alert = NSAlert()
+        alert.messageText = String(localized: "alert.accessibility.title")
+        alert.informativeText = String(
+            format: NSLocalizedString(
+                "alert.accessibility.body_format",
+                value: "%1$@ uses Accessibility to read and edit text in other apps.\n\nOpen System Settings > Privacy & Security > Accessibility and add %1$@.\n\n⚠️ After granting permission, macOS will quit %1$@. Relaunch it from the Applications folder or Dock.",
+                comment: "Accessibility alert body; %1$@ is the app name (Parrot or Wren)"),
+            appName)
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: String(localized: "alert.accessibility.open_settings"))
+        alert.addButton(withTitle: String(localized: "alert.accessibility.ignore"))
+        alert.addButton(withTitle: String(localized: "alert.ok"))
+        // Accessory app: bring the alert forward instead of leaving it behind other windows.
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                NSWorkspace.shared.open(url)
             }
+        } else if response == .alertSecondButtonReturn {
+            UserDefaults.standard.set(true, forKey: "hasAcknowledgedAccessibilityWarning")
         }
     }
 
@@ -428,5 +446,47 @@ extension AppDelegate {
         )
         // Call the (now-swapped) original implementation
         AppDelegate._parrot_crashOnException(exception)
+    }
+}
+
+// MARK: - Deep link parsing
+
+/// Upper bound on the text a `parrot://correct?text=` link may carry. Any app or web page can
+/// open the URL, so cap the work (and memory) one link can trigger.
+let maxDeepLinkTextLength = 20_000
+
+/// A validated `parrot://correct?text=…&mode=…` request.
+struct CorrectionDeepLink: Equatable {
+    enum ParseError: Error, Equatable {
+        case notACorrectionLink
+        case missingText
+        case textTooLong(length: Int, limit: Int)
+    }
+
+    let text: String
+    let promptType: PromptType
+
+    static func parse(_ url: URL, maxLength: Int = maxDeepLinkTextLength) throws -> CorrectionDeepLink {
+        guard url.scheme == "parrot", url.host == "correct",
+              let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else {
+            throw ParseError.notACorrectionLink
+        }
+        // `queryItems` values are already percent-decoded. Decoding again would turn a literal
+        // "%41" in the user's text into "A" (and drop the request when the text has a bare "%").
+        guard let text = queryItems.first(where: { $0.name == "text" })?.value, !text.isEmpty else {
+            throw ParseError.missingText
+        }
+        guard text.count <= maxLength else {
+            throw ParseError.textTooLong(length: text.count, limit: maxLength)
+        }
+        return CorrectionDeepLink(text: text, promptType: promptType(forMode: queryItems.first { $0.name == "mode" }?.value))
+    }
+
+    private static func promptType(forMode mode: String?) -> PromptType {
+        switch mode {
+        case "fluency": return .fluency
+        case "translate": return .translation(targetLanguage: "en")
+        default: return .grammar
+        }
     }
 }

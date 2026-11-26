@@ -100,6 +100,6 @@
 
 /* Accessibility alert (AppDelegate) */
 "alert.accessibility.title" = "Accessibility Permissions Required";
-"alert.accessibility.body" = "Parrot uses Accessibility to read and correct text in other apps.\n\nOpen System Settings > Privacy & Security > Accessibility and add Parrot.\n\n⚠️ After granting permission, macOS will quit Parrot. Relaunch it from the Applications folder or Dock.";
+"alert.accessibility.body_format" = "%1$@ uses Accessibility to read and edit text in other apps.\n\nOpen System Settings > Privacy & Security > Accessibility and add %1$@.\n\n⚠️ After granting permission, macOS will quit %1$@. Relaunch it from the Applications folder or Dock.";
 "alert.accessibility.open_settings" = "Open Settings";
 "alert.accessibility.ignore" = "Don't show again";

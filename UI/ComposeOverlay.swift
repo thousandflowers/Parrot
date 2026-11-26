@@ -54,7 +54,8 @@ final class ComposeController {
             let mouse = NSEvent.mouseLocation
             origin = NSPoint(x: mouse.x - size.width / 2, y: mouse.y - size.height / 2)
         }
-        panel.setFrameOrigin(clampToScreen(origin, size: size))
+        let frame = NSRect(origin: origin, size: size)
+        panel.setFrameOrigin(ScreenGeometry.clamp(frame, toScreenFor: frame).origin)
 
         self.panel = panel
         self.hostingView = hv
@@ -91,14 +92,6 @@ final class ComposeController {
                 DirectApplyToast.show(message: "✗ Failed")
             }
         }
-    }
-
-    private func clampToScreen(_ origin: NSPoint, size: NSSize) -> NSPoint {
-        let screen = NSScreen.screens.first(where: { $0.frame.contains(origin) }) ?? NSScreen.main
-        guard let vf = screen?.visibleFrame else { return origin }
-        let x = max(vf.minX, min(vf.maxX - size.width, origin.x))
-        let y = max(vf.minY, min(vf.maxY - size.height, origin.y))
-        return NSPoint(x: x, y: y)
     }
 }
 
