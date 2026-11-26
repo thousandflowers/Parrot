@@ -5,8 +5,6 @@
 set -euo pipefail
 
 CONFIG="${1:-release}"
-ARM64_PATH=".build/arm64-apple-macosx/${CONFIG}/Parrot"
-X86_PATH=".build/x86_64-apple-macosx/${CONFIG}/Parrot"
 BINARY_PATH=".build/universal-apple-macosx/${CONFIG}/Parrot"
 APP_DIR="Parrot.app"
 CONTENTS="${APP_DIR}/Contents"
@@ -33,19 +31,33 @@ fi
 if [ "${SIGNING_IDENTITY}" = "-" ]; then
     SIGN_OPTS="--force --timestamp=none"
     echo "[i] Ad-hoc signing (no stable identity). Permissions reset on each rebuild."
+elif [[ "${SIGNING_IDENTITY}" == *"Developer ID"* ]]; then
+    # Notarization requires the hardened runtime + a secure timestamp.
+    SIGN_OPTS="--force --timestamp --options runtime"
+    echo "[i] Signing identity (Developer ID, hardened runtime): ${SIGNING_IDENTITY}"
 else
-    # Stable local dev signature (no hardened runtime — avoids entitlement breakage for local use).
-    SIGN_OPTS="--force --timestamp=none"
-    echo "[i] Signing with stable identity: ${SIGNING_IDENTITY}"
+    # Stable local identity; hardened runtime on so local builds exercise the release entitlements.
+    SIGN_OPTS="--force --timestamp=none --options runtime"
+    echo "[i] Signing with stable identity (hardened runtime): ${SIGNING_IDENTITY}"
 fi
 
 echo "[*] Building arm64 (${CONFIG})..."
 swift build -c "${CONFIG}" --arch arm64
+# Ask SwiftPM where products live (swiftbuild: .build/out/Products/<Config>; native: .build/<triple>/<config>).
+BIN_DIR="$(swift build -c "${CONFIG}" --arch arm64 --show-bin-path)"
+# swiftbuild uses ONE products dir for every arch, so the x86_64 build below would overwrite the
+# arm64 binary: keep each slice aside before lipo.
+SLICES=".build/universal-apple-macosx/${CONFIG}"
+mkdir -p "${SLICES}"
+ARM64_PATH="${SLICES}/Parrot-arm64"
+cp "${BIN_DIR}/Parrot" "${ARM64_PATH}"
 
 echo "[*] Building x86_64 (${CONFIG})..."
 # Only the main app for x86_64 — the completion helper links libllama from Apple-Silicon Homebrew
 # and is bundled arm64-only (its target machines are Apple Silicon).
 if swift build -c "${CONFIG}" --arch x86_64 --product Parrot 2>/dev/null; then
+    X86_PATH="${SLICES}/Parrot-x86_64"
+    cp "$(swift build -c "${CONFIG}" --arch x86_64 --show-bin-path)/Parrot" "${X86_PATH}"
     echo "[*] Creating universal binary..."
     mkdir -p ".build/universal-apple-macosx/${CONFIG}"
     lipo -create -output "${BINARY_PATH}" "${ARM64_PATH}" "${X86_PATH}"
@@ -70,149 +82,51 @@ cp "${BINARY_PATH}" "${MACOS}/Parrot"
 install_name_tool -add_rpath "@loader_path/../Frameworks" "${MACOS}/Parrot"
 
 # In-process completion helper (arm64 only). Reuses the bundled libllama/ggml dylibs in Frameworks.
-HELPER_SRC=".build/arm64-apple-macosx/${CONFIG}/ParrotCompletionHelper"
+HELPER_SRC="${BIN_DIR}/ParrotCompletionHelper"
 if [ -f "${HELPER_SRC}" ]; then
     echo "[*] Bundling ParrotCompletionHelper..."
     cp "${HELPER_SRC}" "${MACOS}/ParrotCompletionHelper"
-    install_name_tool -add_rpath "@loader_path/../Frameworks" "${MACOS}/ParrotCompletionHelper" 2>/dev/null || true
-    # Drop the dev-only Homebrew rpath so the bundled app resolves libllama from Frameworks.
-    install_name_tool -delete_rpath "/opt/homebrew/lib" "${MACOS}/ParrotCompletionHelper" 2>/dev/null || true
 else
     echo "[!] ParrotCompletionHelper not built — inline completion will use the server fallback."
 fi
 
-# MLX Metal shaders: SwiftPM cannot compile .metal sources (mlx-swift README), so reuse the
-# metallib produced by an xcodebuild pass when available. Without it the MLX backend reports
-# "unavailable" at runtime (it does not crash).
-MLX_METALLIB=$(ls .xcbuild/Build/Products/*/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib 2>/dev/null | head -1 || true)
-if [ -n "${MLX_METALLIB}" ]; then
-    cp "${MLX_METALLIB}" "${MACOS}/mlx.metallib"
-    echo "[✓] MLX metallib bundled"
-else
-    echo "[i] No MLX metallib (run 'xcodebuild build -scheme Parrot-Package -destination platform=macOS -derivedDataPath .xcbuild' once to enable the MLX backend)"
-fi
 
 # Embed Sparkle.framework (always from arm64 build — framework is architecture-independent)
-SPARKLE_SRC=".build/arm64-apple-macosx/${CONFIG}/Sparkle.framework"
+SPARKLE_SRC="${BIN_DIR}/Sparkle.framework"
 if [ -d "${SPARKLE_SRC}" ]; then
-    cp -r "${SPARKLE_SRC}" "${FRAMEWORKS}/"
+    ditto "${SPARKLE_SRC}" "${FRAMEWORKS}/Sparkle.framework"   # cp -r flattens Versions/Current symlinks -> "bundle format is ambiguous"
 else
     echo "[!] Sparkle.framework not found at ${SPARKLE_SRC}" >&2
     exit 1
 fi
 
 # ---------------------------------------------------------------------------
-# Bundle llama-server + all required Homebrew dylibs
+# Bundle llama-server + the completion helper + every Homebrew dylib they need
+# (Apple Silicon only: the bundled dylibs come from the arm64 Homebrew prefix, so an x86_64
+# llama-server slice could never load them.)
 # ---------------------------------------------------------------------------
-
-# Locate llama-server binaries (arm64 = Apple Silicon Homebrew, x86_64 = Intel Homebrew)
-LLAMA_ARM64="/opt/homebrew/bin/llama-server"
-LLAMA_X86="/usr/local/bin/llama-server"
-LLAMA_BIN=""
-
-# Determine which to use as primary (for dylib resolution)
-if [ -x "$LLAMA_ARM64" ]; then LLAMA_BIN="$LLAMA_ARM64"; fi
-
-if [ -x "$LLAMA_ARM64" ] && [ -x "$LLAMA_X86" ]; then
-    echo "[*] Bundling universal llama-server (arm64 + x86_64)..."
-    lipo -create -output "${MACOS}/llama-server" "$LLAMA_ARM64" "$LLAMA_X86"
-    LLAMA_BUNDLED=1
-elif [ -x "$LLAMA_ARM64" ]; then
-    echo "[*] Bundling arm64 llama-server..."
-    cp "$LLAMA_ARM64" "${MACOS}/llama-server"
-    LLAMA_BUNDLED=1
-elif [ -x "$LLAMA_X86" ]; then
-    echo "[*] Bundling x86_64 llama-server..."
-    cp "$LLAMA_X86" "${MACOS}/llama-server"
-    LLAMA_BIN="$LLAMA_X86"
-    LLAMA_BUNDLED=1
-else
-    LLAMA_BUNDLED=0
-fi
-
-if [ "${LLAMA_BUNDLED}" = "1" ] && [ -n "$LLAMA_BIN" ]; then
-    echo "[*] Bundling llama-server dylibs from ${LLAMA_BIN}..."
-
-    # Resolve the actual Cellar path (Homebrew uses symlinks)
-    LLAMA_REAL=$(readlink -f "$LLAMA_BIN" 2>/dev/null || realpath "$LLAMA_BIN")
-    LLAMA_CPP_LIB=$(dirname "$(dirname "$LLAMA_REAL")")/lib
-
-    GGML_LIB="/opt/homebrew/opt/ggml/lib"
-    SSL_LIB="/opt/homebrew/opt/openssl@3/lib"
-
-    chmod +x "${MACOS}/llama-server"
-
-    # Dylibs to bundle (versioned .0. names so dyld finds them)
-    DYLIBS=(
-        "${LLAMA_CPP_LIB}/libllama.0.dylib"
-        "${LLAMA_CPP_LIB}/libllama-common.0.dylib"
-        "${LLAMA_CPP_LIB}/libllama-server-impl.dylib"
-        "${LLAMA_CPP_LIB}/libmtmd.0.dylib"
-        "${GGML_LIB}/libggml.0.dylib"
-        "${GGML_LIB}/libggml-base.0.dylib"
-        "${SSL_LIB}/libssl.3.dylib"
-        "${SSL_LIB}/libcrypto.3.dylib"
-    )
-
-    for src in "${DYLIBS[@]}"; do
-        [ -f "$src" ] && cp "$src" "${FRAMEWORKS}/" || echo "[!] Missing dylib: $src"
-    done
-
-    # ----------- fix_binary: rewrite all Homebrew paths to @rpath -----------
-    fix_binary() {
-        local b="$1"
-        # llama.cpp libs
-        for name in libllama.0.dylib libllama-common.0.dylib libllama-server-impl.dylib libmtmd.0.dylib; do
-            for prefix in \
-                "${LLAMA_CPP_LIB}" \
-                "/opt/homebrew/opt/llama.cpp/lib" \
-                "$(dirname "$(dirname "$(dirname "$LLAMA_REAL")")")/opt/llama.cpp/lib"; do
-                install_name_tool -change "${prefix}/${name}" "@rpath/${name}" "$b" 2>/dev/null || true
-            done
-        done
-        # ggml
-        for name in libggml.0.dylib libggml-base.0.dylib; do
-            install_name_tool -change "${GGML_LIB}/${name}" "@rpath/${name}" "$b" 2>/dev/null || true
-        done
-        # openssl (both opt/ path and versioned Cellar path)
-        for name in libssl.3.dylib libcrypto.3.dylib; do
-            install_name_tool -change "${SSL_LIB}/${name}" "@rpath/${name}" "$b" 2>/dev/null || true
-            # Also fix versioned Cellar paths that openssl dylibs reference internally
-            local ssl_cellar
-            ssl_cellar=$(readlink -f "${SSL_LIB}" 2>/dev/null || realpath "${SSL_LIB}" 2>/dev/null || echo "")
-            [ -n "$ssl_cellar" ] && \
-                install_name_tool -change "${ssl_cellar}/${name}" "@rpath/${name}" "$b" 2>/dev/null || true
-        done
-    }
-
-    # Fix llama-server: add rpath and rewrite hardcoded paths
-    install_name_tool -add_rpath "@loader_path/../Frameworks" "${MACOS}/llama-server" 2>/dev/null || true
-    fix_binary "${MACOS}/llama-server"
-
-    # Fix each bundled dylib: update install name, add rpath, rewrite deps
-    for dylib in "${FRAMEWORKS}"/libllama*.dylib "${FRAMEWORKS}"/libmtmd*.dylib \
-                 "${FRAMEWORKS}"/libggml*.dylib "${FRAMEWORKS}"/libssl*.dylib \
-                 "${FRAMEWORKS}"/libcrypto*.dylib; do
-        [ -f "$dylib" ] || continue
-        name=$(basename "$dylib")
-        install_name_tool -id "@rpath/${name}" "$dylib" 2>/dev/null || true
-        install_name_tool -add_rpath "@loader_path" "$dylib" 2>/dev/null || true
-        fix_binary "$dylib"
-    done
-
-    echo "[*] Signing llama-server dylibs..."
-    for dylib in "${FRAMEWORKS}"/libllama*.dylib "${FRAMEWORKS}"/libmtmd*.dylib \
-                 "${FRAMEWORKS}"/libggml*.dylib "${FRAMEWORKS}"/libssl*.dylib \
-                 "${FRAMEWORKS}"/libcrypto*.dylib; do
-        # shellcheck disable=SC2086
-        [ -f "$dylib" ] && codesign --sign "${SIGNING_IDENTITY}" ${SIGN_OPTS} "$dylib"
-    done
-    # shellcheck disable=SC2086
-    codesign --sign "${SIGNING_IDENTITY}" ${SIGN_OPTS} "${MACOS}/llama-server"
-    echo "[✓] llama-server bundled."
+# shellcheck source=scripts/bundle-deps.sh
+source scripts/bundle-deps.sh
+bundle_swiftpm_resources "${BIN_DIR}" "${MACOS}" "${CONTENTS}/Resources"
+LLAMA_BIN="${BREW_PREFIX}/bin/llama-server"
+if [ -x "${LLAMA_BIN}" ]; then
+    echo "[*] Bundling llama-server + dylibs..."
+    cp "$(readlink -f "${LLAMA_BIN}")" "${MACOS}/llama-server"
+    chmod u+w,+x "${MACOS}/llama-server"
+    bundle_closure "${MACOS}/llama-server"
 else
     echo "[!] llama-server not found. Install with: brew install llama.cpp" >&2
     echo "    The app will look for llama-server in Homebrew at runtime." >&2
+fi
+[ -f "${MACOS}/ParrotCompletionHelper" ] && bundle_closure "${MACOS}/ParrotCompletionHelper"
+if [ -x "${LLAMA_BIN}" ] || [ -f "${MACOS}/ParrotCompletionHelper" ]; then
+    bundle_ggml_plugins "${MACOS}"
+    echo "[✓] Bundled $(find "${FRAMEWORKS}" -maxdepth 1 -name "*.dylib" | wc -l | tr -d " ") dylibs, $(find "${MACOS}" -maxdepth 1 -name "libggml-*.so" | wc -l | tr -d " ") ggml backends."
+    echo "[*] Signing bundled dylibs + binaries..."
+    for bin in "${FRAMEWORKS}"/*.dylib "${MACOS}"/libggml-*.so "${MACOS}/llama-server"; do
+        # shellcheck disable=SC2086
+        [ -f "$bin" ] && codesign --sign "${SIGNING_IDENTITY}" ${SIGN_OPTS} "$bin"
+    done
 fi
 
 # ---------------------------------------------------------------------------
@@ -341,7 +255,7 @@ hdiutil attach -readwrite -noverify -noautoopen \
 MOUNT="/Volumes/${DMG_VOL}"
 
 # Populate
-cp -r "${APP_DIR}" "${MOUNT}/"
+ditto "${APP_DIR}" "${MOUNT}/${APP_DIR}"
 ln -s /Applications "${MOUNT}/Applications"
 mkdir -p "${MOUNT}/.background"
 cp /tmp/parrot_dmg_bg.png "${MOUNT}/.background/background.png"
@@ -400,7 +314,7 @@ fi
 echo "[*] Generating Wren.app (completion mode)..."
 WREN_APP="Wren.app"
 rm -rf "${WREN_APP}"
-cp -R "${APP_DIR}" "${WREN_APP}"
+ditto "${APP_DIR}" "${WREN_APP}"
 WREN_PLIST="${WREN_APP}/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.thousandflowers.wren" "${WREN_PLIST}"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName Wren" "${WREN_PLIST}" 2>/dev/null \

@@ -52,9 +52,12 @@ echo "[*] Building arm64 (${CONFIG})..."
 swift build -c "${CONFIG}" --arch arm64 --product Parrot
 swift build -c "${CONFIG}" --arch arm64 --product ParrotCompletionHelper
 
-BIN=".build/arm64-apple-macosx/${CONFIG}/Parrot"
-HELPER=".build/arm64-apple-macosx/${CONFIG}/ParrotCompletionHelper"
-SPARKLE_SRC=".build/arm64-apple-macosx/${CONFIG}/Sparkle.framework"
+# Ask SwiftPM where products live: the default swiftbuild system uses .build/out/Products/<Config>,
+# the native one .build/arm64-apple-macosx/<config>.
+BIN_DIR="$(swift build -c "${CONFIG}" --arch arm64 --show-bin-path)"
+BIN="${BIN_DIR}/Parrot"
+HELPER="${BIN_DIR}/ParrotCompletionHelper"
+SPARKLE_SRC="${BIN_DIR}/Sparkle.framework"
 
 echo "[*] Assembling ${APP_DIR}..."
 rm -rf "${APP_DIR}"
@@ -67,17 +70,10 @@ cp "${HELPER}" "${MACOS}/ParrotCompletionHelper"
 install_name_tool -add_rpath "@loader_path/../Frameworks" "${MACOS}/ParrotCompletionHelper" 2>/dev/null || true
 install_name_tool -delete_rpath "/opt/homebrew/lib" "${MACOS}/ParrotCompletionHelper" 2>/dev/null || true
 
-# MLX Metal shaders: SwiftPM cannot compile .metal sources (mlx-swift README), so reuse the
-# metallib produced by an xcodebuild pass when available. Without it the MLX backend reports
-# "unavailable" at runtime (it does not crash).
-# `|| true`: under `set -o pipefail` a missing metallib would otherwise abort the whole build.
-MLX_METALLIB=$(ls .xcbuild/Build/Products/*/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib 2>/dev/null | head -1 || true)
-if [ -n "${MLX_METALLIB}" ]; then
-    cp "${MLX_METALLIB}" "${MACOS}/mlx.metallib"
-    echo "[✓] MLX metallib bundled"
-else
-    echo "[i] No MLX metallib (run 'xcodebuild build -scheme Parrot-Package -destination platform=macOS -derivedDataPath .xcbuild' once to enable the MLX backend)"
-fi
+
+# shellcheck source=scripts/bundle-deps.sh
+source scripts/bundle-deps.sh
+bundle_swiftpm_resources "${BIN_DIR}" "${MACOS}" "${RES}"
 
 # App icon (Wren's own; Resources/AppIcon.icns is Parrot's)
 cp Resources/WrenIcon.icns "${RES}/AppIcon.icns"
@@ -98,50 +94,8 @@ cp "${MODEL_PATH}" "${RES}/Models/"
 ditto "${SPARKLE_SRC}" "${FRAMEWORKS}/Sparkle.framework"   # ditto keeps Versions/Current symlinks (cp -r flattens them)
 
 # --- libllama + everything it transitively needs from Homebrew (ggml, libomp, ...) ---
-# Walk `otool -L` from libllama, copy each /opt/homebrew dylib into Frameworks and rewrite the
-# reference to @rpath. Data-driven on purpose: ggml's link set changes between bottles (0.23 added
-# libomp) and a missing one means "Library not loaded" on every Mac without Homebrew.
-BREW_PREFIX="$(brew --prefix 2>/dev/null || echo /opt/homebrew)"
-brew_deps() {   # $1 = binary → its /opt/homebrew dependencies, one per line
-    otool -L "$1" | awk 'NR>1 {print $1}' | grep "^${BREW_PREFIX}/" || true
-}
-bundle_dylib() {   # $1 = Homebrew dylib path (as referenced by a dependent)
-    local name real dep
-    name="$(basename "$1")"
-    [ -f "${FRAMEWORKS}/${name}" ] && return 0
-    real="$(readlink -f "$1" 2>/dev/null || realpath "$1")"
-    [ -f "${real}" ] || { echo "[!] Missing dylib: $1" >&2; exit 1; }
-    cp "${real}" "${FRAMEWORKS}/${name}"
-    chmod u+w "${FRAMEWORKS}/${name}"
-    install_name_tool -id "@rpath/${name}" "${FRAMEWORKS}/${name}" 2>/dev/null || true
-    install_name_tool -add_rpath "@loader_path" "${FRAMEWORKS}/${name}" 2>/dev/null || true
-    while read -r dep; do
-        [ -n "${dep}" ] || continue
-        install_name_tool -change "${dep}" "@rpath/$(basename "${dep}")" "${FRAMEWORKS}/${name}" 2>/dev/null || true
-        bundle_dylib "${dep}"
-    done < <(brew_deps "${FRAMEWORKS}/${name}")
-}
-bundle_dylib "${BREW_PREFIX}/opt/llama.cpp/lib/libllama.0.dylib"
-while read -r dep; do
-    [ -n "${dep}" ] || continue
-    install_name_tool -change "${dep}" "@rpath/$(basename "${dep}")" "${MACOS}/ParrotCompletionHelper" 2>/dev/null || true
-done < <(brew_deps "${MACOS}/ParrotCompletionHelper")
-# ggml >= 0.23 loads its compute backends (Metal, CPU variants, BLAS) as plugins from
-# <ggml>/libexec at runtime; the loader also searches the executable's directory, so ship
-# them next to the helper. Whatever the bottle provides gets bundled - no fixed list.
-GGML_PLUGIN_DIR="$(brew --prefix ggml 2>/dev/null)/libexec"
-for plugin in "${GGML_PLUGIN_DIR}"/libggml-*.so; do
-    [ -f "${plugin}" ] || { echo "[!] No ggml backend plugins in ${GGML_PLUGIN_DIR}" >&2; exit 1; }
-    name="$(basename "${plugin}")"
-    cp "${plugin}" "${MACOS}/${name}"
-    chmod u+w "${MACOS}/${name}"
-    install_name_tool -add_rpath "@loader_path/../Frameworks" "${MACOS}/${name}" 2>/dev/null || true
-    while read -r dep; do
-        [ -n "${dep}" ] || continue
-        install_name_tool -change "${dep}" "@rpath/$(basename "${dep}")" "${MACOS}/${name}" 2>/dev/null || true
-        bundle_dylib "${dep}"
-    done < <(brew_deps "${MACOS}/${name}")
-done
+bundle_closure "${MACOS}/ParrotCompletionHelper"
+bundle_ggml_plugins "${MACOS}"
 echo "[✓] Bundled ggml backends: $(find "${MACOS}" -maxdepth 1 -name "libggml-*.so" | wc -l | tr -d " ")"
 echo "[✓] Bundled dylibs: $(find "${FRAMEWORKS}" -maxdepth 1 -name "*.dylib" | wc -l | tr -d " ")"
 
