@@ -22,6 +22,12 @@ final class CompletionController {
     private var lastShownOverlayRect: CGRect = .zero         // last non-zero caret rect used for overlay.show(); fallback when AX read returns nil after partial accept
     private var isWalking = false                           // partial-accept word-by-word walk in progress; requestSuggestion() must NOT clear current
 
+    /// After a full accept, poll AX until the target app has applied the insert before re-requesting;
+    /// a pre-insert read would re-serve the same ghost and a second Tab would insert it twice.
+    private static let acceptSettlePollInterval: Duration = .milliseconds(15)
+    private static let acceptSettleMaxPolls = 20            // ≈300 ms upper bound
+    private static let cacheKeyChars = 80                   // cache key = tail of the typed preContext
+
     private let adaptive = AdaptiveDebounce()       // 40ms when paused → up to 200ms under fast typing
     private var lastKeystrokeAt = Date.distantPast
     private let cache = SuggestionCache()           // in-memory LRU → the <50ms hot path
@@ -112,9 +118,11 @@ final class CompletionController {
         if pid == 0 {
             pid = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
         }
-        guard pid != 0 else { return }
+        // Every bail-out below clears a visible ghost: it belongs to a field we are no longer in, and
+        // Tab would otherwise insert the old text into the new field.
+        guard pid != 0 else { clearSuggestion(); return }
         let bundleID = await AppDetector.shared.frontAppBundleID(forPID: pid)
-        if let id = bundleID, PreferencesStore.shared.isExcluded(bundleID: id) { return }
+        if let id = bundleID, PreferencesStore.shared.isExcluded(bundleID: id) { clearSuggestion(); return }
         let allowCode = await AppDetector.shared.isCodeEditor(bundleID: bundleID)
 
         // Per-app effective profile: resolves category defaults → rule overrides → global.
@@ -160,6 +168,7 @@ final class CompletionController {
             #endif
             typedBuffer.invalidate()
             lastAXFoundField = false
+            clearSuggestion()
             return
         }
         lastAXFoundField = axHasField
@@ -168,6 +177,7 @@ final class CompletionController {
             CrashLogger.log("DIAG req: RETURN ax=nil/secure (no usable field)")
             #endif
             Logger.infra.debug("completion: no usable focused field (or secure)")
+            clearSuggestion()
             return
         }
         #if DEBUG
@@ -287,7 +297,7 @@ final class CompletionController {
         // context. Screen/OCR context includes previously-accepted completions, which would leak
         // the model's own output back into the cache/learning → feedback loop.
         let preContext = ax.preContext
-        let cacheKey = String(preContext.suffix(80))
+        let cacheKey = String(preContext.suffix(Self.cacheKeyChars))
 
         // Cache gate: a context we have completed before returns instantly with no model call,
         // guaranteeing the sub-50ms hot path. Cleared implicitly as the LRU evicts.
@@ -408,6 +418,9 @@ final class CompletionController {
         let text = s.text
         let kind = s.kind
         let keys = currentContextKeys
+        let preInsertContext = lastSeenContext
+        // The suggestion is being consumed: never serve it again for the pre-insert context.
+        if let preInsertContext { cache.remove(contextHash: String(preInsertContext.suffix(Self.cacheKeyChars))) }
         clearSuggestion()
         Task {
             switch kind {
@@ -424,7 +437,10 @@ final class CompletionController {
             // emit a value-changed notification the observer catches, which left completion dead
             // after the first accept until the user changed text manually. Mirror the partial-accept
             // exhausted path, which already re-requests via requestImmediately().
-            await MainActor.run { self.requestImmediately() }
+            // insertCompletion posts events and returns before the app applies them: wait (bounded)
+            // until AX shows the new text, or the re-request would read the pre-insert context.
+            await self.waitForInsertToLand(pid: pid, preInsertContext: preInsertContext)
+            self.requestImmediately()
         }
         return true
     }
@@ -514,8 +530,8 @@ final class CompletionController {
         }
         clearSuggestion()
         Task {
+            await CompletionEngine.shared.cancelPending()   // before any other await: no late re-show
             await StatsStore.shared.recordDismissed()
-            await CompletionEngine.shared.cancelPending()
         }
     }
 
@@ -532,9 +548,9 @@ final class CompletionController {
         if keycode == kVK_Space, let s, case .replaceLastWord(let wrong) = s.kind {
             clearSuggestion()
             Task {
+                await CompletionEngine.shared.cancelPending()
                 await StatsStore.shared.recordTypoFix()
                 _ = await AccessibilityBridge.shared.replaceLastWord(wrong: wrong, with: s.text, pid: pid)
-                await CompletionEngine.shared.cancelPending()
             }
             return
         }
@@ -547,12 +563,27 @@ final class CompletionController {
         }
         clearSuggestion()
         Task {
-            await StatsStore.shared.recordDismissed()
             await CompletionEngine.shared.cancelPending()
+            await StatsStore.shared.recordDismissed()
         }
     }
 
+    /// Polls AX (bounded) until the focused text differs from `preInsertContext`. Returns early when
+    /// there is no baseline to compare against; gives up silently after the bound.
+    private func waitForInsertToLand(pid: pid_t, preInsertContext: String?) async {
+        guard let preInsertContext else { return }
+        for _ in 0..<Self.acceptSettleMaxPolls {
+            try? await Task.sleep(for: Self.acceptSettlePollInterval)
+            if let ax = await AccessibilityBridge.shared.completionContext(pid: pid),
+               ax.preContext != preInsertContext { return }
+        }
+        Logger.infra.debug("completion: insert not visible via AX after accept — re-requesting anyway")
+    }
+
     private func clearSuggestion() {
+        // Bump synchronously so any in-flight result (engine or snippet/learned path) is discarded
+        // on return instead of re-showing a ghost the user just dismissed.
+        suggestionGen += 1
         current = nil
         currentPID = 0
         currentContextKeys = []

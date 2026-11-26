@@ -32,11 +32,15 @@ enum WordBoundary {
     ///   "se" + "ccavo" = "seccavo" (valid)   → continue the token, no space
     ///   "per" + "chiedere" = "perchiedere" (invalid) → new word, insert a space
     /// nonisolated so the pure postprocessor can call it; NSSpellChecker is safe off the main thread.
-    nonisolated static func continuationFormsWord(trailingWord: String, continuation: String) -> Bool {
+    /// `context` = the text the user is writing: its language picks the dictionary. Guessing the
+    /// language from the glued token alone is noise ("Eugenioand" → Romanian) and sends the check to
+    /// a dictionary that may not even be loaded.
+    nonisolated static func continuationFormsWord(trailingWord: String, continuation: String, context: String = "") -> Bool {
         let combined = trailingWord + continuation
         guard combined.count >= 3, trailingWord.count >= 1, continuation.count >= 1 else { return false }
         let checker = NSSpellChecker.shared
-        let lang = NSLinguisticTagger.dominantLanguage(for: combined)
+        let sample = context.isEmpty ? combined : context
+        let lang = NSLinguisticTagger.dominantLanguage(for: sample)
             .flatMap { checker.availableLanguages.contains($0) ? $0 : nil } ?? "en"
         let r = checker.checkSpelling(of: combined, startingAt: 0, language: lang,
                                       wrap: false, inSpellDocumentWithTag: 0, wordCount: nil)
