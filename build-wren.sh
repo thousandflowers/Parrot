@@ -73,7 +73,7 @@ install_name_tool -delete_rpath "/opt/homebrew/lib" "${MACOS}/ParrotCompletionHe
 
 # shellcheck source=scripts/bundle-deps.sh
 source scripts/bundle-deps.sh
-bundle_swiftpm_resources "${BIN_DIR}" "${MACOS}" "${RES}"
+bundle_swiftpm_resources "${BIN_DIR}" "${RES}"
 
 # App icon (Wren's own; Resources/AppIcon.icns is Parrot's)
 cp Resources/WrenIcon.icns "${RES}/AppIcon.icns"

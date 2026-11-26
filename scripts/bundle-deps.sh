@@ -79,21 +79,21 @@ bundle_ggml_plugins() {
     done
 }
 
-# $1 = SwiftPM bin dir, $2 = Contents/MacOS, $3 = Contents/Resources.
+# $1 = SwiftPM bin dir, $2 = Contents/Resources.
 # SwiftPM resource bundles (swift-transformers_Hub, swift-crypto_Crypto, mlx-swift_Cmlx, ...) are
 # looked up by the generated `Bundle.module` accessor in the app's resourceURL. Without them the
 # app works on the dev Mac (the accessor falls back to the absolute .build path compiled in) and
 # crashes on every other Mac the first time that module touches its resources.
-# The MLX metallib also goes next to the executable, where mlx's load_default_library looks first.
+# mlx finds its shaders at Resources/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib
+# (load_swiftpm_library). Never put the metallib in Contents/MacOS: codesign treats every file
+# there as code and refuses to seal the app.
 bundle_swiftpm_resources() {
-    local bundle metallib
+    local bundle
     for bundle in "$1"/*.bundle; do
         [ -d "${bundle}" ] || continue
-        ditto "${bundle}" "$3/$(basename "${bundle}")"
+        ditto "${bundle}" "$2/$(basename "${bundle}")"
     done
-    metallib="$1/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib"
-    if [ -f "${metallib}" ]; then
-        cp "${metallib}" "$2/mlx.metallib"
+    if [ -f "$2/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib" ]; then
         echo "[✓] MLX metallib bundled"
     else
         echo "[i] No MLX metallib in $1 (build with the default swiftbuild system + Metal Toolchain:"

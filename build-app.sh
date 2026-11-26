@@ -107,7 +107,7 @@ fi
 # ---------------------------------------------------------------------------
 # shellcheck source=scripts/bundle-deps.sh
 source scripts/bundle-deps.sh
-bundle_swiftpm_resources "${BIN_DIR}" "${MACOS}" "${CONTENTS}/Resources"
+bundle_swiftpm_resources "${BIN_DIR}" "${CONTENTS}/Resources"
 LLAMA_BIN="${BREW_PREFIX}/bin/llama-server"
 if [ -x "${LLAMA_BIN}" ]; then
     echo "[*] Bundling llama-server + dylibs..."

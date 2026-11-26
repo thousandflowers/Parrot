@@ -50,6 +50,11 @@ actor MLXLLMService: @preconcurrency LLMService {
             for rel in ["mlx.metallib", "Resources/mlx.metallib", "Resources/default.metallib"]
             where fm.fileExists(atPath: dir.appendingPathComponent(rel).path) { return true }
         }
+        // Packaged app: the SwiftPM resource bundle sits in Contents/Resources (not loaded, so it
+        // is not in allBundles) - the same place mlx's load_swiftpm_library looks.
+        if let res = Bundle.main.resourceURL,
+           fm.fileExists(atPath: res.appendingPathComponent(
+               "mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib").path) { return true }
         for bundle in Bundle.allFrameworks + Bundle.allBundles
         where bundle.bundleIdentifier == "mlx-swift_Cmlx" {
             if bundle.url(forResource: "default", withExtension: "metallib") != nil { return true }
