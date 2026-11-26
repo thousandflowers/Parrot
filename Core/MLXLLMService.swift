@@ -107,10 +107,13 @@ actor MLXLLMService: @preconcurrency LLMService {
             ? LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
             : language
         let engine = PromptEngine(language: lang, style: await resolveStyle())
-        let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
+        let prompt = engine.buildPrompt(for: text, type: promptType,
+                                        customInstruction: PromptContext.extraInstruction)
 
         let corrected = try await generate(prompt)
-        let validated = validateCorrection(original: text, corrected: corrected, isFluency: promptType.isFluency)
+        // Same per-type cleanup/validation as the HTTP backends: grammar rules must not be
+        // applied to translation/expand/custom output, and the language must be checked.
+        let validated = postProcess(raw: corrected, text: text, promptType: promptType, lang: lang)
 
         return CorrectionResult(
             original: text, corrected: validated,
@@ -135,7 +138,8 @@ actor MLXLLMService: @preconcurrency LLMService {
                 do {
                     let lang = LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
                     let engine = PromptEngine(language: lang, style: await resolveStyle())
-                    let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
+                    let prompt = engine.buildPrompt(for: text, type: promptType,
+                                                    customInstruction: PromptContext.extraInstruction)
 
                     // Yield the accumulated text (not deltas) — same contract as the other
                     // services' streamCorrect implementations.

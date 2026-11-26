@@ -3,6 +3,9 @@ import os
 import OSLog
 
 private let pendingStateLock = OSAllocatedUnfairLock<(task: Task<Void, Never>?, onCancel: (@Sendable () -> Void)?)>(initialState: (task: nil, onCancel: nil))
+/// Identifies the most recent runTask: a superseded task must not touch shared UI state
+/// (loading panel, menu-bar icon) that the newer task now owns.
+private let currentTaskToken = OSAllocatedUnfairLock<UUID?>(initialState: nil)
 
 struct PreparedCheck: Sendable {
     let text: String
@@ -37,10 +40,13 @@ struct TextCheckCoordinator: Sendable {
 
     // MARK: - Core check execution
 
+    /// - Parameter routesSpans: when false, `show` always receives the result (callers that
+    ///   chain another step, e.g. grammar → fluency, must not be bypassed by the span panel).
     func check(
         type: PromptType,
         pid: pid_t? = nil,
         overrideService: Bool = false,
+        routesSpans: Bool = true,
         show: @escaping @MainActor (CorrectionResult) -> Void
     ) {
         performCheck(frontAppPID: pid) { text, resolved, _, detectedTone, language, bundleID in
@@ -70,25 +76,17 @@ struct TextCheckCoordinator: Sendable {
                 NativeGrammarEngine.check(text, language: language)
             }
 
-            // Layer 1: Rule engine already ran above. Convert to spans.
-            let ruleSpans: [CorrectionSpan] = ruleResult.fixes.compactMap { fix in
-                guard let range = text.range(of: fix.original) else { return nil }
-                return CorrectionSpan(
-                    range: NSRange(range, in: text),
-                    original: fix.original,
-                    replacement: fix.corrected,
-                    reason: fix.reason,
-                    confidence: 1.0,
-                    source: .ruleBased
-                )
-            }
+            // Every span below is in the ORIGINAL text's UTF-16 space (what the panel and
+            // SpanApplicator index into) — never in a rewritten intermediate text.
+            // Layer 1: rule matches located in the original text, each at its own position.
+            let ruleSpans = await RuleBasedEngine.shared.spans(in: text, language: language)
 
             // Layer 1b: Harper (EN only)
             var harperSpans: [CorrectionSpan] = []
             let harperAvailable = await HarperEngine.shared.isAvailable
             if harperAvailable && language.hasPrefix("en") {
                 do {
-                    let harperResult = try await HarperEngine.shared.check(ruleResult.text)
+                    let harperResult = try await HarperEngine.shared.check(text)
                     harperSpans = harperResult.fixes.map { fix in
                         CorrectionSpan(
                             range: fix.byteRange,
@@ -146,26 +144,27 @@ struct TextCheckCoordinator: Sendable {
                 let expandTemplate = engine.buildExpandPrompt(for: "{{TEXT}}", contactProfile: contactProfile)
                 finalPromptType = .custom(name: "Smart Expand", template: expandTemplate)
                 finalCustomPrompt = nil
-            } else if let kbContext, let cp = resolved.prompt {
-                finalPromptType = .custom(name: cp.name, template: cp.template + "\n\n" + kbContext)
-                finalCustomPrompt = nil
-            } else if let kbContext {
-                finalPromptType = effectiveType
-                finalCustomPrompt = CustomPrompt(id: UUID(), name: "KB Context", template: kbContext, checkType: .custom)
             } else {
                 finalPromptType = effectiveType
                 finalCustomPrompt = resolved.prompt
             }
 
-            // Layer 3: LLM always runs (short-circuit removed in Task 1)
+            // Layer 3: LLM always runs (short-circuit removed in Task 1).
+            // KB / tone context is an EXTRA instruction on top of the real prompt — it must
+            // never become the prompt itself (it has no {{TEXT}}: the text would not be sent).
             let llmResult = try await RequestQueue.shared.enqueue(
                 text: ruleResult.text, type: finalPromptType, priority: .manual,
                 overrideServiceType: serviceType, overrideCustomPrompt: finalCustomPrompt,
-                language: language
+                language: language, extraInstruction: kbContext
             )
 
-            // Merge: rule spans + LLM diff spans (for UI display only)
-            let llmSpans = spansFromCorrectionResult(llmResult, original: ruleResult.text)
+            // Merge: rule spans + LLM diff spans (for UI display only). The diff is taken
+            // against the ORIGINAL text so its offsets share the rule spans' coordinate space.
+            let llmVsOriginal = CorrectionResult(
+                original: text, corrected: llmResult.correctedText,
+                modelID: llmResult.modelID, confidence: llmResult.confidence
+            )
+            let llmSpans = spansFromCorrectionResult(llmVsOriginal, original: text)
             let allSpans = SpanMerger.merge(ruleMerged + llmSpans)
 
             // llmResult.correctedText is authoritative — it already incorporates both rule
@@ -195,7 +194,7 @@ struct TextCheckCoordinator: Sendable {
                     source: result.source
                 )
                 SuggestionPanelController.shared.showFluency(result: noChangeResult)
-            } else if let spans = result.correctionSpans, !spans.isEmpty {
+            } else if routesSpans, let spans = result.correctionSpans, !spans.isEmpty {
                 SuggestionPanelController.shared.showSpans(result: result, spans: spans)
             } else {
                 show(result)
@@ -324,14 +323,26 @@ struct TextCheckCoordinator: Sendable {
     }
 
     func runTask(body: @escaping @Sendable () async throws -> Void) {
+        let token = UUID()
         pendingStateLock.withLock { state in
             state.task?.cancel()
+            currentTaskToken.withLock { $0 = token }
             state.task = Task {
                 await MainActor.run { MenuBarParrot.shared.setState(.walking) }
                 do {
                     try Task.checkCancellation()
                     try await body()
+                    // Flows that end without a panel (replace / apply-direct / no change) would
+                    // otherwise leave the icon walking forever. Panels set their own state.
+                    guard Self.isCurrentTask(token) else { return }
+                    await MainActor.run {
+                        if MenuBarParrot.shared.state == .walking {
+                            MenuBarParrot.shared.setState(.idle)
+                        }
+                    }
                 } catch is CancellationError {
+                    // A newer task already showed ITS loading panel — don't close it.
+                    guard Self.isCurrentTask(token) else { return }
                     await MainActor.run {
                         MenuBarParrot.shared.setState(.idle)
                         if SuggestionPanelController.shared.isLoading {
@@ -356,6 +367,18 @@ struct TextCheckCoordinator: Sendable {
     }
 
     // MARK: - Helpers
+
+    private static func isCurrentTask(_ token: UUID) -> Bool {
+        currentTaskToken.withLock { current in current == token }
+    }
+
+    /// DiffOp offsets/lengths count Characters; spans must be UTF-16 (NSRange).
+    private static func utf16Range(charOffset: Int, charLength: Int, in text: String) -> NSRange? {
+        guard charOffset >= 0, charLength >= 0, charOffset + charLength <= text.count else { return nil }
+        let start = text.index(text.startIndex, offsetBy: charOffset)
+        let end = text.index(start, offsetBy: charLength)
+        return NSRange(start..<end, in: text)
+    }
 
     func showInlineAnnotations(result: CorrectionResult, textOffset: Int, pid: pid_t) async {
         let annots = result.toAnnotations(baseOffset: textOffset)
@@ -388,9 +411,10 @@ struct TextCheckCoordinator: Sendable {
         return ops.compactMap { op in
             switch op.type {
             case .insert:
-                guard let replacement = op.replacement, !replacement.isEmpty else { return nil }
+                guard let replacement = op.replacement, !replacement.isEmpty,
+                      let nsRange = Self.utf16Range(charOffset: op.offset, charLength: 0, in: original) else { return nil }
                 return CorrectionSpan(
-                    range: NSRange(location: op.offset, length: 0),
+                    range: nsRange,
                     original: "",
                     replacement: replacement,
                     reason: "AI correction",
@@ -398,8 +422,8 @@ struct TextCheckCoordinator: Sendable {
                     source: .llm
                 )
             case .delete:
-                let nsRange = NSRange(location: op.offset, length: op.length)
-                guard let swiftRange = Range(nsRange, in: original) else { return nil }
+                guard let nsRange = Self.utf16Range(charOffset: op.offset, charLength: op.length, in: original),
+                      let swiftRange = Range(nsRange, in: original) else { return nil }
                 let orig = String(original[swiftRange])
                 return CorrectionSpan(
                     range: nsRange,

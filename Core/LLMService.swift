@@ -42,6 +42,20 @@ enum PromptType: Sendable, Codable, Equatable, Hashable {
         return false
     }
 
+    /// Cache identity. `label` is "custom" for EVERY custom prompt, so keying the cache on it
+    /// lets two different custom prompts return each other's results. Custom prompts and any
+    /// extra instruction (e.g. knowledge-base context) are folded in via a SHA-256 based hash:
+    /// the cache is persisted to disk, so Swift's per-process seeded `hashValue` would not do.
+    /// Built-in types without extras keep their plain label, so persisted entries stay valid.
+    func cacheKey(extraInstruction: String?) -> String {
+        let base: String = switch self {
+        case .custom(let name, let template): "custom:" + StableHash.hex(name + "\u{0}" + template)
+        default: label
+        }
+        guard let extra = extraInstruction, !extra.isEmpty else { return base }
+        return base + "+ctx:" + StableHash.hex(extra)
+    }
+
     enum CodingKeys: String, CodingKey {
         case grammar, fluency, grammarAndFluency, expand, coach, explain, custom, translation, deSlop, aiPrompt
     }

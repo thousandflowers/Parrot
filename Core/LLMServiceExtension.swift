@@ -1,22 +1,47 @@
 import Foundation
 import OSLog
+import NaturalLanguage
 
 // MARK: - Utility condivisa (tutti i servizi LLM)
+
+/// Per-request prompt context, carried as task-locals so it reaches every concrete
+/// service's `correct` without changing the `LLMService` protocol (and all its conformers).
+/// RequestQueue binds these around the service call for exactly one request.
+enum PromptContext {
+    /// Extra instruction appended to the real prompt (e.g. knowledge-base reference context).
+    /// It never replaces the prompt: the user's text is always sent.
+    @TaskLocal static var extraInstruction: String?
+    /// Model to use instead of the one configured in Settings (fallback-model retry).
+    @TaskLocal static var modelOverride: String?
+}
+
+struct ParsedChatResponse: Equatable {
+    let content: String
+    /// The server stopped at max_tokens (`finish_reason == "length"`): the text is cut off.
+    let isTruncated: Bool
+}
 
 extension LLMService {
 
     func parseResponse(data: Data) throws -> String {
+        try parseChatResponse(data: data).content
+    }
+
+    func parseChatResponse(data: Data) throws -> ParsedChatResponse {
+        let raw = String(data: data, encoding: .utf8) ?? "nil"
+        let response: ChatResponse
         do {
-            let response = try JSONDecoder().decode(ChatResponse.self, from: data)
-            guard let content = response.choices.first?.message.content, !content.isEmpty else {
-                throw CorrectionError.outputParsingFailed(raw: String(data: data, encoding: .utf8) ?? "nil")
-            }
-            return content.trimmingCharacters(in: .whitespacesAndNewlines)
-        } catch is CorrectionError {
-            throw CorrectionError.outputParsingFailed(raw: String(data: data, encoding: .utf8) ?? "nil")
+            response = try JSONDecoder().decode(ChatResponse.self, from: data)
         } catch {
-            throw CorrectionError.outputParsingFailed(raw: String(data: data, encoding: .utf8) ?? error.localizedDescription)
+            throw CorrectionError.outputParsingFailed(raw: raw)
         }
+        guard let choice = response.choices.first, !choice.message.content.isEmpty else {
+            throw CorrectionError.outputParsingFailed(raw: raw)
+        }
+        return ParsedChatResponse(
+            content: choice.message.content.trimmingCharacters(in: .whitespacesAndNewlines),
+            isTruncated: choice.finish_reason == "length"
+        )
     }
 
     func buildLLMRequest(url: URL, apiKey: String?, body: ChatRequest) throws -> URLRequest {
@@ -35,7 +60,8 @@ extension LLMService {
         body: ChatRequest,
         url: URL,
         apiKey: String?,
-        extraHeaders: [String: String] = [:]
+        extraHeaders: [String: String] = [:],
+        rejectTruncated: Bool = false
     ) async throws -> String {
         try throwIfInvalidLLMURL(url)
         var request = try buildLLMRequest(url: url, apiKey: apiKey, body: body)
@@ -51,11 +77,16 @@ extension LLMService {
                     throw CorrectionError.networkUnavailable
                 }
                 try handleOpenAIHTTPStatus(httpResponse.statusCode, data: data)
-                let result = try parseResponse(data: data)
-                guard !result.isEmpty else {
+                let parsed = try parseChatResponse(data: data)
+                guard !parsed.content.isEmpty else {
                     throw CorrectionError.outputParsingFailed(raw: "empty")
                 }
-                return result
+                // A grammar/fluency correction cut off at max_tokens would silently delete
+                // the tail of the user's text on replace — never accept it.
+                if rejectTruncated && parsed.isTruncated {
+                    throw CorrectionError.outputParsingFailed(raw: "truncated (finish_reason=length)")
+                }
+                return parsed.content
             } catch is CancellationError {
                 throw CancellationError()
             } catch let error as CorrectionError {
@@ -127,7 +158,7 @@ extension LLMService {
     }
 
     private func maxTokens(for text: String, promptType: PromptType) -> Int {
-        let approxInputTokens = max(64, text.count / 4)
+        let approxInputTokens = max(64, TokenEstimator.estimatedTokens(for: text))
         switch promptType {
         case .fluency, .translation:
             return max(256, min(approxInputTokens * 2 + 128, 2048))
@@ -138,6 +169,62 @@ extension LLMService {
         }
     }
 
+    /// Prompt, system prompt and base temperature for one prompt type. Shared by the
+    /// one-shot and the streaming path so both send the same task to the model.
+    /// `extraInstruction` (e.g. knowledge-base context) is ADDED to the real prompt.
+    func promptPlan(
+        text: String,
+        promptType: PromptType,
+        engine: PromptEngine,
+        extraInstruction: String?
+    ) -> (prompt: String, systemPrompt: String?, temperature: Double) {
+        let extra = extraInstruction.flatMap { $0.isEmpty ? nil : $0 }
+        // Builders that take a custom instruction get it inline; the others get it in the
+        // system prompt (or as a leading block when there is none).
+        func withContext(_ system: String?) -> String? {
+            guard let extra else { return system }
+            return system.map { $0 + "\n\n" + extra } ?? extra
+        }
+        switch promptType {
+        case .grammar:
+            return (engine.buildGrammarPrompt(for: text, customInstruction: extra),
+                    "You are a proofreader. Fix ONLY clear grammatical errors: misspellings, wrong verb forms, wrong agreement, missing required grammatical forms. ABSOLUTE RULES: (1) Every grammatically correct word MUST be kept unchanged. (2) Do NOT add any word, fact, or information not in the original text. (3) Preserve sentence type exactly — a statement ends with a period and stays a statement, a question ends with a question mark and stays a question. (4) Do NOT rephrase, reorder, or substitute synonyms. (5) Output must be in the SAME language as the input — do NOT translate. (6) If no errors exist, output the text VERBATIM. Output ONLY the corrected text — no labels, no explanations, no quotes.",
+                    Constants.grammarTemperature)
+        case .fluency:
+            return (engine.buildFluencyPrompt(for: text, customInstruction: extra),
+                    "You are a writing assistant. Rewrite text to improve readability, flow, and naturalness. Preserve the original meaning exactly — do not add, invent, or assume any information not in the original. Output only the rewritten text. Keep the exact same language as the input — do NOT translate to English or any other language.",
+                    Constants.fluencyTemperature)
+        case .grammarAndFluency:
+            return (engine.buildCombinedPrompt(for: text),
+                    withContext("You are a proofreader and writing assistant. Fix all grammatical errors AND improve fluency and flow. Preserve the original meaning exactly — do NOT add facts or information not in the original. Preserve sentence type (statement/question/exclamation). Output must be in the SAME language as the input. Do NOT translate. Output only the corrected text."),
+                    (Constants.grammarTemperature + Constants.fluencyTemperature) / 2.0)
+        case .coach:
+            return (engine.buildCoachPrompt(for: text),
+                    withContext("You are a concise writing coach. Analyze only the specific text given — never invent issues that are not present. Respond in the same language as the input text."),
+                    Constants.grammarTemperature)
+        case .deSlop:
+            return (engine.buildDeSlopPrompt(for: text),
+                    withContext("You are an editor. Remove AI-sounding patterns from text. Preserve meaning. Output only the rewritten text in the same language as the input — do NOT translate."),
+                    Constants.fluencyTemperature)
+        case .aiPrompt:
+            return (engine.buildAIPromptPrompt(for: text),
+                    withContext("You are a prompt engineer. Rewrite the given text into an effective AI assistant prompt. Output only the optimized prompt."),
+                    Constants.grammarTemperature)
+        case .expand:
+            return (engine.buildExpandPrompt(for: text, contactProfile: nil),
+                    withContext("You are an expert writing assistant. Expand rough draft notes into a complete, polished message. Output only the final message — no preamble, no explanation."),
+                    Constants.fluencyTemperature)
+        case .custom:
+            // The user's template fully specifies the task; context goes in its <CUSTOM> slot.
+            return (engine.buildPrompt(for: text, type: promptType, customInstruction: extra), nil,
+                    Constants.grammarTemperature)
+        default:
+            // Translation, explain: no system prompt — user prompt fully specifies the task.
+            return (engine.buildPrompt(for: text, type: promptType, customInstruction: nil), withContext(nil),
+                    Constants.grammarTemperature)
+        }
+    }
+
     private func buildChatBody(
         text: String,
         promptType: PromptType,
@@ -145,74 +232,31 @@ extension LLMService {
         model: String,
         temperatureOffset: Double = 0,
         sampling: SamplingParams? = nil,
-        seedOverride: Int? = nil
+        seedOverride: Int? = nil,
+        stream: Bool = false
     ) -> ChatRequest {
-        let prompt: String
-        let temperature: Double
-        let systemPrompt: String?
-
-        switch promptType {
-        case .grammar:
-            prompt = engine.buildGrammarPrompt(for: text, customInstruction: nil)
-            temperature = Constants.grammarTemperature + temperatureOffset
-            systemPrompt = "You are a proofreader. Fix ONLY clear grammatical errors: misspellings, wrong verb forms, wrong agreement, missing required grammatical forms. ABSOLUTE RULES: (1) Every grammatically correct word MUST be kept unchanged. (2) Do NOT add any word, fact, or information not in the original text. (3) Preserve sentence type exactly — a statement ends with a period and stays a statement, a question ends with a question mark and stays a question. (4) Do NOT rephrase, reorder, or substitute synonyms. (5) Output must be in the SAME language as the input — do NOT translate. (6) If no errors exist, output the text VERBATIM. Output ONLY the corrected text — no labels, no explanations, no quotes."
-        case .fluency:
-            prompt = engine.buildFluencyPrompt(for: text, customInstruction: nil)
-            temperature = Constants.fluencyTemperature + temperatureOffset
-            systemPrompt = "You are a writing assistant. Rewrite text to improve readability, flow, and naturalness. Preserve the original meaning exactly — do not add, invent, or assume any information not in the original. Output only the rewritten text. Keep the exact same language as the input — do NOT translate to English or any other language."
-        case .grammarAndFluency:
-            prompt = engine.buildCombinedPrompt(for: text)
-            temperature = (Constants.grammarTemperature + Constants.fluencyTemperature) / 2.0 + temperatureOffset
-            systemPrompt = "You are a proofreader and writing assistant. Fix all grammatical errors AND improve fluency and flow. Preserve the original meaning exactly — do NOT add facts or information not in the original. Preserve sentence type (statement/question/exclamation). Output must be in the SAME language as the input. Do NOT translate. Output only the corrected text."
-        case .coach:
-            prompt = engine.buildCoachPrompt(for: text)
-            temperature = Constants.grammarTemperature + temperatureOffset
-            systemPrompt = "You are a concise writing coach. Analyze only the specific text given — never invent issues that are not present. Respond in the same language as the input text."
-        case .deSlop:
-            prompt = engine.buildDeSlopPrompt(for: text)
-            temperature = Constants.fluencyTemperature + temperatureOffset
-            systemPrompt = "You are an editor. Remove AI-sounding patterns from text. Preserve meaning. Output only the rewritten text in the same language as the input — do NOT translate."
-        case .aiPrompt:
-            prompt = engine.buildAIPromptPrompt(for: text)
-            temperature = Constants.grammarTemperature + temperatureOffset
-            systemPrompt = "You are a prompt engineer. Rewrite the given text into an effective AI assistant prompt. Output only the optimized prompt."
-        case .expand:
-            prompt = engine.buildExpandPrompt(for: text, contactProfile: nil)
-            temperature = Constants.fluencyTemperature + temperatureOffset
-            systemPrompt = "You are an expert writing assistant. Expand rough draft notes into a complete, polished message. Output only the final message — no preamble, no explanation."
-        default:
-            // Translation, explain, custom: no system prompt — user prompt fully specifies the task.
-            prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-            temperature = Constants.grammarTemperature + temperatureOffset
-            systemPrompt = nil
-        }
+        let plan = promptPlan(text: text, promptType: promptType, engine: engine,
+                              extraInstruction: PromptContext.extraInstruction)
         var effectiveSampling = sampling
         if let seedOverride { effectiveSampling?.seed = seedOverride }
-        return chatBody(model: model, prompt: prompt, systemPrompt: systemPrompt,
-                        temperature: temperature,
+        return chatBody(model: model, prompt: plan.prompt, systemPrompt: plan.systemPrompt,
+                        temperature: plan.temperature + temperatureOffset,
                         maxTokens: maxTokens(for: text, promptType: promptType),
+                        stream: stream,
                         sampling: effectiveSampling)
     }
 
     /// Cleans and validates one raw model output into a final correction string.
-    private func postProcess(raw: String, text: String, promptType: PromptType, lang: String) -> String {
+    /// Every backend (HTTP, MLX, Apple Intelligence, streaming) must go through this.
+    func postProcess(raw: String, text: String, promptType: PromptType, lang: String) -> String {
+        CorrectionSanitizer.postProcess(raw: raw, original: text, promptType: promptType, language: lang)
+    }
+
+    /// Grammar/fluency must never accept output cut off at max_tokens.
+    private func rejectsTruncation(_ promptType: PromptType) -> Bool {
         switch promptType {
-        case .grammar, .fluency, .grammarAndFluency, .deSlop:
-            let isFluency = promptType != .grammar
-            return validateCorrection(original: text, corrected: raw, isFluency: isFluency, language: lang)
-        default:
-            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            switch promptType {
-            case .expand, .custom:
-                // Runaway generation guard: if the model generated more than 10× the input,
-                // something went wrong (repetition loop, assistant hallucination, etc.).
-                return (!trimmed.isEmpty && trimmed.count <= text.count * 10) ? trimmed : text
-            case .translation:
-                // Translations are approximately the same length — 4× guards against hallucination.
-                return (!trimmed.isEmpty && trimmed.count <= max(200, text.count * 4)) ? trimmed : text
-            default:
-                return trimmed
-            }
+        case .grammar, .fluency, .grammarAndFluency: return true
+        default: return false
         }
     }
 
@@ -227,7 +271,9 @@ extension LLMService {
         sampling: SamplingParams? = nil,
         samples: Int = 1
     ) async throws -> CorrectionResult {
-        CrashLogger.log("performCorrection: start model=\(model) type=\(promptType.label) samples=\(samples)")
+        // Fallback-model retry passes the model explicitly instead of rewriting Settings.
+        let resolvedModel = PromptContext.modelOverride ?? model
+        CrashLogger.log("performCorrection: start model=\(resolvedModel) type=\(promptType.label) samples=\(samples)")
         let lang = language.isEmpty
             ? LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
             : language
@@ -240,22 +286,23 @@ extension LLMService {
         let corrected: String
         if canMultiPass {
             corrected = try await multiPassCorrect(
-                text: text, promptType: promptType, engine: engine, model: model,
+                text: text, promptType: promptType, engine: engine, model: resolvedModel,
                 url: url, apiKey: apiKey, extraHeaders: extraHeaders,
                 sampling: sampling, samples: samples, lang: lang
             )
         } else {
             let rawCorrected = try await performOpenAIRequest(
                 body: buildChatBody(text: text, promptType: promptType, engine: engine,
-                                    model: model, sampling: sampling),
-                url: url, apiKey: apiKey, extraHeaders: extraHeaders
+                                    model: resolvedModel, sampling: sampling),
+                url: url, apiKey: apiKey, extraHeaders: extraHeaders,
+                rejectTruncated: rejectsTruncation(promptType)
             )
             corrected = postProcess(raw: rawCorrected, text: text, promptType: promptType, lang: lang)
         }
         CrashLogger.log("performCorrection: done")
         return CorrectionResult(
             original: text, corrected: corrected,
-            modelID: model, confidence: Constants.defaultConfidence, promptType: promptType.label
+            modelID: resolvedModel, confidence: Constants.defaultConfidence, promptType: promptType.label
         )
     }
 
@@ -287,7 +334,8 @@ extension LLMService {
                                      model: model, temperatureOffset: offset,
                                      sampling: sampling, seedOverride: i)
             do {
-                let raw = try await performOpenAIRequest(body: body, url: url, apiKey: apiKey, extraHeaders: extraHeaders)
+                let raw = try await performOpenAIRequest(body: body, url: url, apiKey: apiKey, extraHeaders: extraHeaders,
+                                                         rejectTruncated: rejectsTruncation(promptType))
                 sawRequest = true
                 let candidate = postProcess(raw: raw, text: text, promptType: promptType, lang: lang)
                 let rawEchoedOriginal = raw.trimmingCharacters(in: .whitespacesAndNewlines) == text
@@ -309,7 +357,8 @@ extension LLMService {
             // Every request errored — re-issue one so the caller gets a real error, not a silent no-op.
             let body = buildChatBody(text: text, promptType: promptType, engine: engine,
                                      model: model, sampling: sampling)
-            let raw = try await performOpenAIRequest(body: body, url: url, apiKey: apiKey, extraHeaders: extraHeaders)
+            let raw = try await performOpenAIRequest(body: body, url: url, apiKey: apiKey, extraHeaders: extraHeaders,
+                                                         rejectTruncated: rejectsTruncation(promptType))
             return postProcess(raw: raw, text: text, promptType: promptType, lang: lang)
         }
         // No surviving vote → every pass was a rejected over-correction. Safest is the original.
@@ -356,149 +405,11 @@ extension LLMService {
     }
 
     func validateCorrection(original: String, corrected: String, isFluency: Bool = false, language: String? = nil) -> String {
-        var text = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return original }
-
-        // 1. Strip label prefixes — language-agnostic structural detection.
-        //    Models sometimes output "Corrected text: ...", "Testo corretto: ...", "修正後: ..." etc.
-        //    Pattern: up to 3 tokens before the first ":" with no newline → strip the label.
-        let firstLine = String(text.prefix(while: { $0 != "\n" }))
-        if let colonIdx = firstLine.firstIndex(of: ":") {
-            let labelPart = String(firstLine[..<colonIdx]).trimmingCharacters(in: .whitespaces)
-            let labelWords = labelPart.split(whereSeparator: \.isWhitespace).count
-            if labelWords <= 3 && !labelPart.isEmpty {
-                let origLower = original.lowercased()
-                let labelLower = labelPart.lowercased()
-                // Only strip if the label word is not part of the original text
-                if !origLower.contains(labelLower) {
-                    let after = String(text[text.index(after: colonIdx)...])
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !after.isEmpty && after.count >= original.count / 4 { text = after }
-                }
-            }
-        }
-
-        // 2. Strip wrapping quotes
-        if let q = text.first, (q == "\"" || q == "'"), text.last == q, text.count > 2 {
-            text = String(text.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        // 3. Strip appended commentary after a blank line — language-agnostic structural check.
-        //    If the first block is ≥50% the length of the original (a substantial correction)
-        //    AND the second block is less than half the length of the first block,
-        //    the second block is almost certainly meta-commentary, not a second paragraph.
-        if let blankRange = text.range(of: "\n\n") {
-            let firstBlock = String(text[..<blankRange.lowerBound])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let secondBlock = String(text[blankRange.upperBound...])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let firstCoversOriginal = Double(firstBlock.count) / Double(max(original.count, 1)) >= 0.5
-            let secondMuchShorter = secondBlock.count < firstBlock.count / 2
-            if firstCoversOriginal && secondMuchShorter && !firstBlock.isEmpty {
-                text = firstBlock
-            }
-        }
-
-        guard !text.isEmpty else { return original }
-
-        // 4. Language drift: check output against KNOWN expected language (the one sent to the LLM).
-        //    Unlike the old approach comparing two unreliable detections, this uses the language
-        //    we KNOW is correct. Short texts (<5 chars) are exempt to avoid false rejection on
-        //    very short corrections where detection is inherently unreliable.
-        if let expectedLang = language, !expectedLang.isEmpty, text.count >= 5 {
-            let outputLang = LanguageDetector.detect(text: text, fallbackLanguage: expectedLang)
-            if outputLang != expectedLang {
-                return original
-            }
-        }
-
-        // 5. Length sanity: grammar up to 2x (should not expand significantly), fluency up to 6x
-        let maxRatio = isFluency ? 6 : 2
-        if text.count > original.count * maxRatio { return original }
-
-        // 6. For grammar: reject if >50% of words differ (over-correction / invented content)
-        if !isFluency && wordChangeFraction(original: original, corrected: text) > 0.50 {
-            return original
-        }
-
-        // 7. For grammar: per-word edit distance guard (same word count).
-        //    Catches hallucinations like "alcujne"→"Alleggeri" (LD=6) that slip through
-        //    the fraction check because fewer than 50% of words changed.
-        //    Only checks words ≥5 chars: short words legitimately undergo large edits
-        //    in conjugation corrections (e.g., "fa"→"fanno", "è"→"sono").
-        if !isFluency {
-            let origWords = original.split(whereSeparator: \.isWhitespace).map(String.init)
-            let corrWords = text.split(whereSeparator: \.isWhitespace).map(String.init)
-            if origWords.count == corrWords.count {
-                for (orig, corr) in zip(origWords, corrWords) {
-                    guard orig.lowercased() != corr.lowercased() else { continue }
-                    guard orig.count >= 5 else { continue }
-                    let maxDist = max(2, orig.count / 2)
-                    if levenshteinDistance(orig.lowercased(), corr.lowercased()) > maxDist {
-                        return original
-                    }
-                }
-            }
-        }
-
-        return isFluency ? text : preservePunctuation(original: original, corrected: text)
+        CorrectionSanitizer.validate(original: original, corrected: corrected, isFluency: isFluency, language: language)
     }
 
     private func levenshteinDistance(_ a: String, _ b: String) -> Int {
-        let aChars = Array(a), bChars = Array(b)
-        let m = aChars.count, n = bChars.count
-        if m == 0 { return n }
-        if n == 0 { return m }
-        var prev = Array(0...n)
-        var curr = [Int](repeating: 0, count: n + 1)
-        for i in 1...m {
-            curr[0] = i
-            for j in 1...n {
-                curr[j] = aChars[i-1] == bChars[j-1]
-                    ? prev[j-1]
-                    : 1 + min(prev[j-1], prev[j], curr[j-1])
-            }
-            prev = curr
-        }
-        return prev[n]
-    }
-
-    private func wordChangeFraction(original: String, corrected: String) -> Double {
-        let origTokens = original.split(separator: " ")
-            .map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters) }
-        let corrTokens = corrected.split(separator: " ")
-            .map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters) }
-        guard !origTokens.isEmpty else { return 0 }
-        // Count how many original tokens have no match in corrected (multiset-aware).
-        var corrCounts = corrTokens.reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
-        var unmatched = 0
-        for tok in origTokens {
-            if let n = corrCounts[tok], n > 0 {
-                corrCounts[tok] = n - 1
-            } else {
-                unmatched += 1
-            }
-        }
-        return Double(unmatched) / Double(origTokens.count)
-    }
-
-    private func preservePunctuation(original: String, corrected: String) -> String {
-        let sentenceEnders = CharacterSet(charactersIn: ".!?")
-        let allPunct = CharacterSet(charactersIn: ".!?;:")
-        let trimmedCorrected = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let origLast = original.trimmingCharacters(in: .whitespacesAndNewlines).last,
-              origLast != trimmedCorrected.last,
-              let origScalar = origLast.unicodeScalars.first,
-              sentenceEnders.contains(origScalar)
-        else { return corrected }
-        // Model changed punctuation type (e.g., "." → "?") — replace last char with original.
-        if let corrLast = trimmedCorrected.last,
-           let corrScalar = corrLast.unicodeScalars.first,
-           allPunct.contains(corrScalar) {
-            return String(trimmedCorrected.dropLast()) + String(origLast)
-        }
-        // Model removed final punctuation — restore it.
-        return trimmedCorrected + String(origLast)
+        CorrectionSanitizer.levenshteinDistance(a, b)
     }
 
     func chatBody(
@@ -536,8 +447,9 @@ extension LLMService {
                 do {
                     let lang = LanguageDetector.detect(text: text, fallbackLanguage: resolvedLanguage)
                     let engine = PromptEngine(language: lang, style: await resolveStyle())
-                    let prompt = engine.buildPrompt(for: text, type: promptType, customInstruction: nil)
-                    let body = chatBody(model: model, prompt: prompt, temperature: 0.1, stream: true, sampling: sampling)
+                    // Same system prompt / temperature / context as the one-shot path.
+                    let body = buildChatBody(text: text, promptType: promptType, engine: engine,
+                                             model: model, sampling: sampling, stream: true)
                     var request = try buildLLMRequest(url: url, apiKey: apiKey, body: body)
                     for (key, value) in extraHeaders {
                         request.setValue(value, forHTTPHeaderField: key)
@@ -597,5 +509,256 @@ enum LLMJSONParser {
             if cleaned.hasSuffix("```") { cleaned = String(cleaned.dropLast(3)) }
         }
         return parse(json: cleaned.trimmingCharacters(in: .whitespacesAndNewlines), in: text)
+    }
+}
+
+// MARK: - Token budget
+
+enum TokenEstimator {
+    /// Conservative tokens-per-text estimate that works for every script: ~3 UTF-8 bytes per
+    /// token over-counts Latin text slightly (≈4 chars/token) and gives CJK — 3 bytes per
+    /// character, roughly one token each — a full token per character instead of a quarter.
+    static let utf8BytesPerToken = 3
+
+    static func estimatedTokens(for text: String) -> Int {
+        (text.utf8.count + utf8BytesPerToken - 1) / utf8BytesPerToken
+    }
+}
+
+// MARK: - Output sanitizing / validation (pure, no I/O)
+
+/// Turns one raw model output into a safe correction. Every structural strip runs only when
+/// the ORIGINAL lacks that structure, so the user's own prefixes, quotes and paragraphs survive.
+enum CorrectionSanitizer {
+    static let maxGrammarLengthRatio = 2
+    static let maxFluencyLengthRatio = 6
+    /// Grammar output shorter than this fraction of the original is a truncation, not a fix.
+    static let minGrammarLengthRatio = 0.6
+    /// Below this length a big relative shrink can be legitimate ("the the" → "the").
+    static let minLengthForShrinkCheck = 20
+    static let maxGrammarWordChange = 0.50
+    static let minLengthForLanguageCheck = 5
+    static let maxLabelWords = 3
+    static let maxRunawayRatio = 10
+    static let maxTranslationRatio = 4
+    static let minTranslationCap = 200
+    /// A first line is a preamble only if almost none of its words come from the original…
+    static let maxPreambleOverlap = 0.25
+    /// …while the rest of the output still covers most of the original.
+    static let minBodyCoverage = 0.5
+
+    private static let quotePairs: [(open: Character, close: Character)] = [
+        ("\"", "\""), ("'", "'"), ("“", "”"), ("„", "“"), ("«", "»"), ("「", "」"),
+    ]
+    private static let labelColons: Set<Character> = [":", "："]
+    private static let fence = "```"
+
+    // MARK: Entry points
+
+    static func postProcess(raw: String, original: String, promptType: PromptType, language: String) -> String {
+        switch promptType {
+        case .grammar, .fluency, .grammarAndFluency, .deSlop:
+            return validate(original: original, corrected: raw,
+                            isFluency: promptType != .grammar, language: language)
+        default:
+            let cleaned = stripCodeFence(stripReasoning(trimmed(raw), original: original), original: original)
+            guard !cleaned.isEmpty else { return original }
+            switch promptType {
+            case .expand, .custom:
+                // Runaway generation guard (repetition loop, assistant hallucination).
+                return cleaned.count <= original.count * maxRunawayRatio ? cleaned : original
+            case .translation:
+                return cleaned.count <= max(minTranslationCap, original.count * maxTranslationRatio) ? cleaned : original
+            default:
+                return cleaned
+            }
+        }
+    }
+
+    static func validate(original: String, corrected: String, isFluency: Bool, language: String?) -> String {
+        let strips: [(String, String) -> String] = [
+            stripReasoning, stripCodeFence, stripLabelPrefix, stripPreamble,
+            stripWrappingQuotes, stripTrailingCommentary,
+        ]
+        let cleaned = strips.reduce(trimmed(corrected)) { text, strip in strip(text, original) }
+        guard !cleaned.isEmpty,
+              isAcceptable(cleaned, original: original, isFluency: isFluency, language: language)
+        else { return original }
+        return isFluency ? cleaned : preservePunctuation(original: original, corrected: cleaned)
+    }
+
+    // MARK: Structural strips
+
+    /// Removes `<think>…</think>` reasoning. An unterminated block means the answer never came.
+    static func stripReasoning(_ text: String, original: String) -> String {
+        guard !original.lowercased().contains("<think") else { return text }
+        let closed = text.replacingOccurrences(
+            of: "(?s)<(think|thinking)>.*?</\\1>", with: "",
+            options: [.regularExpression, .caseInsensitive])
+        // Chat templates that pre-open <think> leave only the closing tag in the output.
+        let afterDangling = closed.range(of: "</think>", options: [.caseInsensitive, .backwards])
+            .map { String(closed[$0.upperBound...]) } ?? closed
+        let result = trimmed(afterDangling)
+        return result.lowercased().hasPrefix("<think") ? "" : result
+    }
+
+    static func stripCodeFence(_ text: String, original: String) -> String {
+        guard text.hasPrefix(fence), !original.contains(fence) else { return text }
+        let body = text.firstIndex(of: "\n").map { String(text[text.index(after: $0)...]) } ?? ""
+        let unfenced = trimmed(body)
+        return trimmed(unfenced.hasSuffix(fence) ? String(unfenced.dropLast(fence.count)) : unfenced)
+    }
+
+    /// "Label: text" with a short label on the first line, split into (label, text).
+    static func labelPrefix(of text: String) -> (label: String, remainder: String)? {
+        let firstLine = text.prefix(while: { $0 != "\n" })
+        guard let colon = firstLine.firstIndex(where: { labelColons.contains($0) }) else { return nil }
+        let label = firstLine[..<colon].trimmingCharacters(in: .whitespaces)
+        guard !label.isEmpty, label.split(whereSeparator: \.isWhitespace).count <= maxLabelWords else { return nil }
+        return (label, trimmed(String(text[text.index(after: colon)...])))
+    }
+
+    static func stripLabelPrefix(_ text: String, original: String) -> String {
+        guard let (label, remainder) = labelPrefix(of: text),
+              !remainder.isEmpty, remainder.count >= original.count / 4 else { return text }
+        if labelPrefix(of: original) != nil {
+            // The user wrote "X: …" (maybe with a typo in X): keep it, unless the model
+            // stacked one more label on top ("Corrected: Nota: …").
+            return labelPrefix(of: remainder) != nil ? remainder : text
+        }
+        return original.lowercased().contains(label.lowercased()) ? text : remainder
+    }
+
+    /// Drops a colon-less first line ("Here is the corrected text") that shares almost no
+    /// words with a single-line original while the rest of the output covers it.
+    static func stripPreamble(_ text: String, original: String) -> String {
+        let source = trimmed(original)
+        guard !source.contains("\n"), let newline = text.firstIndex(of: "\n") else { return text }
+        let firstLine = trimmed(String(text[..<newline]))
+        let body = trimmed(String(text[newline...]))
+        guard !firstLine.isEmpty, !body.isEmpty,
+              !source.lowercased().hasPrefix(firstLine.lowercased()) else { return text }
+        let sourceWords = Set(wordTokens(source))
+        let lineWords = wordTokens(firstLine)
+        guard !lineWords.isEmpty else { return text }
+        let overlap = Double(lineWords.filter(sourceWords.contains).count) / Double(lineWords.count)
+        let coverage = 1 - wordChangeFraction(original: source, corrected: body)
+        return overlap <= maxPreambleOverlap && coverage >= minBodyCoverage ? body : text
+    }
+
+    static func stripWrappingQuotes(_ text: String, original: String) -> String {
+        let source = trimmed(original)
+        guard text.count > 2,
+              let pair = quotePairs.first(where: { text.first == $0.open && text.last == $0.close }),
+              !(source.first == pair.open && source.last == pair.close)
+        else { return text }
+        return trimmed(String(text.dropFirst().dropLast()))
+    }
+
+    /// Commentary after a blank line — only when the original is a single paragraph.
+    static func stripTrailingCommentary(_ text: String, original: String) -> String {
+        guard !original.contains("\n\n"), let blank = text.range(of: "\n\n") else { return text }
+        let first = trimmed(String(text[..<blank.lowerBound]))
+        let second = trimmed(String(text[blank.upperBound...]))
+        let firstCoversOriginal = Double(first.count) / Double(max(original.count, 1)) >= 0.5
+        let secondMuchShorter = second.count < first.count / 2
+        return firstCoversOriginal && secondMuchShorter && !first.isEmpty ? first : text
+    }
+
+    // MARK: Acceptance checks
+
+    static func isAcceptable(_ text: String, original: String, isFluency: Bool, language: String?) -> Bool {
+        // Language drift against the language we KNOW was requested (primary subtag compare,
+        // so "zh" == "zh-Hans").
+        if let expected = language, !expected.isEmpty, text.count >= minLengthForLanguageCheck {
+            let detected = LanguageDetector.detect(text: text, fallbackLanguage: expected)
+            guard LanguageDetector.isSameLanguage(detected, expected) else { return false }
+        }
+        let maxRatio = isFluency ? maxFluencyLengthRatio : maxGrammarLengthRatio
+        guard text.count <= original.count * maxRatio else { return false }
+        guard !isFluency else { return true }
+
+        if original.count >= minLengthForShrinkCheck,
+           Double(text.count) < Double(original.count) * minGrammarLengthRatio {
+            return false
+        }
+        guard wordChangeFraction(original: original, corrected: text) <= maxGrammarWordChange else { return false }
+        return !hasHallucinatedWord(original: original, corrected: text)
+    }
+
+    /// Per-word edit-distance guard (same word count): catches "alcujne"→"Alleggeri" that
+    /// slips through the fraction check. Short words are skipped — conjugation fixes like
+    /// "fa"→"fanno" are legitimately large edits.
+    private static func hasHallucinatedWord(original: String, corrected: String) -> Bool {
+        let origWords = wordTokens(original)
+        let corrWords = wordTokens(corrected)
+        guard origWords.count == corrWords.count else { return false }
+        return zip(origWords, corrWords).contains { orig, corr in
+            orig != corr && orig.count >= 5 && levenshteinDistance(orig, corr) > max(2, orig.count / 2)
+        }
+    }
+
+    // MARK: Word-level helpers
+
+    /// Lowercased word tokens. NLTokenizer segments scripts without spaces (Chinese,
+    /// Japanese, Thai) into words, so one CJK edit is one changed word, not 100%.
+    static func wordTokens(_ text: String) -> [String] {
+        let tokenizer = NLTokenizer(unit: .word)
+        tokenizer.string = text
+        return tokenizer.tokens(for: text.startIndex..<text.endIndex).map { text[$0].lowercased() }
+    }
+
+    /// Fraction of the original's words (multiset) missing from the correction.
+    static func wordChangeFraction(original: String, corrected: String) -> Double {
+        let origTokens = wordTokens(original)
+        guard !origTokens.isEmpty else { return 0 }
+        var available = wordTokens(corrected).reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
+        let unmatched = origTokens.filter { token in
+            guard let n = available[token], n > 0 else { return true }
+            available[token] = n - 1
+            return false
+        }.count
+        return Double(unmatched) / Double(origTokens.count)
+    }
+
+    static func levenshteinDistance(_ a: String, _ b: String) -> Int {
+        let aChars = Array(a), bChars = Array(b)
+        let m = aChars.count, n = bChars.count
+        if m == 0 { return n }
+        if n == 0 { return m }
+        var prev = Array(0...n)
+        var curr = [Int](repeating: 0, count: n + 1)
+        for i in 1...m {
+            curr[0] = i
+            for j in 1...n {
+                curr[j] = aChars[i-1] == bChars[j-1]
+                    ? prev[j-1]
+                    : 1 + min(prev[j-1], prev[j], curr[j-1])
+            }
+            prev = curr
+        }
+        return prev[n]
+    }
+
+    /// Grammar mode must keep the sentence type: restore/replace a changed final . ! ?
+    static func preservePunctuation(original: String, corrected: String) -> String {
+        let sentenceEnders = CharacterSet(charactersIn: ".!?")
+        let allPunct = CharacterSet(charactersIn: ".!?;:")
+        let trimmedCorrected = trimmed(corrected)
+        guard let origLast = trimmed(original).last,
+              origLast != trimmedCorrected.last,
+              let origScalar = origLast.unicodeScalars.first,
+              sentenceEnders.contains(origScalar)
+        else { return corrected }
+        if let corrLast = trimmedCorrected.last,
+           let corrScalar = corrLast.unicodeScalars.first,
+           allPunct.contains(corrScalar) {
+            return String(trimmedCorrected.dropLast()) + String(origLast)
+        }
+        return trimmedCorrected + String(origLast)
+    }
+
+    private static func trimmed(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

@@ -77,6 +77,8 @@ struct ChatResponse: Decodable {
     let choices: [Choice]
     struct Choice: Decodable {
         let message: Message
+        /// "stop" = natural end; "length" = cut off at max_tokens (truncated output).
+        let finish_reason: String?
         struct Message: Decodable {
             let content: String
         }
