@@ -86,19 +86,13 @@ actor RealtimeMonitor {
         guard AXIsProcessTrusted() else { return }
 
         AccessibilityBridge.installAXMessagingTimeout()
-        let systemAX = AXUIElementCreateSystemWide()
-        var frontAppRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-            systemAX, kAXFocusedApplicationAttribute as CFString, &frontAppRef
-        ) == .success,
-        let frontApp = frontAppRef,
-        let frontAppAX = AccessibilityBridge.asElementPublic(frontApp) else {
-            return
-        }
-
-        var pid: pid_t = 0
-        AXUIElementGetPid(frontAppAX, &pid)
-        guard pid != 0 else { return }
+        // Target the app NSWorkspace just activated. The AX system-wide "focused application" lags
+        // behind didActivateApplication by a few ms: reading it here returned the PREVIOUS app, the
+        // `pid == observedPID` guard then kept the observer on it, and completion went silent in
+        // the app the user actually switched to.
+        let pid = await MainActor.run { NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0 }
+        guard pid != 0, pid != ProcessInfo.processInfo.processIdentifier else { return }
+        let frontAppAX = AXUIElementCreateApplication(pid)
 
         if pid == observedPID { return }
 
