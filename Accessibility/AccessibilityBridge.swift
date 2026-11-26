@@ -4,6 +4,52 @@ import OSLog
 actor AccessibilityBridge: AXBridgeProtocol {
     static let shared = AccessibilityBridge()
 
+    /// Upper bound for a single AX IPC round-trip. The system default is ~6 s, so one hung app
+    /// would stall every AX call queued on this actor (Parrot hotkeys behind keystroke reads).
+    nonisolated static let axMessagingTimeoutSeconds: Float = 0.5
+    /// Max AX nodes visited by the `boundsForRange` subtree fallback (browser DOMs are huge).
+    nonisolated static let maxSubtreeSearchNodes = 400
+    /// Max UTF-16 units per synthetic Unicode key event; longer strings are truncated by macOS.
+    nonisolated static let maxUnicodeUnitsPerKeyEvent = 20
+    /// How long the corrected text stays on the clipboard before the user's clipboard is restored.
+    /// Electron/Chromium apps read the pasteboard asynchronously and need much longer.
+    nonisolated static let clipboardRestoreDelayNative: Duration = .milliseconds(200)
+    nonisolated static let clipboardRestoreDelayElectron: Duration = .milliseconds(1000)
+
+    /// Setting the messaging timeout on the system-wide element makes it the global default for
+    /// every AX request this process sends. Runs once (static let initialisation is thread-safe).
+    nonisolated private static let globalMessagingTimeoutInstalled: Bool = {
+        let err = AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), axMessagingTimeoutSeconds)
+        if err != .success {
+            Logger.ax.error("AccessibilityBridge: AXUIElementSetMessagingTimeout failed (\(err.rawValue, privacy: .public))")
+        }
+        return err == .success
+    }()
+
+    /// Installs the global AX messaging timeout if not yet done. Safe to call from anywhere.
+    nonisolated static func installAXMessagingTimeout() {
+        _ = globalMessagingTimeoutInstalled
+    }
+
+    nonisolated private static func appElement(_ pid: pid_t) -> AXUIElement {
+        installAXMessagingTimeout()
+        let el = AXUIElementCreateApplication(pid)
+        let err = AXUIElementSetMessagingTimeout(el, axMessagingTimeoutSeconds)
+        if err != .success {
+            Logger.ax.debug("AccessibilityBridge: per-app messaging timeout failed for pid \(pid) (\(err.rawValue, privacy: .public))")
+        }
+        return el
+    }
+
+    nonisolated private static func systemWideElement() -> AXUIElement {
+        installAXMessagingTimeout()
+        return AXUIElementCreateSystemWide()
+    }
+
+    init() {
+        Self.removeLegacyClipboardStateFile()
+    }
+
     nonisolated private static func asElement(_ ref: CFTypeRef) -> AXUIElement? {
         CFGetTypeID(ref) == AXUIElementGetTypeID() ? (ref as! AXUIElement) : nil // safe: CFGetTypeID checked
     }
@@ -27,7 +73,6 @@ actor AccessibilityBridge: AXBridgeProtocol {
             Self._boundsLock.withLock { $0 = v }
         }
     }
-    private var pendingClipboardRestore: PendingClipboardRestore?
     private var _lastKnownFrontAppPID: pid_t = 0
     /// PIDs we have already forced `AXManualAccessibility` on. Chromium/Electron apps expose no AX
     /// tree until a client sets this private attribute; once set it sticks for the process lifetime,
@@ -50,7 +95,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
         guard AXIsProcessTrusted() else {
             throw CorrectionError.accessibilityPermissionDenied
         }
-        let frontAppAX = AXUIElementCreateApplication(pid)
+        let frontAppAX = Self.appElement(pid)
         var focusedRef: CFTypeRef?
         let focusResult = AXUIElementCopyAttributeValue(
             frontAppAX, kAXFocusedUIElementAttribute as CFString, &focusedRef
@@ -138,7 +183,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
         guard AXIsProcessTrusted() else {
             throw CorrectionError.accessibilityPermissionDenied
         }
-        let frontAppAX = AXUIElementCreateApplication(pid)
+        let frontAppAX = Self.appElement(pid)
         var focusedRef: CFTypeRef?
         let focusResult = AXUIElementCopyAttributeValue(
             frontAppAX, kAXFocusedUIElementAttribute as CFString, &focusedRef
@@ -156,7 +201,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
     /// does not prefer selected text.
     func focusedPlainText(pid: pid_t) async -> String? {
         guard AXIsProcessTrusted() else { return nil }
-        let appAX = AXUIElementCreateApplication(pid)
+        let appAX = Self.appElement(pid)
         var focusedRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
                 appAX, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
@@ -173,7 +218,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
         guard AXIsProcessTrusted() else {
             throw CorrectionError.accessibilityPermissionDenied
         }
-        let systemAX = AXUIElementCreateSystemWide()
+        let systemAX = Self.systemWideElement()
         var frontAppRef: CFTypeRef?
         let appResult = AXUIElementCopyAttributeValue(
             systemAX, kAXFocusedApplicationAttribute as CFString, &frontAppRef
@@ -203,11 +248,17 @@ actor AccessibilityBridge: AXBridgeProtocol {
     /// - Parameter expectedPID: when non-nil, the write is refused unless the
     ///   currently-focused app is still this PID — prevents overwriting a span in
     ///   a different document if focus moved during the LLM round-trip.
+    /// - Parameter expectedText: the text the write is meant to replace (the original that was
+    ///   corrected). When non-nil, the write is refused unless the focused field still holds it at
+    ///   `range` (or as its live selection when `range` is nil) — prevents overwriting a different
+    ///   document/field in the same app (tab switch, other field clicked) during the LLM round-trip.
     /// - Returns: the span actually written via a targeted AX replace, so undo can
     ///   re-select it exactly; nil if the write went through the clipboard or
     ///   replaced the live selection (span not known).
     @discardableResult
-    func replaceSelectedText(with correctedText: String, range: CFRange?, expectedPID: pid_t? = nil) async throws -> CFRange? {
+    func replaceSelectedText(
+        with correctedText: String, range: CFRange?, expectedPID: pid_t? = nil, expectedText: String? = nil
+    ) async throws -> CFRange? {
         guard AXIsProcessTrusted() else {
             throw CorrectionError.accessibilityPermissionDenied
         }
@@ -218,11 +269,15 @@ actor AccessibilityBridge: AXBridgeProtocol {
         if targetPID != 0, expectedPID == nil || targetPID == expectedPID {
             let bid = await AppDetector.shared.frontAppBundleID(forPID: targetPID)
             if let b = bid, await ElectronFallbackHandler.shared.isElectronApp(bundleID: b) {
+                // Electron AX reads are unreliable, so only a positive mismatch blocks the paste.
+                if let focused = Self.focusedElement(ofApp: Self.appElement(targetPID)) {
+                    try verifyWriteTarget(focused, range: range, expectedText: expectedText, strict: false)
+                }
                 try await injectViaClipboard(correctedText: correctedText, targetPID: targetPID)
                 return nil
             }
         }
-        let systemAX = AXUIElementCreateSystemWide()
+        let systemAX = Self.systemWideElement()
         var frontAppRef: CFTypeRef?
         let appResult = AXUIElementCopyAttributeValue(
             systemAX, kAXFocusedApplicationAttribute as CFString, &frontAppRef
@@ -249,6 +304,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
               let axElement = Self.asElement(focusedElement) else {
             throw CorrectionError.noTextSelected
         }
+        try verifyWriteTarget(axElement, range: range, expectedText: expectedText, strict: true)
         // If we captured a specific range at extraction time (the no-live-selection
         // path), re-select it first so the replace targets exactly that line/range
         // instead of inserting at the caret.
@@ -257,7 +313,12 @@ actor AccessibilityBridge: AXBridgeProtocol {
                   AXUIElementSetAttributeValue(
                     axElement, kAXSelectedTextRangeAttribute as CFString, axRange
                   ) == .success else {
-                // Could not re-establish the selection — paste instead.
+                // Could not re-establish the selection. A paste only replaces text if the live
+                // selection already IS the target; with a bare caret it would insert a duplicate.
+                guard Self.liveSelectionIsTarget(axElement, length: r.length, expectedText: expectedText) else {
+                    Logger.ax.warning("AccessibilityBridge: cannot re-select target range; refusing caret paste")
+                    throw CorrectionError.noTextSelected
+                }
                 try await injectViaClipboard(correctedText: correctedText)
                 return nil
             }
@@ -281,9 +342,108 @@ actor AccessibilityBridge: AXBridgeProtocol {
         return nil
     }
 
+    /// True when the element's live selection is the text a write targets (so pasting over it
+    /// replaces exactly that). Matches `expectedText` when given, otherwise the target length.
+    nonisolated private static func liveSelectionIsTarget(
+        _ element: AXUIElement, length: CFIndex, expectedText: String?
+    ) -> Bool {
+        var selRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &selRef) == .success,
+              let selected = selRef as? String, !selected.isEmpty else { return false }
+        return liveSelectionMatches(selected: selected, length: length, expectedText: expectedText)
+    }
+
+    nonisolated static func liveSelectionMatches(selected: String, length: CFIndex, expectedText: String?) -> Bool {
+        guard !selected.isEmpty else { return false }
+        if let expectedText { return checkSelectionTarget(selectedText: selected, expected: expectedText) == .match }
+        return (selected as NSString).length == length
+    }
+
+    /// Result of checking that the focused field still holds the text a write is meant to replace.
+    enum WriteTargetCheck: Equatable { case match, mismatch, unreadable }
+
+    /// Pure check: does `fieldValue` hold `expected` at `range`? With `expected == nil` only the
+    /// bounds are checked (a range past the end means a different/changed document).
+    /// Whitespace at the edges is ignored because callers may hand over a trimmed original.
+    nonisolated static func checkWriteTarget(fieldValue: String?, range: CFRange, expected: String?) -> WriteTargetCheck {
+        guard let value = fieldValue else { return .unreadable }
+        let ns = value as NSString
+        guard range.location >= 0, range.length >= 0, range.location + range.length <= ns.length else {
+            return .mismatch
+        }
+        guard let expected else { return .match }
+        let actual = ns.substring(with: NSRange(location: range.location, length: range.length))
+        return sameText(actual, expected) ? .match : .mismatch
+    }
+
+    /// Pure check for the live-selection path (no captured range).
+    nonisolated static func checkSelectionTarget(selectedText: String?, expected: String?) -> WriteTargetCheck {
+        guard let expected else { return .match }
+        guard let selected = selectedText, !selected.isEmpty else { return .unreadable }
+        return sameText(selected, expected) ? .match : .mismatch
+    }
+
+    nonisolated private static func sameText(_ a: String, _ b: String) -> Bool {
+        a == b || a.trimmingCharacters(in: .whitespacesAndNewlines) == b.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    nonisolated private static func focusedElement(ofApp app: AXUIElement) -> AXUIElement? {
+        var ref: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &ref) == .success,
+              let r = ref else { return nil }
+        return asElement(r)
+    }
+
+    /// Fails closed (throws) when the focused field no longer holds the text the write targets.
+    /// `strict`: an unreadable field also fails when an `expectedText` was given.
+    private func verifyWriteTarget(_ element: AXUIElement, range: CFRange?, expectedText: String?, strict: Bool) throws {
+        let check: WriteTargetCheck
+        if let range {
+            var valueRef: CFTypeRef?
+            let read = AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef)
+            check = Self.checkWriteTarget(fieldValue: read == .success ? valueRef as? String : nil,
+                                          range: range, expected: expectedText)
+        } else {
+            var selRef: CFTypeRef?
+            let read = AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &selRef)
+            check = Self.checkSelectionTarget(selectedText: read == .success ? selRef as? String : nil,
+                                              expected: expectedText)
+        }
+        switch check {
+        case .match:
+            return
+        case .mismatch:
+            Logger.ax.warning("AccessibilityBridge: write refused — focused field no longer holds the original text")
+            throw CorrectionError.noTextSelected
+        case .unreadable:
+            guard strict, expectedText != nil else { return }
+            Logger.ax.warning("AccessibilityBridge: write refused — cannot verify the focused field's text")
+            throw CorrectionError.noTextSelected
+        }
+    }
+
     private static let clipboardTokenType = NSPasteboard.PasteboardType("com.parrot.clipboard-token")
 
+    /// Tail of the serialized clipboard-injection chain. Each injection waits for the previous one
+    /// to finish (including its restore) so a second call never snapshots the first call's text as
+    /// the user's "original" clipboard.
+    private var clipboardInFlight: Task<Void, Never>?
+
     private func injectViaClipboard(correctedText: String, targetPID: pid_t = 0) async throws {
+        let previous = clipboardInFlight
+        let op = Task {
+            await previous?.value
+            try await self.performClipboardInjection(correctedText: correctedText, targetPID: targetPID)
+        }
+        clipboardInFlight = Task { _ = await op.result }
+        try await op.value
+    }
+
+    nonisolated static func clipboardRestoreDelay(isElectron: Bool) -> Duration {
+        isElectron ? clipboardRestoreDelayElectron : clipboardRestoreDelayNative
+    }
+
+    private func performClipboardInjection(correctedText: String, targetPID: pid_t) async throws {
         // NSPasteboard is not thread-safe — all reads/writes must happen on the main thread.
         let originalItems: [[String: Data]] = await MainActor.run {
             NSPasteboard.general.pasteboardItems?.compactMap { item -> [String: Data]? in
@@ -293,11 +453,6 @@ actor AccessibilityBridge: AXBridgeProtocol {
                 }
                 return dict.isEmpty ? nil : dict
             } ?? []
-        }
-
-        if let existing = self.pendingClipboardRestore {
-            await restoreClipboard(existing)
-            self.pendingClipboardRestore = nil
         }
 
         let token = UUID().uuidString
@@ -338,27 +493,37 @@ actor AccessibilityBridge: AXBridgeProtocol {
         let source = CGEventSource(stateID: .hidSystemState)
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(0x09), keyDown: false) else {
-            if !originalItems.isEmpty {
-                await restoreClipboard(PendingClipboardRestore(items: originalItems))
-            }
-            return
+            await restoreClipboard(PendingClipboardRestore(items: originalItems))
+            Logger.ax.error("AccessibilityBridge: could not create Cmd+V events — paste not performed")
+            throw CorrectionError.textExtractionFailed(appName: "unknown")
         }
         keyDown.flags = .maskCommand
         keyUp.flags = .maskCommand
         keyDown.post(tap: .cghidEventTap)
         keyUp.post(tap: .cghidEventTap)
 
-        guard !originalItems.isEmpty else { return }
+        let bundleID = pid != 0 ? await AppDetector.shared.frontAppBundleID(forPID: pid) : nil
+        let isElectron: Bool
+        if let b = bundleID {
+            isElectron = await ElectronFallbackHandler.shared.isElectronApp(bundleID: b)
+        } else {
+            isElectron = false
+        }
+        // Not `try`: a cancellation here must still restore the user's clipboard below.
+        do {
+            try await Task.sleep(for: Self.clipboardRestoreDelay(isElectron: isElectron))
+        } catch {
+            Logger.ax.debug("AccessibilityBridge: clipboard restore wait cancelled — restoring now")
+        }
 
-        try await Task.sleep(for: .milliseconds(200))
-
+        // Restore only if the clipboard still holds OUR text: if the user copied something in the
+        // meantime, that newer content wins. An empty original clipboard is restored as empty, so
+        // the corrected text is not left behind.
         let existingToken = await MainActor.run { NSPasteboard.general.string(forType: Self.clipboardTokenType) }
         if existingToken == token {
             await restoreClipboard(PendingClipboardRestore(items: originalItems))
         } else {
-            let pending = PendingClipboardRestore(items: originalItems)
-            pending.persistToDisk()
-            self.pendingClipboardRestore = pending
+            Logger.ax.debug("AccessibilityBridge: clipboard changed during paste — not restoring")
         }
     }
 
@@ -366,7 +531,8 @@ actor AccessibilityBridge: AXBridgeProtocol {
         await MainActor.run {
             let pb = NSPasteboard.general
             pb.clearContents()
-            pb.writeObjects(pending.pasteboardItems())
+            let items = pending.pasteboardItems()
+            if !items.isEmpty { pb.writeObjects(items) }
         }
     }
 
@@ -394,9 +560,9 @@ actor AccessibilityBridge: AXBridgeProtocol {
         guard AXIsProcessTrusted() else { throw CorrectionError.accessibilityPermissionDenied }
         let appElement: AXUIElement
         if let pid {
-            appElement = AXUIElementCreateApplication(pid)
+            appElement = Self.appElement(pid)
         } else {
-            let systemAX = AXUIElementCreateSystemWide()
+            let systemAX = Self.systemWideElement()
             var frontAppRef: CFTypeRef?
             let appResult = AXUIElementCopyAttributeValue(
                 systemAX, kAXFocusedApplicationAttribute as CFString, &frontAppRef
@@ -428,7 +594,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
     /// field is a secure (password) field. Returns nil if nothing usable is focused.
     func completionContext(pid: pid_t) async -> CompletionAXContext? {
         guard AXIsProcessTrusted() else { return nil }
-        let appAX = AXUIElementCreateApplication(pid)
+        let appAX = Self.appElement(pid)
 
         if let ctx = readCompletionContext(appAX: appAX) { return ctx }
 
@@ -496,42 +662,94 @@ actor AccessibilityBridge: AXBridgeProtocol {
         guard !wrong.isEmpty else { return await insertCompletion(correction, pid: pid) }
         // Abort if the field's trailing text is no longer `wrong` (user edited since we matched) — we
         // must never blind-delete characters we haven't verified. Only enforced when AX can read it.
-        if let ctx = readCompletionContext(appAX: AXUIElementCreateApplication(pid)),
+        if let ctx = readCompletionContext(appAX: Self.appElement(pid)),
            !ctx.preContext.hasSuffix(wrong) {
             Logger.ax.debug("replaceLastWord: trailing word changed, aborting")
             return false
         }
+        guard await isFrontmost(pid: pid) else { return false }
         let source = CGEventSource(stateID: .combinedSessionState)
         let kVKDelete: CGKeyCode = 51
         for _ in 0..<wrong.count {
-            CGEvent(keyboardEventSource: source, virtualKey: kVKDelete, keyDown: true)?.post(tap: .cghidEventTap)
-            CGEvent(keyboardEventSource: source, virtualKey: kVKDelete, keyDown: false)?.post(tap: .cghidEventTap)
+            Self.postWithoutModifiers(CGEvent(keyboardEventSource: source, virtualKey: kVKDelete, keyDown: true))
+            Self.postWithoutModifiers(CGEvent(keyboardEventSource: source, virtualKey: kVKDelete, keyDown: false))
         }
         return await insertCompletion(correction, pid: pid)
     }
 
     /// Inserts completion text at the caret by synthesizing typing (a Unicode keyboard event).
     /// This is the most universal method — it works in AppKit, Electron, web fields, terminals —
-    /// where AX value-setting silently fails. Returns false only if event creation fails.
+    /// where AX value-setting silently fails. Returns false if `pid` is no longer frontmost (the
+    /// keystrokes would land in another app) or if event creation fails.
     func insertCompletion(_ text: String, pid: pid_t) async -> Bool {
         guard !text.isEmpty else { return false }
+        guard await isFrontmost(pid: pid) else { return false }
         let source = CGEventSource(stateID: .combinedSessionState)
-        var utf16 = Array(text.utf16)
-        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
-            return false
+        for chunk in Self.unicodeChunks(text, maxUnits: Self.maxUnicodeUnitsPerKeyEvent) {
+            var units = chunk
+            guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+                  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+                Logger.ax.error("insertCompletion: could not create keyboard events")
+                return false
+            }
+            keyDown.keyboardSetUnicodeString(stringLength: units.count, unicodeString: &units)
+            keyUp.keyboardSetUnicodeString(stringLength: units.count, unicodeString: &units)
+            Self.postWithoutModifiers(keyDown)
+            Self.postWithoutModifiers(keyUp)
         }
-        keyDown.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
-        keyUp.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
         Logger.ax.debug("insertCompletion: typed \(text.count, privacy: .public) chars")
         return true
     }
 
+    /// Synthetic events otherwise inherit physically-held modifiers (e.g. ⌥⇧ still down from the
+    /// backslash accept on an Italian layout), turning typed text into shortcuts / ⌥⌫ word deletes.
+    nonisolated private static func postWithoutModifiers(_ event: CGEvent?) {
+        guard let event else { return }
+        event.flags = []
+        event.post(tap: .cghidEventTap)
+    }
+
+    private func isFrontmost(pid: pid_t) async -> Bool {
+        let front = await MainActor.run { NSWorkspace.shared.frontmostApplication?.processIdentifier }
+        guard Self.isTargetFrontmost(frontPID: front, target: pid) else {
+            Logger.ax.debug("synthetic typing skipped: pid \(pid) is not frontmost")
+            return false
+        }
+        return true
+    }
+
+    nonisolated static func isTargetFrontmost(frontPID: pid_t?, target: pid_t) -> Bool {
+        target != 0 && frontPID == target
+    }
+
+    /// Splits `text` into UTF-16 chunks of at most `maxUnits`, never splitting a grapheme cluster
+    /// when it fits, and never splitting a surrogate pair (an oversize cluster is split by scalar).
+    nonisolated static func unicodeChunks(_ text: String, maxUnits: Int) -> [[UInt16]] {
+        let limit = max(maxUnits, 2)   // a surrogate pair needs 2 units
+        var chunks: [[UInt16]] = []
+        var current: [UInt16] = []
+        func append(_ units: [UInt16]) {
+            if current.count + units.count > limit, !current.isEmpty {
+                chunks.append(current)
+                current = []
+            }
+            current += units
+        }
+        for ch in text {
+            let units = Array(String(ch).utf16)
+            if units.count <= limit {
+                append(units)
+            } else {
+                for scalar in ch.unicodeScalars { append(Array(String(scalar).utf16)) }
+            }
+        }
+        if !current.isEmpty { chunks.append(current) }
+        return chunks
+    }
+
     func boundsForRange(_ range: CFRange, pid: pid_t) async -> CGRect? {
         guard AXIsProcessTrusted() else { return nil }
-        let appAX = AXUIElementCreateApplication(pid)
+        let appAX = Self.appElement(pid)
         var focusedRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(appAX, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
               let focused = focusedRef, let element = Self.asElement(focused) else { return nil }
@@ -545,7 +763,8 @@ actor AccessibilityBridge: AXBridgeProtocol {
             bundleID.map { PreferencesStore.shared.isTreeTraversalDisabled(bundleID: $0) } ?? false
         }
         guard !traversalDisabled else { return nil }
-        return axSearchSubtree(of: element, range: range, depth: 0, maxDepth: 8)
+        var budget = Self.maxSubtreeSearchNodes
+        return axSearchSubtree(of: element, range: range, depth: 0, maxDepth: 8, budget: &budget)
     }
 
     private func axBoundsForRange(_ range: CFRange, on element: AXUIElement) -> CGRect? {
@@ -559,14 +778,22 @@ actor AccessibilityBridge: AXBridgeProtocol {
         var rect = CGRect()
         AXValueGetValue(axBV, .cgRect, &rect)
         guard rect != .zero else { return nil }
-        let screenH = NSScreen.main?.frame.height ?? 0
-        return CGRect(x: rect.origin.x, y: screenH - rect.origin.y - rect.height,
-                      width: rect.width, height: rect.height)
+        // AX origin is the top-left of the PRIMARY screen (screens[0]), not of NSScreen.main (the
+        // screen with the key window) — using main offsets the caret on multi-monitor setups.
+        return Self.flipAXRectToAppKit(rect, primaryScreenHeight: NSScreen.screens.first?.frame.height ?? 0)
     }
 
-    // DFS through AX children. Skips subtrees with >300 children to avoid browser DOM spam.
-    private func axSearchSubtree(of element: AXUIElement, range: CFRange, depth: Int, maxDepth: Int) -> CGRect? {
-        guard depth < maxDepth else { return nil }
+    /// Converts an AX (top-left origin, y down) rect to AppKit (bottom-left origin, y up).
+    nonisolated static func flipAXRectToAppKit(_ rect: CGRect, primaryScreenHeight: CGFloat) -> CGRect {
+        CGRect(x: rect.origin.x, y: primaryScreenHeight - rect.origin.y - rect.height,
+               width: rect.width, height: rect.height)
+    }
+
+    // DFS through AX children. Skips subtrees with >300 children to avoid browser DOM spam, and
+    // stops after `budget` nodes in total (each node costs several AX IPC round-trips).
+    private func axSearchSubtree(of element: AXUIElement, range: CFRange, depth: Int, maxDepth: Int,
+                                 budget: inout Int) -> CGRect? {
+        guard depth < maxDepth, budget > 0 else { return nil }
         var childrenRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenRef) == .success,
               let ref = childrenRef,
@@ -575,17 +802,20 @@ actor AccessibilityBridge: AXBridgeProtocol {
         let count = CFArrayGetCount(arr)
         guard count > 0 && count < 300 else { return nil }
         for i in 0..<count {
+            guard budget > 0 else { return nil }
             guard let raw = CFArrayGetValueAtIndex(arr, i) else { continue }
+            budget -= 1
             let child = Unmanaged<AXUIElement>.fromOpaque(raw).retain().takeRetainedValue()
             if let rect = axBoundsForRange(range, on: child) { return rect }
-            if let rect = axSearchSubtree(of: child, range: range, depth: depth + 1, maxDepth: maxDepth) { return rect }
+            if let rect = axSearchSubtree(of: child, range: range, depth: depth + 1, maxDepth: maxDepth,
+                                          budget: &budget) { return rect }
         }
         return nil
     }
 
     func fetchSurroundingText(pid: pid_t, selectionRange: CFRange, windowSize: Int = 600) async -> String {
         guard AXIsProcessTrusted() else { return "" }
-        let appAX = AXUIElementCreateApplication(pid)
+        let appAX = Self.appElement(pid)
         var focusedRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             appAX, kAXFocusedUIElementAttribute as CFString, &focusedRef
@@ -605,21 +835,29 @@ actor AccessibilityBridge: AXBridgeProtocol {
         return nsText.substring(with: NSRange(location: ctxStart, length: ctxEnd - ctxStart))
     }
 
-    func replaceRange(_ range: CFRange, with text: String, pid: pid_t) async throws {
+    /// Replaces `range` in the focused field of `pid` with `text`.
+    /// - Parameter expectedText: the original text at `range` (e.g. the annotation's snippet). When
+    ///   non-nil the write is refused unless the field still holds it there; the range is always
+    ///   bounds-checked against the current value when the value is readable.
+    func replaceRange(_ range: CFRange, with text: String, pid: pid_t, expectedText: String? = nil) async throws {
         guard AXIsProcessTrusted() else { throw CorrectionError.accessibilityPermissionDenied }
-        let appAX = AXUIElementCreateApplication(pid)
-        var focusedRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(appAX, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
-              let focused = focusedRef, let element = Self.asElement(focused) else {
+        let appAX = Self.appElement(pid)
+        guard let element = Self.focusedElement(ofApp: appAX) else {
             throw CorrectionError.noTextSelected
         }
+        try verifyWriteTarget(element, range: range, expectedText: expectedText, strict: true)
         var cfRange = range
         guard let axRangeValue = AXValueCreate(.cfRange, &cfRange) else { throw CorrectionError.noTextSelected }
+        // If the range cannot be selected, nothing has been written yet: stop here. Writing
+        // kAXSelectedText or pasting now would insert at the caret instead of replacing the span.
         let selectResult = AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, axRangeValue)
+        guard selectResult == .success else {
+            Logger.ax.warning("replaceRange: could not select target range (\(selectResult.rawValue, privacy: .public))")
+            throw CorrectionError.noTextSelected
+        }
+        // The span is selected: if the AX write fails, a paste replaces exactly that selection.
         let setResult = AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFTypeRef)
-        // AX setters can claim nothing (Electron) or fail outright — don't report
-        // silent success. Fall back to clipboard so the fix actually lands.
-        if selectResult != .success || setResult != .success {
+        if setResult != .success {
             try await injectViaClipboard(correctedText: text, targetPID: pid)
         }
     }
@@ -661,7 +899,7 @@ actor AccessibilityBridge: AXBridgeProtocol {
             }
         }
 
-        let systemAX = AXUIElementCreateSystemWide()
+        let systemAX = Self.systemWideElement()
         var frontAppRef: CFTypeRef?
         AXUIElementCopyAttributeValue(systemAX, kAXFocusedApplicationAttribute as CFString, &frontAppRef)
         if let app = frontAppRef, let axApp = Self.asElement(app) {
@@ -685,7 +923,9 @@ actor AccessibilityBridge: AXBridgeProtocol {
             }
         }
 
-        self.lastSelectionBounds = NSScreen.main?.visibleFrame ?? .zero
+        // No anchor (neither selection nor window bounds readable): .zero means "follow the mouse".
+        // Never store an AppKit-space screen frame here — every reader treats this as an AX rect.
+        self.lastSelectionBounds = .zero
         return capturedRange
     }
 }
@@ -698,7 +938,9 @@ actor AccessibilityBridge: AXBridgeProtocol {
 struct PendingClipboardRestore: Sendable {
     let items: [[String: Data]]
 
-    private static var stateFileURL: URL {
+    /// Where older builds persisted the clipboard snapshot as plaintext JSON. Clipboard contents
+    /// are no longer written to disk; the file is only located so it can be deleted.
+    static var legacyStateFileURL: URL {
         let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         let parrotDir = dir.appendingPathComponent("Parrot")
@@ -715,41 +957,16 @@ struct PendingClipboardRestore: Sendable {
             return item.types.isEmpty ? nil : item
         }
     }
+}
 
-    func persistToDisk() {
+extension AccessibilityBridge {
+    /// Deletes the plaintext clipboard snapshot older builds left in Caches. Idempotent.
+    nonisolated static func removeLegacyClipboardStateFile(at url: URL = PendingClipboardRestore.legacyStateFileURL) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
-            // Capping each item to 256 KB prevents OOM when the clipboard contains
-            // images or rich-text blobs — base64-encoded Data can balloon 33%.
-            let capped = items.map { dict in
-                dict.mapValues { $0.count > 262_144 ? Data() : $0 }
-                    .filter { !$0.value.isEmpty }
-            }.filter { !$0.isEmpty }
-            guard !capped.isEmpty else { return }
-            let dir = Self.stateFileURL.deletingLastPathComponent()
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let encoded = try JSONEncoder().encode(capped)
-            try encoded.write(to: Self.stateFileURL, options: .atomic)
+            try FileManager.default.removeItem(at: url)
         } catch {
-            Logger.ax.error("AccessibilityBridge: failed to persist clipboard state — \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    func cleanupDiskState() {
-        do {
-            try FileManager.default.removeItem(at: Self.stateFileURL)
-        } catch {
-            Logger.ax.warning("AccessibilityBridge: clipboard state cleanup failed — \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    static func restoreFromDiskIfAvailable() -> PendingClipboardRestore? {
-        do {
-            let data = try Data(contentsOf: stateFileURL)
-            let plist = try JSONDecoder().decode([[String: Data]].self, from: data)
-            return plist.isEmpty ? nil : PendingClipboardRestore(items: plist)
-        } catch {
-            Logger.ax.warning("AccessibilityBridge: clipboard state restore failed — \(error.localizedDescription, privacy: .public)")
-            return nil
+            Logger.ax.error("AccessibilityBridge: could not delete legacy clipboard snapshot — \(error.localizedDescription, privacy: .public)")
         }
     }
 }

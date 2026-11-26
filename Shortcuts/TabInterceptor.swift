@@ -148,7 +148,9 @@ private func tabTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: CG
     // Italian layout "\" is Option+Shift+/ (different keycode + modifiers), so a keycode check missed
     // it entirely. Only reached while a suggestion is visible (gate above). If the accept loses a
     // race (no current suggestion), re-post the SAME key event so the user's "\" is not eaten.
-    if event.typedCharacter() == "\\" || (!hasModifier && keycode == fullKey && fullKey != partialKey) {
+    // ⌘\ / ⌃\ are app shortcuts, never an accept. ⌥/⇧ stay allowed: layouts need them to TYPE "\".
+    if isBackslashAccept(typedCharacter: event.typedCharacter(), flags: flags)
+        || (!hasModifier && keycode == fullKey && fullKey != partialKey) {
         Logger.infra.debug("TabInterceptor: full accept (keycode \(fullKey))")
         let kc = CGKeyCode(keycode)
         let fl = flags
@@ -165,17 +167,20 @@ private func tabTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: CG
         }
         return nil   // swallow the key
     }
-    // ⌘→ accepts a single word (partial accept), then re-suggests.
-    if keycode == 124 && flags.contains(.maskCommand) {   // kVKRightArrow
+    // Plain ⌘→ accepts a single word (partial accept), then re-suggests. ⌘⇧→ (select to end of
+    // line), ⌥⌘→ etc. are the app's own shortcuts: let them through untouched.
+    if keycode == 124 && flags.contains(.maskCommand)   // kVKRightArrow
+        && !flags.contains(.maskShift) && !flags.contains(.maskAlternate) && !flags.contains(.maskControl) {
         Logger.infra.debug("TabInterceptor: ⌘→ partial accept")
+        let fl = flags   // re-post with the ORIGINAL modifiers (⇧ for ⌘⇧→ select-to-end)
         Task { @MainActor in
             if !CompletionController.shared.tryAcceptPartial() {
                 let src = CGEventSource(stateID: .hidSystemState)
                 let kVKRight: CGKeyCode = 124
                 if let rd = CGEvent(keyboardEventSource: src, virtualKey: kVKRight, keyDown: true),
                    let ru = CGEvent(keyboardEventSource: src, virtualKey: kVKRight, keyDown: false) {
-                    rd.flags = .maskCommand
-                    ru.flags = .maskCommand
+                    rd.flags = fl
+                    ru.flags = fl
                     rd.post(tap: .cghidEventTap)
                     ru.post(tap: .cghidEventTap)
                 }
@@ -195,6 +200,12 @@ private func tabTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: CG
 }
 
 private let kVKBackspace: Int64 = 51
+
+/// "\" accepts the full suggestion only when it is TYPED as a character without ⌘/⌃ held.
+/// Internal (not private) so it can be unit-tested.
+func isBackslashAccept(typedCharacter: Character?, flags: CGEventFlags) -> Bool {
+    typedCharacter == "\\" && !flags.contains(.maskCommand) && !flags.contains(.maskControl)
+}
 
 /// Updates the in-memory typed-input buffer from a keydown so AX-blind apps still have a context to
 /// complete from. Reconstruction is best-effort: any caret-moving or text-mutating chord
