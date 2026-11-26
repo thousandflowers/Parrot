@@ -99,7 +99,7 @@ actor CompletionLearningStore {
     private var profile = StyleProfile()
 
     private static var fileURL: URL {
-        let dir = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let dir = (AppPaths.applicationSupport
             ?? FileManager.default.temporaryDirectory).appendingPathComponent("Parrot")
         return dir.appendingPathComponent("completion_learned.json")
     }

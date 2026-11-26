@@ -896,9 +896,6 @@ final class CorrectionCacheDiskTests: XCTestCase {
         let url = await CorrectionCache.shared.cacheFileURL
         let data = try? Data(contentsOf: url)
         XCTAssertNotNil(data)
-        // Should decode as empty array
-        let entries = try? JSONDecoder().decode([String].self, from: data ?? Data())
-        // Actually it's [DiskEntry], verify it's valid JSON at minimum
         XCTAssertNotNil(data.flatMap { try? JSONSerialization.jsonObject(with: $0) })
     }
 }
@@ -1135,7 +1132,9 @@ final class CorrectionSpanTests: XCTestCase {
 final class LanguageToolInstallerTests: XCTestCase {
     func testLanguageToolInstaller_installPathIsInsideAppSupport() {
         let path = LanguageToolInstaller.binaryPath
-        XCTAssertTrue(path.path.contains("Application Support/Parrot"))
+        // Under XCTest AppPaths points at a sandbox, never the user's real Application Support.
+        let base = AppPaths.applicationSupport?.appendingPathComponent("Parrot").path ?? "<nil>"
+        XCTAssertTrue(path.path.hasPrefix(base), "\(path.path) not under \(base)")
     }
 
     func testLanguageToolInstaller_isAvailable_doesNotCrash() {

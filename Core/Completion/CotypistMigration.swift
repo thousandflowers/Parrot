@@ -55,7 +55,7 @@ enum CotypistMigration {
         let fm = FileManager.default
         guard let files = try? fm.contentsOfDirectory(atPath: modelsDir.path) else { return 0 }
         // Shared models dir (same hardcoded "Parrot/Models" used by ModelManager → shared by both apps).
-        let dest = (fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let dest = (AppPaths.applicationSupport
             ?? fm.temporaryDirectory).appendingPathComponent("Parrot/Models")
         try? fm.createDirectory(at: dest, withIntermediateDirectories: true)
 

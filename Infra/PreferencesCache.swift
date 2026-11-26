@@ -101,7 +101,7 @@ final class PreferencesCache {
     }
 
     static func downloadedModels() -> [String] {
-        guard let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+        guard let dir = AppPaths.applicationSupport else {
             Logger.infra.error("Cannot access Application Support directory")
             return []
         }

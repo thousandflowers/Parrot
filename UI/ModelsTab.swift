@@ -326,7 +326,7 @@ struct ModelsTab: View {
     }
 
     private func detectDownloadedModels() async -> Set<String> {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+        guard let appSupport = AppPaths.applicationSupport else {
             return []
         }
         let dir = appSupport.appendingPathComponent("Parrot/Models")

@@ -25,7 +25,7 @@ actor StatsStore {
     private var sessionBaseAccepted = 0
 
     private static var fileURL: URL {
-        let dir = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let dir = (AppPaths.applicationSupport
             ?? FileManager.default.temporaryDirectory).appendingPathComponent("Parrot")
         return dir.appendingPathComponent("completion_stats.json")
     }
