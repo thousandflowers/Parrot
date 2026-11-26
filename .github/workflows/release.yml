@@ -128,7 +128,9 @@ jobs:
           NOTARIZE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           NOTARIZE_APPLE_ID: ${{ secrets.APPLE_ID }}
           NOTARIZE_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-        run: ./build-app.sh release
+        # Stamp the tag into Info.plist: Sparkle compares it with the appcast version, so a stale
+        # CFBundleShortVersionString would offer the same update forever.
+        run: APP_VERSION="${GITHUB_REF_NAME#v}" ./build-app.sh release
 
       # ── Wren standalone .app + DMG (bundles a model) ───────────────────────
       # Wren is the inline-completion sibling app. build-wren.sh bundles a small GGUF so the
@@ -148,7 +150,7 @@ jobs:
           NOTARIZE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           NOTARIZE_APPLE_ID: ${{ secrets.APPLE_ID }}
           NOTARIZE_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-        run: ./build-wren.sh release
+        run: APP_VERSION="${GITHUB_REF_NAME#v}" ./build-wren.sh release
 
       # ── ZIP for Sparkle autoupdate ─────────────────────────────────────────
       - name: Create Sparkle ZIP

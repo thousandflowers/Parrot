@@ -77,6 +77,8 @@ mkdir -p "${FRAMEWORKS}"
 for lproj in Resources/*.lproj; do
     [ -d "$lproj" ] && cp -r "$lproj" "${CONTENTS}/Resources/"
 done
+# App icon (Finder, Dock, Gatekeeper dialogs). Info.plist gets CFBundleIconFile below.
+cp Resources/AppIcon.icns "${CONTENTS}/Resources/AppIcon.icns"
 
 cp "${BINARY_PATH}" "${MACOS}/Parrot"
 install_name_tool -add_rpath "@loader_path/../Frameworks" "${MACOS}/Parrot"
@@ -138,6 +140,13 @@ sed \
   -e "s/\$(PRODUCT_BUNDLE_IDENTIFIER)/${BUNDLE_ID}/g" \
   -e "s/\$(PRODUCT_NAME)/Parrot/g" \
   "${PLIST_SRC}" > "${PLIST_DST}"
+/usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "${PLIST_DST}" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile AppIcon" "${PLIST_DST}"
+# Release builds stamp the tag version.
+if [ -n "${APP_VERSION:-}" ]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" "${PLIST_DST}"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(git rev-list --count HEAD 2>/dev/null || echo 1)" "${PLIST_DST}"
+fi
 
 echo "[*] Signing Sparkle sub-components (inside-out)..."
 SPARKLE_VB="${FRAMEWORKS}/Sparkle.framework/Versions/B"
@@ -307,21 +316,5 @@ if [ "${SIGNING_IDENTITY}" = "-" ]; then
     echo "    For distribution without warnings: set SIGNING_IDENTITY + NOTARIZE_* and rebuild."
 fi
 
-# ---------------------------------------------------------------------------
-# Wren — the inline-completion app. Same binary, different identity → AppMode.wren.
-# (Parrot = correction; Wren = completion. See App/AppMode.swift.)
-# ---------------------------------------------------------------------------
-echo "[*] Generating Wren.app (completion mode)..."
-WREN_APP="Wren.app"
-rm -rf "${WREN_APP}"
-ditto "${APP_DIR}" "${WREN_APP}"
-WREN_PLIST="${WREN_APP}/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.thousandflowers.wren" "${WREN_PLIST}"
-/usr/libexec/PlistBuddy -c "Set :CFBundleName Wren" "${WREN_PLIST}" 2>/dev/null \
-  || /usr/libexec/PlistBuddy -c "Add :CFBundleName string Wren" "${WREN_PLIST}"
-/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Wren" "${WREN_PLIST}" 2>/dev/null \
-  || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Wren" "${WREN_PLIST}"
-# Editing Info.plist invalidates the signature → re-seal the outer bundle.
-# shellcheck disable=SC2086
-codesign --force --sign "${SIGNING_IDENTITY}" --entitlements "${ENTITLEMENTS}" ${SIGN_OPTS} "${WREN_APP}"
-echo "[✓] Wren.app ready (com.thousandflowers.wren)."
+# Wren is built by ./build-wren.sh (standalone, bundled model). Don't derive it from Parrot.app
+# here: that copy has no model and overwrote the real Wren.app in this directory.
