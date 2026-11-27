@@ -380,16 +380,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// UserDefaults key: the failed-shortcut list already reported, so the same conflict is not
+    /// re-announced on every launch.
+    private static let lastWarnedShortcutsKey = "lastWarnedFailedShortcuts"
+
     @MainActor
     private func warnFailedShortcuts() {
-        guard let failed = hotkeyManager?.failedShortcuts, !failed.isEmpty else { return }
+        guard let failed = hotkeyManager?.failedShortcuts, !failed.isEmpty else {
+            UserDefaults.standard.removeObject(forKey: Self.lastWarnedShortcutsKey)
+            return
+        }
         let list = failed.joined(separator: ", ")
-        let alert = NSAlert()
-        alert.messageText = String(localized: "alert.shortcuts.title")
-        alert.informativeText = String(format: String(localized: "alert.shortcuts.body_format"), list)
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: String(localized: "alert.ok"))
-        alert.runModal()
+        guard UserDefaults.standard.string(forKey: Self.lastWarnedShortcutsKey) != list else { return }
+        // After launch setup finishes: a modal here blocked onboarding, the realtime monitor and
+        // completion setup until dismissed.
+        DispatchQueue.main.async {
+            UserDefaults.standard.set(list, forKey: Self.lastWarnedShortcutsKey)
+            let alert = NSAlert()
+            alert.messageText = String(localized: "alert.shortcuts.title")
+            alert.informativeText = String(format: String(localized: "alert.shortcuts.body_format"), list)
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: String(localized: "alert.ok"))
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+        }
     }
 }
 

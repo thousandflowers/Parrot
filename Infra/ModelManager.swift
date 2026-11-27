@@ -112,10 +112,16 @@ actor ModelManager: Sendable {
                 return ext
             }
         }
+        // Selected model missing (or none selected): use an installed one. Sorted so the choice
+        // is stable across launches (directory order is not), and logged because it differs from
+        // what Settings shows.
         guard let contents = try? FileManager.default.contentsOfDirectory(atPath: modelsDir.path(percentEncoded: false)),
-              let firstModel = contents.first(where: { $0.hasSuffix(".gguf") }) else {
+              let firstModel = contents.filter({ $0.hasSuffix(".gguf") }).sorted().first else {
             Logger.infra.debug("ModelManager: no .gguf models found in \(self.modelsDir.path(percentEncoded: false))")
             return nil
+        }
+        if !cleanID.isEmpty {
+            Logger.infra.warning("ModelManager: selected model \(cleanID, privacy: .public) not installed — using \(firstModel, privacy: .public)")
         }
         return modelsDir.appendingPathComponent(firstModel).path(percentEncoded: false)
     }

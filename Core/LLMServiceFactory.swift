@@ -55,6 +55,11 @@ struct LLMServiceFactory {
         case .stub:
             return "stub-v1"
         case .local:
+            // Report the model llama-server actually loads: when the selected file is missing,
+            // ModelManager falls back to another installed model and history/logs must say so.
+            if let path = ModelManager.shared.currentModelPath {
+                return URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+            }
             let id = UserDefaults.standard.string(forKey: Constants.UserDefaultsKey.selectedModelID)
             return id?.replacingOccurrences(of: ".gguf", with: "") ?? "local-qwen"
         case .remote:
