@@ -39,8 +39,8 @@ enum WordBoundary {
         let combined = trailingWord + continuation
         guard combined.count >= 3, trailingWord.count >= 1, continuation.count >= 1 else { return false }
         let checker = NSSpellChecker.shared
-        // A real word in ANY language the user writes in counts: the context's language when there
-        // is enough text to detect it, plus the user's preferred languages. Never guess from the
+        // A real word in ANY language the user writes in counts: the context's language plus the
+        // user's preferred languages. Never guess from the
         // glued token itself ("Eugenioand" → Romanian) or from a fragment too short to detect.
         let available = Set(checker.availableLanguages)
         let languages = candidateLanguages(context: context, preferred: Locale.preferredLanguages)
@@ -51,12 +51,11 @@ enum WordBoundary {
         }
     }
 
-    /// Detected context language first (only from text long enough to be reliable), then the
-    /// user's preferred languages as primary subtags ("it-IT" → "it"), without duplicates.
+    /// Language detected from the context (the user's sentence; reliable even when short, unlike
+    /// the glued token) first, then the user's preferred languages as primary subtags
+    /// ("it-IT" → "it"), without duplicates.
     nonisolated static func candidateLanguages(context: String, preferred: [String]) -> [String] {
-        let detected = context.count >= LanguageDetector.longTextMinLength
-            ? NSLinguisticTagger.dominantLanguage(for: context).map { [$0] } ?? []
-            : []
+        let detected = context.isEmpty ? [] : NSLinguisticTagger.dominantLanguage(for: context).map { [$0] } ?? []
         let primaries = preferred.compactMap { $0.split(separator: "-").first.map(String.init) }
         return (detected + primaries).reduce(into: [String]()) { acc, lang in
             if !acc.contains(lang) { acc.append(lang) }

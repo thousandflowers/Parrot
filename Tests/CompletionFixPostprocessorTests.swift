@@ -43,8 +43,12 @@ final class CompletionFixPostprocessorTests: XCTestCase {
         XCTAssertEqual(r, "ption desk")
     }
 
-    func testCandidateLanguages_shortContextUsesOnlyPreferredPrimaries() {
-        XCTAssertEqual(WordBoundary.candidateLanguages(context: "rece", preferred: ["it-IT", "en-US", "it"]), ["it", "en"])
+    func testCandidateLanguages_noContextUsesPreferredPrimaries() {
+        XCTAssertEqual(WordBoundary.candidateLanguages(context: "", preferred: ["it-IT", "en-US", "it"]), ["it", "en"])
+    }
+
+    func testCandidateLanguages_shortItalianContextDetected() {
+        XCTAssertEqual(WordBoundary.candidateLanguages(context: "Io non mi se", preferred: ["en-US"]), ["it", "en"])
     }
 
     func testCandidateLanguages_longContextPutsDetectedFirst() {
