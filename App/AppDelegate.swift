@@ -69,12 +69,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     guard !UserDefaults.standard.bool(forKey: ackKey) else { return }
                     let alert = NSAlert()
                     alert.messageText = String(localized: "alert.completion.no_model.title",
-                                               defaultValue: "Nessun modello installato")
+                                               defaultValue: "No model installed")
                     alert.informativeText = String(localized: "alert.completion.no_model.body",
-                                                   defaultValue: "Wren genera i suggerimenti con un modello on-device. Scarica un modello nelle Impostazioni per attivare il completamento inline.")
+                                                   defaultValue: "Wren generates suggestions with an on-device model. Download a model in Settings to turn on inline completion.")
                     alert.alertStyle = .informational
                     alert.addButton(withTitle: String(localized: "alert.completion.no_model.open_settings",
-                                                      defaultValue: "Apri Impostazioni"))
+                                                      defaultValue: "Open Settings"))
                     alert.addButton(withTitle: String(localized: "alert.ok", defaultValue: "OK"))
                     if alert.runModal() == .alertFirstButtonReturn {
                         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)

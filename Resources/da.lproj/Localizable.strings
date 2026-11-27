@@ -72,3 +72,37 @@
 "model.qwen.reason" = "Minimalt RAM-forbrug — ideelt til korte tekster og kinesisk";
 "model.gemma2b.reason" = "God kvalitet til vestlige sprog — Mac med under 16 GB RAM";
 "model.gemma4b.reason" = "Maksimal kvalitet til vestlige sprog — kræver Mac med 16 GB RAM eller mere";
+
+/* Added 2026-11-27: keys used in code but missing here (showed as raw keys) */
+"alert.accessibility.ignore" = "Vis ikke igen";
+"alert.accessibility.open_settings" = "Åbn Indstillinger";
+"alert.accessibility.title" = "Tilladelse til Tilgængelighed kræves";
+"alert.completion.no_model.body" = "Wren laver forslag med en model på enheden. Hent en model i Indstillinger for at slå inline-fuldførelse til.";
+"alert.completion.no_model.open_settings" = "Åbn Indstillinger";
+"alert.completion.no_model.title" = "Ingen model installeret";
+"model.llama1b.reason" = "Let og hurtig — god til korte engelske tekster";
+"model.llama3b.reason" = "Bedre kvalitet til engelsk — Mac med 8 GB RAM eller mere";
+"model.phi.reason" = "Solid kvalitet til engelsk — Mac med 8 GB RAM eller mere";
+"model.qwen05b.reason" = "Mindst og hurtigst — enkle rettelser, kører på alle Mac'er";
+"panel.analyzing" = "Analyserer...";
+"panel.applied" = "Anvendt";
+"panel.apply" = "Anvend";
+"panel.cancel" = "Annuller";
+"panel.close" = "Luk";
+"panel.corrected" = "Forslag";
+"panel.error" = "Fejl";
+"panel.fluency" = "Flydende sprog";
+"panel.ignore" = "Ignorer";
+"panel.modelMissing" = "Model mangler";
+"panel.noErrors" = "Ingen fejl";
+"panel.streaming" = "Retter...";
+"panel.textTooLong" = "Teksten er for lang";
+"panel.undo" = "Fortryd";
+"realtime.errors" = "Fejl fundet";
+"realtime.ok" = "Ingen fejl";
+"tone.opener.casualMessage" = "Hej! Ville bare sige, at";
+"tone.opener.formalEmail" = "Kære dr. Hansen, jeg skriver for at";
+"tone.opener.narrative" = "Den morgen, lige da jeg vågnede,";
+"tone.opener.politeRequest" = "Gider du";
+"tone.opener.workTechnical" = "Jeg har opdateret modulet, og nu";
+"alert.accessibility.body_format" = "%1$@ bruger Tilgængelighed til at læse og redigere tekst i andre apps.\n\nÅbn Systemindstillinger > Anonymitet & sikkerhed > Tilgængelighed, og tilføj %1$@.\n\n⚠️ Når du har givet tilladelsen, lukker macOS %1$@. Start den igen fra mappen Programmer eller Dock.";

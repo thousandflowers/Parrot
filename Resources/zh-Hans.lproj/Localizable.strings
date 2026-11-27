@@ -72,3 +72,37 @@
 "model.qwen.reason" = "最低内存占用 — 适合短文本和中文";
 "model.gemma2b.reason" = "适合西方语言的优质模型 — 适合 16 GB 以下的 Mac";
 "model.gemma4b.reason" = "适合西方语言的最高质量模型 — 需要 16 GB 或更多 RAM 的 Mac";
+
+/* Added 2026-11-27: keys used in code but missing here (showed as raw keys) */
+"alert.accessibility.ignore" = "不再显示";
+"alert.accessibility.open_settings" = "打开设置";
+"alert.accessibility.title" = "需要辅助功能权限";
+"alert.completion.no_model.body" = "Wren 使用设备端模型生成建议。请在设置中下载模型以启用行内补全。";
+"alert.completion.no_model.open_settings" = "打开设置";
+"alert.completion.no_model.title" = "未安装模型";
+"model.llama1b.reason" = "轻量快速——适合简短的英文文本";
+"model.llama3b.reason" = "英文质量更好——需要 8 GB 或以上内存的 Mac";
+"model.phi.reason" = "英文质量稳定——需要 8 GB 或以上内存的 Mac";
+"model.qwen05b.reason" = "最小最快——基础纠错，可在任何 Mac 上运行";
+"panel.analyzing" = "正在分析...";
+"panel.applied" = "已应用";
+"panel.apply" = "应用";
+"panel.cancel" = "取消";
+"panel.close" = "关闭";
+"panel.corrected" = "建议";
+"panel.error" = "错误";
+"panel.fluency" = "流畅度";
+"panel.ignore" = "忽略";
+"panel.modelMissing" = "缺少模型";
+"panel.noErrors" = "没有错误";
+"panel.streaming" = "正在纠正...";
+"panel.textTooLong" = "文本过长";
+"panel.undo" = "撤销";
+"realtime.errors" = "发现问题";
+"realtime.ok" = "没有问题";
+"tone.opener.casualMessage" = "嘿！就想告诉你";
+"tone.opener.formalEmail" = "尊敬的王医生，我写信是想";
+"tone.opener.narrative" = "那天早上，我一醒来，";
+"tone.opener.politeRequest" = "你介意";
+"tone.opener.workTechnical" = "我更新了模块，现在";
+"alert.accessibility.body_format" = "%1$@ 使用辅助功能来读取和编辑其他应用中的文本。\n\n请打开“系统设置”>“隐私与安全性”>“辅助功能”，然后添加 %1$@。\n\n⚠️ 授予权限后，macOS 会退出 %1$@。请从“应用程序”文件夹或程序坞重新打开它。";

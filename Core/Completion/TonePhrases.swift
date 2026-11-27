@@ -11,15 +11,15 @@ enum TonePhrases {
 
     static let all: [Phrase] = [
         Phrase(register: .formalEmail,
-               opener: String(localized: "tone.opener.formalEmail", defaultValue: "Gentile Dottoressa, le scrivo per")),
+               opener: String(localized: "tone.opener.formalEmail", defaultValue: "Dear Dr. Smith, I am writing to")),
         Phrase(register: .casualMessage,
-               opener: String(localized: "tone.opener.casualMessage", defaultValue: "Ehi! Volevo solo dirti che")),
+               opener: String(localized: "tone.opener.casualMessage", defaultValue: "Hey! Just wanted to tell you that")),
         Phrase(register: .workTechnical,
-               opener: String(localized: "tone.opener.workTechnical", defaultValue: "Ho aggiornato il modulo e ora")),
+               opener: String(localized: "tone.opener.workTechnical", defaultValue: "I updated the module and now")),
         Phrase(register: .narrative,
-               opener: String(localized: "tone.opener.narrative", defaultValue: "Quella mattina, appena sveglio,")),
+               opener: String(localized: "tone.opener.narrative", defaultValue: "That morning, as soon as I woke up,")),
         Phrase(register: .politeRequest,
-               opener: String(localized: "tone.opener.politeRequest", defaultValue: "Ti andrebbe di")),
+               opener: String(localized: "tone.opener.politeRequest", defaultValue: "Would you mind")),
     ]
 
     /// Deterministic rotating subset of `count` phrases, offset by `seed` (e.g. a run counter),

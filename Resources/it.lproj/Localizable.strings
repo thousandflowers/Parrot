@@ -103,3 +103,20 @@
 "alert.accessibility.body_format" = "%1$@ usa l'Accessibilità per leggere e modificare il testo in altre applicazioni.\n\nApri Impostazioni di Sistema > Privacy e Sicurezza > Accessibilità e aggiungi %1$@.\n\n⚠️ Dopo aver concesso il permesso, macOS chiuderà %1$@. Riavvialo dalla cartella Applicazioni o dal Dock.";
 "alert.accessibility.open_settings" = "Apri Impostazioni";
 "alert.accessibility.ignore" = "Non mostrare più";
+
+/* Added 2026-11-27: keys used in code but missing here (showed as raw keys) */
+"alert.completion.no_model.body" = "Wren genera i suggerimenti con un modello on-device. Scarica un modello nelle Impostazioni per attivare il completamento inline.";
+"alert.completion.no_model.open_settings" = "Apri Impostazioni";
+"alert.completion.no_model.title" = "Nessun modello installato";
+"model.llama1b.reason" = "Leggero e veloce — adatto a testi brevi in inglese";
+"model.llama3b.reason" = "Qualità migliore per l'inglese — Mac con 8 GB di RAM o più";
+"model.phi.reason" = "Buona qualità per l'inglese — Mac con 8 GB di RAM o più";
+"model.qwen05b.reason" = "Il più piccolo e veloce — correzioni di base, funziona su ogni Mac";
+"panel.streaming" = "Correggendo...";
+"realtime.errors" = "Errori trovati";
+"realtime.ok" = "Nessun errore";
+"tone.opener.casualMessage" = "Ehi! Volevo solo dirti che";
+"tone.opener.formalEmail" = "Gentile Dottoressa, le scrivo per";
+"tone.opener.narrative" = "Quella mattina, appena sveglio,";
+"tone.opener.politeRequest" = "Ti andrebbe di";
+"tone.opener.workTechnical" = "Ho aggiornato il modulo e ora";
