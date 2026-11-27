@@ -395,6 +395,17 @@ extension LLMService {
             return winner
         }
 
+        // 1b. Strict majority on the WORDS (punctuation/spacing variants vote together). Within the
+        //     winning group take its most voted exact form; on a tie prefer the original. Stops a
+        //     "; for ," pass from counting as a change that hands the win to a broken word.
+        let byWords = Dictionary(grouping: candidates) { CorrectionSanitizer.wordTokens($0) }
+        if let group = byWords.values.max(by: { $0.count < $1.count }), group.count * 2 > candidates.count {
+            let groupCounts = group.reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
+            let top = groupCounts.values.max() ?? 0
+            let leaders = groupCounts.filter { $0.value == top }.map(\.key)
+            return leaders.contains(original) ? original : (leaders.min { levenshteinDistance($0, original) < levenshteinDistance($1, original) } ?? group[0])
+        }
+
         // 2. No majority: choose among candidates that actually changed the text — but only when
         //    passes proposing a change outnumber the "no change" votes. A tie (one pass breaks a
         //    correct sentence, one leaves it alone) is no evidence of an error: keep the text.

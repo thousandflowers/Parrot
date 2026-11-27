@@ -970,6 +970,24 @@ final class SelfConsistencyTests: XCTestCase {
         XCTAssertEqual(service.selectConsensus(candidates: candidates, original: original), original)
     }
 
+    func testSelectConsensus_punctuationVariantCountsWithOriginal() {
+        // Live Gemma 4 votes: original / one broken word / original with ";" for ",".
+        // Two of three passes kept every word: the sentence is correct.
+        let original = "Ieri sono andato al mare con i miei amici, ci siamo divertiti molto."
+        let candidates = [
+            original,
+            "Ieri sono andato al mare con i miei amici, ci siamo divertito molto.",
+            "Ieri sono andato al mare con i miei amici; ci siamo divertiti molto.",
+        ]
+        XCTAssertEqual(service.selectConsensus(candidates: candidates, original: original), original)
+    }
+
+    func testSelectConsensus_agreedPunctuationFixStillWins() {
+        let original = "Ciao come stai"
+        let fixed = "Ciao, come stai?"
+        XCTAssertEqual(service.selectConsensus(candidates: [fixed, fixed, original], original: original), fixed)
+    }
+
     func testSelectConsensus_singleCandidate_returnsIt() {
         let result = service.selectConsensus(candidates: ["only one"], original: "orig")
         XCTAssertEqual(result, "only one")
