@@ -147,4 +147,23 @@ final class PipelineFixSanitizerTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(TokenEstimator.estimatedTokens(for: cjk), cjk.count)
         XCTAssertGreaterThanOrEqual(TokenEstimator.estimatedTokens(for: "hello world, this is a test"), 27 / 4)
     }
+
+    // Inflection fixes change most letters of a short verb; they must not be taken for hallucinations.
+    func testHallucinationGuard_acceptsMoodFix_avreiToAvessi() {
+        let original = "Se avrei saputo, sarei venuto prima."
+        let fixed = "Se avessi saputo, sarei venuto prima."
+        XCTAssertEqual(CorrectionSanitizer.validate(original: original, corrected: fixed, isFluency: false, language: "it"), fixed)
+    }
+
+    func testHallucinationGuard_acceptsSuppletiveForm_sarebbeToFosse() {
+        let original = "Se sarebbe venuto, lo avrei salutato."
+        let fixed = "Se fosse venuto, lo avrei salutato."
+        XCTAssertEqual(CorrectionSanitizer.validate(original: original, corrected: fixed, isFluency: false, language: "it"), fixed)
+    }
+
+    func testHallucinationGuard_stillRejectsDifferentWord() {
+        let original = "Siamo andati alla stazione con alcujne amiche."
+        let invented = "Siamo andati alla spiaggia con alleggeri amiche."
+        XCTAssertEqual(CorrectionSanitizer.validate(original: original, corrected: invented, isFluency: false, language: "it"), original)
+    }
 }

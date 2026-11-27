@@ -962,6 +962,14 @@ final class SelfConsistencyTests: XCTestCase {
         XCTAssertEqual(result, original, "A majority of no-change votes means the text is already correct")
     }
 
+    func testSelectConsensus_tieBetweenNoChangeAndChange_keepsOriginal() {
+        // Seen live with Gemma 4: one pass broke a correct sentence ("divertiti" -> "divertito"),
+        // the other left it alone. A tie is no evidence of an error: keep the user's text.
+        let original = "Ieri ci siamo divertiti molto."
+        let candidates = [original, "Ieri ci siamo divertito molto."]
+        XCTAssertEqual(service.selectConsensus(candidates: candidates, original: original), original)
+    }
+
     func testSelectConsensus_singleCandidate_returnsIt() {
         let result = service.selectConsensus(candidates: ["only one"], original: "orig")
         XCTAssertEqual(result, "only one")

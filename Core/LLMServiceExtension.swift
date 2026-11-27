@@ -344,6 +344,13 @@ extension LLMService {
                 } else if rawEchoedOriginal {
                     votes.append(text)                 // model deliberately said "no change"
                 }
+                // A strict majority of all planned passes is already decided: the remaining
+                // passes cannot change the outcome, so skip them (a full pass costs seconds on
+                // an 8B local model).
+                if let top = votes.reduce(into: [String: Int](), { $0[$1, default: 0] += 1 }).values.max(),
+                   top * 2 > samples {
+                    break
+                }
                 // else: the model DID try to change the text but validateCorrection reverted it
                 // (over-correction / hallucination). That is a rejected attempt, NOT a vote for
                 // "no change" — dropping it stops a few bad passes from burying one good fix.
@@ -388,9 +395,12 @@ extension LLMService {
             return winner
         }
 
-        // 2. No majority: choose among candidates that actually changed the text.
+        // 2. No majority: choose among candidates that actually changed the text — but only when
+        //    passes proposing a change outnumber the "no change" votes. A tie (one pass breaks a
+        //    correct sentence, one leaves it alone) is no evidence of an error: keep the text.
         let changed = candidates.filter { $0 != original }
         guard !changed.isEmpty else { return original }  // 3. every pass was a no-op
+        guard changed.count > candidates.count - changed.count else { return original }
 
         // Most conservative real correction (fewest edits), ties broken by higher
         // agreement count then shorter length.
@@ -683,19 +693,40 @@ enum CorrectionSanitizer {
             return false
         }
         guard wordChangeFraction(original: original, corrected: text) <= maxGrammarWordChange else { return false }
-        return !hasHallucinatedWord(original: original, corrected: text)
+        return !hasHallucinatedWord(original: original, corrected: text, language: language)
     }
 
-    /// Per-word edit-distance guard (same word count): catches "alcujne"→"Alleggeri" that
-    /// slips through the fraction check. Short words are skipped — conjugation fixes like
-    /// "fa"→"fanno" are legitimately large edits.
-    private static func hasHallucinatedWord(original: String, corrected: String) -> Bool {
+    /// Edits up to this share of a word's letters are still a plausible fix of that word.
+    private static let maxWordEditRatio = 0.6
+
+    /// Per-word guard (same word count): catches "alcujne"→"Alleggeri" that slips through the
+    /// fraction check. Two ways a big edit is still legitimate:
+    /// - same lemma = an inflection fix ("avrei"→"avessi", "sarebbe"→"fosse", "went"→"goes");
+    /// - the edit touches at most ~60% of the word (short words are skipped entirely).
+    private static func hasHallucinatedWord(original: String, corrected: String, language: String?) -> Bool {
         let origWords = wordTokens(original)
         let corrWords = wordTokens(corrected)
         guard origWords.count == corrWords.count else { return false }
         return zip(origWords, corrWords).contains { orig, corr in
-            orig != corr && orig.count >= 5 && levenshteinDistance(orig, corr) > max(2, orig.count / 2)
+            guard orig != corr, orig.count >= 5 else { return false }
+            let limit = max(2, Int((Double(orig.count) * maxWordEditRatio).rounded(.up)))
+            guard levenshteinDistance(orig, corr) > limit else { return false }
+            return !sameLemma(orig, corr, language: language)
         }
+    }
+
+    /// True when the system lemmatizer maps both words to the same dictionary form.
+    static func sameLemma(_ a: String, _ b: String, language: String?) -> Bool {
+        func lemma(_ word: String) -> String? {
+            let tagger = NLTagger(tagSchemes: [.lemma])
+            tagger.string = word
+            if let language, !language.isEmpty {
+                tagger.setLanguage(NLLanguage(rawValue: language), range: word.startIndex..<word.endIndex)
+            }
+            return tagger.tag(at: word.startIndex, unit: .word, scheme: .lemma).0?.rawValue.lowercased()
+        }
+        guard let la = lemma(a), let lb = lemma(b) else { return false }
+        return la == lb
     }
 
     // MARK: Word-level helpers
