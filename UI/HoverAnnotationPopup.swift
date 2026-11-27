@@ -25,17 +25,22 @@ final class HoverAnnotationPopup {
         let popupW = min(estimatedW, 260)
         let popupH: CGFloat = 28
 
-        // Place above the annotation (higher Y = higher on screen in AppKit coords)
-        let screen = NSScreen.main?.frame ?? .zero
-        var x = rect.midX - popupW / 2
-        var y = rect.maxY + 5
-
-        x = max(8, min(screen.width - popupW - 8, x))
-        if y + popupH > screen.height - 8 { y = rect.minY - popupH - 5 }
+        // Place above the annotation (higher Y = higher on screen in AppKit coords); flip below
+        // when that would leave the annotation's screen. Clamp into that screen's visible frame
+        // (secondary displays have non-zero/negative origins — never assume (0,0)).
+        let edgeInset: CGFloat = 8
+        let gap: CGFloat = 5
+        let size = NSSize(width: popupW, height: popupH)
+        let bounds = (ScreenGeometry.screen(for: rect)?.visibleFrame ?? .zero).insetBy(dx: edgeInset, dy: edgeInset)
+        let above = NSRect(origin: NSPoint(x: rect.midX - popupW / 2, y: rect.maxY + gap), size: size)
+        let placed = above.maxY > bounds.maxY
+            ? NSRect(origin: NSPoint(x: above.minX, y: rect.minY - popupH - gap), size: size)
+            : above
+        let frame = bounds.isEmpty ? placed : ScreenGeometry.clamp(placed, into: bounds)
 
         if panel == nil { buildPanel() }
         updateContent(annotation: annotation)
-        panel?.setFrame(NSRect(x: x, y: y, width: popupW, height: popupH), display: false)
+        panel?.setFrame(frame, display: false)
         panel?.orderFrontRegardless()
     }
 
@@ -58,7 +63,8 @@ final class HoverAnnotationPopup {
                 try await AccessibilityBridge.shared.replaceRange(
                     annotation.charRange,
                     with: annotation.suggestedFix,
-                    pid: pid
+                    pid: pid,
+                    expectedText: annotation.originalSnippet
                 )
                 await MainActor.run {
                     self.hide()

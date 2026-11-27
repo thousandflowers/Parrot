@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 struct UndoEntry: Codable, Equatable, Identifiable {
     let id: UUID
@@ -24,14 +25,12 @@ actor UndoHistoryStore {
     private var entries: [UndoEntry] = []
 
     init() {
-        let appSupport = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let appSupport = (AppPaths.applicationSupport
             ?? FileManager.default.temporaryDirectory)
             .appendingPathComponent("Parrot")
         try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
         fileURL = appSupport.appendingPathComponent("undo_history.json")
-        let data = try? Data(contentsOf: fileURL)
-        entries = data.flatMap { try? JSONDecoder().decode([UndoEntry].self, from: $0) } ?? []
-        entries = Array(entries.prefix(Self.maxEntries))
+        entries = Array((PersistentJSON.load([UndoEntry].self, from: fileURL) ?? []).prefix(Self.maxEntries))
     }
 
     func add(_ entry: UndoEntry) {
@@ -61,6 +60,10 @@ actor UndoHistoryStore {
     }
 
     private func save() {
-        try? JSONEncoder().encode(entries).write(to: fileURL, options: .atomic)
+        do {
+            try JSONEncoder().encode(entries).write(to: fileURL, options: .atomic)
+        } catch {
+            Logger.infra.error("UndoHistoryStore: save failed — \(error.localizedDescription, privacy: .public)")
+        }
     }
 }

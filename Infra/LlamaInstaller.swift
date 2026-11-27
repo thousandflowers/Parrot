@@ -17,21 +17,25 @@ final class LlamaInstaller {
 
     // Where we install a self-managed binary (not Homebrew)
     nonisolated static let managedBinURL: URL = {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first ?? FileManager.default.temporaryDirectory
+        let appSupport = AppPaths.applicationSupport ?? FileManager.default.temporaryDirectory
         return appSupport.appendingPathComponent("Parrot/bin/llama-server")
     }()
 
     // Called by ServerManager and the UI
     nonisolated static func resolveExecutable() -> String? {
-        let candidates: [String] = [
+        candidateExecutables.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    /// Every llama-server location Parrot may launch, in preference order. Also used to
+    /// recognise an orphaned server of ours after a crash (ServerManager.reapOrphan).
+    nonisolated static var candidateExecutables: [String] {
+        [
             Bundle.main.url(forAuxiliaryExecutable: "llama-server")?.path(percentEncoded: false),
             managedBinURL.path(percentEncoded: false),
             "/opt/homebrew/bin/llama-server",
             "/usr/local/bin/llama-server",
             "/usr/bin/llama-server",
         ].compactMap { $0 }
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
     func checkAvailability() {

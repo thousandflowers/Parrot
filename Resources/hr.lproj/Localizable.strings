@@ -72,3 +72,37 @@
 "model.qwen.reason" = "Minimalna potrošnja RAM-a — idealno za kratke tekstove i kineski";
 "model.gemma2b.reason" = "Dobra kvaliteta za zapadne jezike — Mac s manje od 16 GB RAM-a";
 "model.gemma4b.reason" = "Maksimalna kvaliteta za zapadne jezike — zahtijeva Mac s 16 GB RAM-a ili više";
+
+/* Added 2026-11-27: keys used in code but missing here (showed as raw keys) */
+"alert.accessibility.ignore" = "Ne prikazuj ponovno";
+"alert.accessibility.open_settings" = "Otvori Postavke";
+"alert.accessibility.title" = "Potrebna su dopuštenja za Pristupačnost";
+"alert.completion.no_model.body" = "Wren stvara prijedloge pomoću modela na uređaju. Preuzmite model u Postavkama kako biste uključili dovršavanje teksta.";
+"alert.completion.no_model.open_settings" = "Otvori Postavke";
+"alert.completion.no_model.title" = "Nijedan model nije instaliran";
+"model.llama1b.reason" = "Lagan i brz — dobar za kratke tekstove na engleskom";
+"model.llama3b.reason" = "Bolja kvaliteta za engleski — Mac s 8 GB RAM-a ili više";
+"model.phi.reason" = "Pouzdana kvaliteta za engleski — Mac s 8 GB RAM-a ili više";
+"model.qwen05b.reason" = "Najmanji i najbrži — osnovni ispravci, radi na svakom Macu";
+"panel.analyzing" = "Analiziram...";
+"panel.applied" = "Primijenjeno";
+"panel.apply" = "Primijeni";
+"panel.cancel" = "Odustani";
+"panel.close" = "Zatvori";
+"panel.corrected" = "Prijedlog";
+"panel.error" = "Pogreška";
+"panel.fluency" = "Tečnost";
+"panel.ignore" = "Zanemari";
+"panel.modelMissing" = "Model nedostaje";
+"panel.noErrors" = "Nema pogrešaka";
+"panel.streaming" = "Ispravljam...";
+"panel.textTooLong" = "Tekst je predug";
+"panel.undo" = "Poništi";
+"realtime.errors" = "Pronađene pogreške";
+"realtime.ok" = "Nema pogrešaka";
+"tone.opener.casualMessage" = "Hej! Samo sam ti htio reći da";
+"tone.opener.formalEmail" = "Poštovana doktorice, pišem Vam kako bih";
+"tone.opener.narrative" = "Tog jutra, čim sam se probudio,";
+"tone.opener.politeRequest" = "Bi li ti odgovaralo da";
+"tone.opener.workTechnical" = "Ažurirao sam modul i sada";
+"alert.accessibility.body_format" = "%1$@ koristi Pristupačnost za čitanje i uređivanje teksta u drugim aplikacijama.\n\nOtvorite Postavke sustava > Privatnost i sigurnost > Pristupačnost i dodajte %1$@.\n\n⚠️ Nakon dodjele dopuštenja macOS će zatvoriti %1$@. Ponovno ga pokrenite iz mape Aplikacije ili s Docka.";

@@ -125,7 +125,7 @@ struct MenuBarView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
-            Text("If Parrot is already listed, try toggling it off and on again.")
+            Text("If \(AppMode.current.displayName) is already listed, try toggling it off and on again.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)

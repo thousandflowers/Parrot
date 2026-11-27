@@ -72,3 +72,37 @@
 "model.qwen.reason" = "Ελάχιστη κατανάλωση RAM — ιδανικό για σύντομα κείμενα και κινεζικά";
 "model.gemma2b.reason" = "Καλή ποιότητα για δυτικές γλώσσες — Mac με λιγότερο από 16 GB RAM";
 "model.gemma4b.reason" = "Μέγιστη ποιότητα για δυτικές γλώσσες — απαιτεί Mac με 16 GB RAM ή περισσότερο";
+
+/* Added 2026-11-27: keys used in code but missing here (showed as raw keys) */
+"alert.accessibility.ignore" = "Να μην εμφανιστεί ξανά";
+"alert.accessibility.open_settings" = "Άνοιγμα Ρυθμίσεων";
+"alert.accessibility.title" = "Απαιτούνται άδειες Προσβασιμότητας";
+"alert.completion.no_model.body" = "Το Wren δημιουργεί προτάσεις με ένα μοντέλο στη συσκευή. Κατεβάστε ένα μοντέλο από τις Ρυθμίσεις για να ενεργοποιήσετε τη συμπλήρωση κειμένου.";
+"alert.completion.no_model.open_settings" = "Άνοιγμα Ρυθμίσεων";
+"alert.completion.no_model.title" = "Δεν έχει εγκατασταθεί μοντέλο";
+"model.llama1b.reason" = "Ελαφρύ και γρήγορο — κατάλληλο για σύντομα αγγλικά κείμενα";
+"model.llama3b.reason" = "Καλύτερη ποιότητα για αγγλικά — Mac με 8 GB RAM ή περισσότερο";
+"model.phi.reason" = "Σταθερή ποιότητα για αγγλικά — Mac με 8 GB RAM ή περισσότερο";
+"model.qwen05b.reason" = "Το μικρότερο και ταχύτερο — βασικές διορθώσεις, λειτουργεί σε κάθε Mac";
+"panel.analyzing" = "Ανάλυση...";
+"panel.applied" = "Εφαρμόστηκε";
+"panel.apply" = "Εφαρμογή";
+"panel.cancel" = "Ακύρωση";
+"panel.close" = "Κλείσιμο";
+"panel.corrected" = "Πρόταση";
+"panel.error" = "Σφάλμα";
+"panel.fluency" = "Ροή";
+"panel.ignore" = "Παράβλεψη";
+"panel.modelMissing" = "Λείπει μοντέλο";
+"panel.noErrors" = "Κανένα σφάλμα";
+"panel.streaming" = "Διόρθωση...";
+"panel.textTooLong" = "Το κείμενο είναι πολύ μεγάλο";
+"panel.undo" = "Αναίρεση";
+"realtime.errors" = "Βρέθηκαν σφάλματα";
+"realtime.ok" = "Κανένα σφάλμα";
+"tone.opener.casualMessage" = "Γεια! Ήθελα απλώς να σου πω ότι";
+"tone.opener.formalEmail" = "Αξιότιμη κυρία, σας γράφω για να";
+"tone.opener.narrative" = "Εκείνο το πρωί, μόλις ξύπνησα,";
+"tone.opener.politeRequest" = "Θα μπορούσες να";
+"tone.opener.workTechnical" = "Ενημέρωσα τη μονάδα και τώρα";
+"alert.accessibility.body_format" = "Το %1$@ χρησιμοποιεί την Προσβασιμότητα για να διαβάζει και να επεξεργάζεται κείμενο σε άλλες εφαρμογές.\n\nΑνοίξτε Ρυθμίσεις συστήματος > Απόρρητο και ασφάλεια > Προσβασιμότητα και προσθέστε το %1$@.\n\n⚠️ Μετά την παραχώρηση της άδειας, το macOS θα κλείσει το %1$@. Ανοίξτε το ξανά από τον φάκελο Εφαρμογές ή το Dock.";

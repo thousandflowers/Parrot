@@ -96,7 +96,7 @@ struct ExportImportTab: View {
                 let savePanel = NSSavePanel()
                 savePanel.allowedContentTypes = [.json]
                 savePanel.nameFieldStringValue = "parrot-config-\(Self.isoFormatter.string(from: Date())).json"
-                savePanel.title = "Export Parrot Configuration"
+                savePanel.title = "Export \(AppMode.current.displayName) Configuration"
 
                 guard case .OK = savePanel.runModal(), let url = savePanel.url else { return }
                 try data.write(to: url)

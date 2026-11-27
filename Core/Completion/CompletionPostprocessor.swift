@@ -3,6 +3,9 @@ import Foundation
 /// Pure cleaning of a raw model continuation into a short inline suggestion.
 /// No I/O, no state — fully unit-testable.
 enum CompletionPostprocessor {
+    /// In mid-word mode the model's own leading space is honoured only when the "incomplete" trailing
+    /// word is at least this long. Shorter fragments ("se", "a") are almost always real prefixes.
+    static let minTrailingWordForModelSpace = 3
     /// Cleans `raw` into an inline suggestion, or returns nil if there is nothing useful to show.
     /// - `preContext`: the text before the caret, used to strip an echoed prefix.
     /// - `maxWords`: hard cap on suggestion length (a "short" completion budget).
@@ -97,12 +100,21 @@ enum CompletionPostprocessor {
         var capped = words.prefix(max(1, maxWords)).joined(separator: " ")
 
         // 4. Join spacing (the model is unreliable at the boundary space, so decide it here):
-        //    - mid-word → CONTINUE the token, no space, even if the model emitted one ("rece"→"ption");
+        //    - mid-word → CONTINUE the token, no space ("rece"→"ption"), unless the model emitted a
+        //      space after a ≥3-letter word and gluing would not form a real word (names, "Thx");
         //    - word boundary after a non-space char → exactly one leading space;
         //    - empty preContext or already ends with whitespace → no leading space (never double).
         let lead = String(capped.drop(while: { $0.isWhitespace }))   // strip leading space OR tab (model echoes "\t")
         if midWord {
-            capped = lead                                       // continue the token, no space ("rece"+" ption"→"ption")
+            // The spell-check mid-word flag also fires on finished words it doesn't know (names,
+            // "Thx"). If the model emitted a space and gluing would NOT form a word, trust the space:
+            // "Eugenio" + " and" stays " and", while "rece" + " ption" still glues to "ption".
+            let trailingWord = String(preContext.reversed().prefix { $0.isLetter }.reversed())
+            let firstToken = String(lead.prefix { $0.isLetter })
+            let keepModelSpace = modelLeadingSpace
+                && trailingWord.count >= minTrailingWordForModelSpace
+                && !WordBoundary.continuationFormsWord(trailingWord: trailingWord, continuation: firstToken, context: preContext)
+            capped = keepModelSpace ? " " + lead : lead         // else continue the token ("rece"+" ption"→"ption")
         } else if let last = preContext.last, !last.isWhitespace {
             // Letter boundary. The spell-check midWord above says the trailing word is complete, but a
             // word can be a prefix of a longer one being typed ("se" → "seccavo"). Disambiguate:
@@ -112,7 +124,7 @@ enum CompletionPostprocessor {
             let trailingWord = String(preContext.reversed().prefix { $0.isLetter }.reversed())
             let firstToken = String(lead.prefix { $0.isLetter })
             if !modelLeadingSpace,
-               WordBoundary.continuationFormsWord(trailingWord: trailingWord, continuation: firstToken) {
+               WordBoundary.continuationFormsWord(trailingWord: trailingWord, continuation: firstToken, context: preContext) {
                 capped = lead                                   // "se" + "ccavo" → "seccavo"
             } else {
                 capped = " " + lead                             // new word → exactly one space

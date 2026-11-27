@@ -46,7 +46,7 @@ final class ExplainController {
 
         let size = panel.frame.size
         var origin = NSPoint(x: selectionRect.midX - size.width / 2, y: selectionRect.minY - size.height - 8)
-        let screen = NSScreen.screens.first(where: { $0.frame.contains(selectionRect) }) ?? NSScreen.main
+        let screen = ScreenGeometry.screen(for: selectionRect)
         if let vf = screen?.visibleFrame {
             if origin.y < vf.minY { origin.y = selectionRect.maxY + 8 }
             if origin.x < vf.minX { origin.x = vf.minX }

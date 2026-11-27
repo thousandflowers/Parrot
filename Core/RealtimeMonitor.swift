@@ -9,34 +9,66 @@ actor RealtimeMonitor {
     private var lastTextHash: Int?
     private var debounceTask: Task<Void, Never>?
     private var correctionTask: Task<Void, Never>?
+    /// Realtime CORRECTION is active. The AX observer itself may stay attached while this is
+    /// false, because inline completion (Wren) is driven by the same observer.
     private var isEnabled = false
+    /// Tail of the serialized observer attach/detach chain (see `scheduleReconcile`).
+    private var reconcileTail: Task<Void, Never>?
 
-    func start() {
-        guard !isEnabled else { return }
+    func start() async {
         isEnabled = true
-        Task { await attachToFocusedApp() }
+        await scheduleReconcile().value
     }
 
     func stop() async {
         isEnabled = false
-        await detachObserver()
         debounceTask?.cancel()
         debounceTask = nil
         correctionTask?.cancel()
         correctionTask = nil
         lastTextHash = nil
+        await scheduleReconcile().value
     }
 
-    func suspend() {
+    func suspend() async {
         isEnabled = false
-        Task { await detachObserver() }
         debounceTask?.cancel()
         correctionTask?.cancel()
+        await scheduleReconcile().value
     }
 
-    func resume() {
+    func resume() async {
         isEnabled = true
-        Task { await attachToFocusedApp() }
+        await scheduleReconcile().value
+    }
+
+    /// The observer must stay attached while EITHER feature needs AX change notifications.
+    static func shouldObserve(realtimeCorrection: Bool, inlineCompletion: Bool) -> Bool {
+        realtimeCorrection || inlineCompletion
+    }
+
+    /// Serializes every observer attach/detach: each reconcile waits for the previous one, then
+    /// brings the observer in line with the CURRENT state. Prevents two interleaved attaches
+    /// (both passing the `observedPID` check across an await) from leaking an observer on the
+    /// main run loop, and makes the last suspend/resume/start/stop win deterministically.
+    @discardableResult
+    private func scheduleReconcile() -> Task<Void, Never> {
+        let previous = reconcileTail
+        let task = Task {
+            await previous?.value
+            await self.reconcileObserver()
+        }
+        reconcileTail = task
+        return task
+    }
+
+    private func reconcileObserver() async {
+        let completionOn = await MainActor.run { CompletionController.shared.isEnabled }
+        guard Self.shouldObserve(realtimeCorrection: isEnabled, inlineCompletion: completionOn) else {
+            await detachObserver()
+            return
+        }
+        await attachToFocusedApp()
     }
 
     func frontAppChanged() async {
@@ -44,28 +76,23 @@ actor RealtimeMonitor {
         guard !isRawDraft else { return }
         lastTextHash = nil
         Task { await RealtimeIndicatorController.shared.hide() }
-        Task { await attachToFocusedApp() }
+        scheduleReconcile()
         // Clear any inline-completion ghost left over from the previous app.
         Task { @MainActor in CompletionController.shared.dismiss() }
     }
 
+    /// Only called from `reconcileObserver` (serialized) — never directly.
     private func attachToFocusedApp() async {
-        guard isEnabled else { return }
         guard AXIsProcessTrusted() else { return }
 
-        let systemAX = AXUIElementCreateSystemWide()
-        var frontAppRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-            systemAX, kAXFocusedApplicationAttribute as CFString, &frontAppRef
-        ) == .success,
-        let frontApp = frontAppRef,
-        let frontAppAX = AccessibilityBridge.asElementPublic(frontApp) else {
-            return
-        }
-
-        var pid: pid_t = 0
-        AXUIElementGetPid(frontAppAX, &pid)
-        guard pid != 0 else { return }
+        AccessibilityBridge.installAXMessagingTimeout()
+        // Target the app NSWorkspace just activated. The AX system-wide "focused application" lags
+        // behind didActivateApplication by a few ms: reading it here returned the PREVIOUS app, the
+        // `pid == observedPID` guard then kept the observer on it, and completion went silent in
+        // the app the user actually switched to.
+        let pid = await MainActor.run { NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0 }
+        guard pid != 0, pid != ProcessInfo.processInfo.processIdentifier else { return }
+        let frontAppAX = AXUIElementCreateApplication(pid)
 
         if pid == observedPID { return }
 

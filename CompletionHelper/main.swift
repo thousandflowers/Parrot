@@ -8,8 +8,16 @@ import Foundation
 //   stdin  : one JSON object per line  {"prefix": "...", "maxTokens": 12}
 //   stdout : one JSON object per line  {"text": "..."}   (and {"ready":true} once warm)
 
-struct Req: Decodable { let prefix: String; let maxTokens: Int?; let id: Int?; let latinOnly: Bool?; let seed: UInt32?; let temperature: Double?; let repeatPenalty: Double?; let suppressMarkup: Bool?; let language: String? }
-struct Resp: Encodable { let text: String; let id: Int }   // echo the request id so the parent matches responses 1:1
+struct Req: Decodable { let prefix: String; let maxTokens: Int?; let id: Int?; let latinOnly: Bool?; let seed: UInt32?; let temperature: Double?; let repeatPenalty: Double?; let suppressMarkup: Bool? }
+struct Resp: Encodable {   // echo the request id so the parent matches responses 1:1
+    let text: String
+    let id: Int
+    var error: String? = nil   // omitted from the JSON when nil
+}
+/// Lenient decode of just the id, so a malformed request still gets a matching (empty) response.
+struct ReqID: Decodable { let id: Int? }
+/// id used when even the request id is unreadable; never matches a real parent request.
+let unknownRequestID = -1
 
 let args = CommandLine.arguments
 guard args.count > 1 else {
@@ -84,44 +92,20 @@ let reader = Thread {
 reader.stackSize = 1 << 20
 reader.start()
 
-/// Returns a short language-anchor phrase that biases the base model's continuation toward the
-/// target language. DISABLED in practice: on-device this primed the base model into web/forum
-/// boilerplate and meta-commentary ("(non so se è possibile scrivere in italiano)") with no
-/// quality gain, and the `isUsable` gate (≥3 words) never sends a prefix short enough to trigger
-/// the `≤2 words` branch below anyway. Kept dead pending a proper logit/grammar-level anchor.
-private func languageAnchor(_ lang: String) -> String {
-    switch lang.lowercased() {
-    case "it": return "Scrivo in italiano:"
-    case "en": return "Writing in English:"
-    case "fr": return "J'écris en français:"
-    case "de": return "Ich schreibe auf Deutsch:"
-    case "es": return "Escribo en español:"
-    case "pt": return "Escrevo em português:"
-    case "nl": return "Ik schrijf in het Nederlands:"
-    case "pl": return "Piszę po polsku:"
-    case "ru": return "Я пишу по-русски:"
-    case "ja": return "日本語で書いています:"
-    case "ko": return "한국어로 쓰고 있습니다:"
-    case "zh": return "我用中文写作:"
-    default: return ""
-    }
-}
-
 while let (seq, line) = queue.next() {
-    guard !line.isEmpty, let data = line.data(using: .utf8),
-          let req = try? JSONDecoder().decode(Req.self, from: data) else { continue }
-    // When language is known and the prefix is short (≤2 words), prepend a language anchor
-    // to bias the base model toward the target language. On longer prefixes the existing text
-    // already anchors the language naturally; the anchor would just waste token budget.
-    let prefix: String
-    if let lang = req.language, !lang.isEmpty {
-        let wordCount = req.prefix.split(separator: " ").filter { !$0.isEmpty }.count
-        if wordCount <= 2 {
-            let anchor = languageAnchor(lang)
-            if !anchor.isEmpty { prefix = anchor + " " + req.prefix }
-            else { prefix = req.prefix }
-        } else { prefix = req.prefix }
-    } else { prefix = req.prefix }
+    guard !line.isEmpty else { continue }
+    let data = Data(line.utf8)
+    let req: Req
+    do {
+        req = try JSONDecoder().decode(Req.self, from: data)
+    } catch {
+        // Answer anyway: without a response line the parent waits for its full timeout.
+        let id = (try? JSONDecoder().decode(ReqID.self, from: data))?.id ?? unknownRequestID
+        FileHandle.standardError.write(Data("helper: bad request: \(error.localizedDescription)\n".utf8))
+        emit(Resp(text: "", id: id, error: "bad request"))
+        continue
+    }
+    let prefix = req.prefix
     let temperature = Float(req.temperature ?? 0.3)
     let repPenalty = Float(req.repeatPenalty ?? 1.0)
     let text = session.complete(prefix: prefix, maxTokens: req.maxTokens ?? 12,

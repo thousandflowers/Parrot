@@ -40,9 +40,10 @@ extension TextCheckCoordinator {
             )
 
             // Cache lookup before streaming
+            let cacheKey = prepared.promptType.cacheKey(extraInstruction: nil)
             if let cached = await CorrectionCache.shared.get(
                 text: prepared.text,
-                promptType: prepared.promptType.label,
+                promptType: cacheKey,
                 modelID: modelID,
                 language: prepared.resolvedLanguage
             ) {
@@ -67,7 +68,12 @@ extension TextCheckCoordinator {
                 }
             }
             try Task.checkCancellation()
-            let finalText = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
+            // The streamed preview is raw model output; the FINAL text (shown as the result and
+            // cached under the normal key) gets the same cleanup/validation as the one-shot path.
+            let finalText = CorrectionSanitizer.postProcess(
+                raw: accumulated, original: prepared.text,
+                promptType: prepared.promptType, language: prepared.resolvedLanguage
+            )
             var result = CorrectionResult(
                 original: prepared.text,
                 corrected: finalText,
@@ -83,7 +89,7 @@ extension TextCheckCoordinator {
             await CorrectionCache.shared.set(
                 finalResult,
                 text: prepared.text,
-                promptType: prepared.promptType.label,
+                promptType: cacheKey,
                 modelID: modelID,
                 language: prepared.resolvedLanguage
             )
@@ -146,7 +152,8 @@ extension TextCheckCoordinator {
             Task {
                 do {
                     try await AccessibilityBridge.shared.replaceSelectedText(
-                        with: result.correctedText, range: result.replacementRange, expectedPID: result.capturedPID)
+                        with: result.correctedText, range: result.replacementRange, expectedPID: result.capturedPID,
+                        expectedText: result.originalText)
                 } catch {
                     await MainActor.run {
                         SuggestionPanelController.shared.showError(error as? CorrectionError ?? .textExtractionFailed(appName: "unknown"))
@@ -185,7 +192,8 @@ extension TextCheckCoordinator {
                     // Undo re-selects exactly the span apply wrote (nil if it went via
                     // clipboard/live-selection), never a fabricated location+length.
                     let undoRange = try await AccessibilityBridge.shared.replaceSelectedText(
-                        with: result.correctedText, range: result.replacementRange, expectedPID: result.capturedPID)
+                        with: result.correctedText, range: result.replacementRange, expectedPID: result.capturedPID,
+                        expectedText: result.originalText)
                     await MainActor.run {
                         DirectApplyToast.showUndo(
                             message: "Correction applied",
@@ -207,7 +215,7 @@ extension TextCheckCoordinator {
     // MARK: - Grammar then Fluency
 
     func checkGrammarThenFluency() {
-        check(type: .grammar) { grammarResult in
+        check(type: .grammar, routesSpans: false) { grammarResult in
             guard grammarResult.hasChanges else {
                 self.checkFluency()
                 return
@@ -276,38 +284,60 @@ extension TextCheckCoordinator {
         let modelID = LLMServiceFactory.resolveModelID(for: serviceType)
 
         Task {
-            var accumulated = ""
-            let stream = service.streamCorrect(text: text, promptType: mode)
-            for try await chunk in stream {
-                accumulated = chunk
-                let snapshot = chunk
+            do {
+                try await streamDirectCorrection(
+                    text: text, mode: mode, service: service,
+                    modelID: modelID, language: language
+                )
+            } catch is CancellationError {
+                return
+            } catch let error as CorrectionError {
+                await MainActor.run { SuggestionPanelController.shared.showError(error) }
+            } catch {
                 await MainActor.run {
-                    SuggestionPanelController.shared.showOrUpdateStreaming(
-                        original: text, current: snapshot
-                    )
+                    SuggestionPanelController.shared.showError(.outputParsingFailed(raw: error.localizedDescription))
                 }
             }
-            try Task.checkCancellation()
-            let finalText = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
-            let result = CorrectionResult(
-                original: text,
-                corrected: finalText,
-                modelID: modelID,
-                confidence: 0.9,
-                promptType: mode.label,
-                detectedTone: ""
-            )
-
-            await CorrectionCache.shared.set(
-                result,
-                text: text,
-                promptType: mode.label,
-                modelID: modelID,
-                language: language
-            )
-
-            await MainActor.run { SuggestionPanelController.shared.show(result: result) }
         }
+    }
+
+    private func streamDirectCorrection(
+        text: String, mode: PromptType, service: any LLMService,
+        modelID: String, language: String
+    ) async throws {
+        var accumulated = ""
+        let stream = service.streamCorrect(text: text, promptType: mode)
+        for try await chunk in stream {
+            accumulated = chunk
+            let snapshot = chunk
+            await MainActor.run {
+                SuggestionPanelController.shared.showOrUpdateStreaming(
+                    original: text, current: snapshot
+                )
+            }
+        }
+        try Task.checkCancellation()
+        let finalText = CorrectionSanitizer.postProcess(
+            raw: accumulated, original: text, promptType: mode, language: language
+        )
+        let result = CorrectionResult(
+            original: text,
+            corrected: finalText,
+            modelID: modelID,
+            confidence: 0.9,
+            promptType: mode.label,
+            detectedTone: ""
+        )
+
+        await CorrectionCache.shared.set(
+            result,
+            text: text,
+            promptType: mode.cacheKey(extraInstruction: nil),
+            modelID: modelID,
+            language: language
+        )
+
+        await MainActor.run { SuggestionPanelController.shared.show(result: result) }
     }
 
     // MARK: - Writing Coach

@@ -21,9 +21,14 @@ actor HistoryStore {
     private let historyURL: URL
 
     private init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let appSupport = AppPaths.applicationSupport
             ?? FileManager.default.temporaryDirectory
-        historyURL = appSupport.appendingPathComponent("Parrot/history.json")
+        self.init(fileURL: appSupport.appendingPathComponent("Parrot/history.json"))
+    }
+
+    /// Injectable location so tests never touch the user's real history.
+    init(fileURL: URL) {
+        historyURL = fileURL
     }
 
     func add(result: CorrectionResult) {
@@ -64,13 +69,7 @@ actor HistoryStore {
     }
 
     private func load() -> [HistoryEntry] {
-        guard let data = try? Data(contentsOf: historyURL) else { return [] }
-        do {
-            return try JSONDecoder().decode([HistoryEntry].self, from: data)
-        } catch {
-            Logger.core.error("HistoryStore: failed to decode history — \(error.localizedDescription, privacy: .public)")
-            return []
-        }
+        PersistentJSON.load([HistoryEntry].self, from: historyURL) ?? []
     }
 
     private func save(_ entries: [HistoryEntry]) {

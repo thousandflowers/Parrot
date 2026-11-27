@@ -896,9 +896,6 @@ final class CorrectionCacheDiskTests: XCTestCase {
         let url = await CorrectionCache.shared.cacheFileURL
         let data = try? Data(contentsOf: url)
         XCTAssertNotNil(data)
-        // Should decode as empty array
-        let entries = try? JSONDecoder().decode([String].self, from: data ?? Data())
-        // Actually it's [DiskEntry], verify it's valid JSON at minimum
         XCTAssertNotNil(data.flatMap { try? JSONSerialization.jsonObject(with: $0) })
     }
 }
@@ -963,6 +960,32 @@ final class SelfConsistencyTests: XCTestCase {
         let candidates = [original, original, "La frase e già corretta."]
         let result = service.selectConsensus(candidates: candidates, original: original)
         XCTAssertEqual(result, original, "A majority of no-change votes means the text is already correct")
+    }
+
+    func testSelectConsensus_tieBetweenNoChangeAndChange_keepsOriginal() {
+        // Seen live with Gemma 4: one pass broke a correct sentence ("divertiti" -> "divertito"),
+        // the other left it alone. A tie is no evidence of an error: keep the user's text.
+        let original = "Ieri ci siamo divertiti molto."
+        let candidates = [original, "Ieri ci siamo divertito molto."]
+        XCTAssertEqual(service.selectConsensus(candidates: candidates, original: original), original)
+    }
+
+    func testSelectConsensus_punctuationVariantCountsWithOriginal() {
+        // Live Gemma 4 votes: original / one broken word / original with ";" for ",".
+        // Two of three passes kept every word: the sentence is correct.
+        let original = "Ieri sono andato al mare con i miei amici, ci siamo divertiti molto."
+        let candidates = [
+            original,
+            "Ieri sono andato al mare con i miei amici, ci siamo divertito molto.",
+            "Ieri sono andato al mare con i miei amici; ci siamo divertiti molto.",
+        ]
+        XCTAssertEqual(service.selectConsensus(candidates: candidates, original: original), original)
+    }
+
+    func testSelectConsensus_agreedPunctuationFixStillWins() {
+        let original = "Ciao come stai"
+        let fixed = "Ciao, come stai?"
+        XCTAssertEqual(service.selectConsensus(candidates: [fixed, fixed, original], original: original), fixed)
     }
 
     func testSelectConsensus_singleCandidate_returnsIt() {
@@ -1135,7 +1158,9 @@ final class CorrectionSpanTests: XCTestCase {
 final class LanguageToolInstallerTests: XCTestCase {
     func testLanguageToolInstaller_installPathIsInsideAppSupport() {
         let path = LanguageToolInstaller.binaryPath
-        XCTAssertTrue(path.path.contains("Application Support/Parrot"))
+        // Under XCTest AppPaths points at a sandbox, never the user's real Application Support.
+        let base = AppPaths.applicationSupport?.appendingPathComponent("Parrot").path ?? "<nil>"
+        XCTAssertTrue(path.path.hasPrefix(base), "\(path.path) not under \(base)")
     }
 
     func testLanguageToolInstaller_isAvailable_doesNotCrash() {

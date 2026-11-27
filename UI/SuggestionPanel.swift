@@ -1,6 +1,7 @@
 import SwiftUI
 import Cocoa
 import OSLog
+import Carbon.HIToolbox
 
 enum SuggestionState: Sendable {
     case loading
@@ -47,13 +48,52 @@ final class FixedSizeHostingView<Content: View>: NSHostingView<Content> {
     }
 }
 
+/// Borderless, non-activating panel that can still become KEY. A plain
+/// `[.borderless, .nonactivatingPanel]` NSPanel refuses key status, so Return
+/// (`.keyboardShortcut(.defaultAction)`) and Esc never reach it. Staying non-activating keeps the
+/// target app frontmost: its menu bar, active state and AX focused element are untouched.
+final class KeyablePanel: NSPanel {
+    /// Invoked on Esc. When nil, Esc follows the normal responder chain.
+    var onCancel: (() -> Void)?
+
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+
+    override func cancelOperation(_ sender: Any?) {
+        guard let onCancel else { return super.cancelOperation(sender) }
+        onCancel()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        // Esc not consumed by a SwiftUI control lands here; route it to cancelOperation.
+        if Int(event.keyCode) == kVK_Escape { return cancelOperation(nil) }
+        super.keyDown(with: event)
+    }
+
+    /// Shows the panel and makes it key WITHOUT activating the app.
+    func presentAsKey() {
+        orderFrontRegardless()
+        makeKey()
+    }
+
+    /// Hands keyboard focus back to the target app before text is written into it, so a
+    /// clipboard-fallback Cmd+V lands in that app instead of this key panel. Ordering a key
+    /// non-activating panel out returns key status to the active app's window; the panel is put
+    /// straight back on screen without becoming key.
+    func relinquishKeyFocus() {
+        guard isKeyWindow else { return }
+        orderOut(nil)
+        orderFrontRegardless()
+    }
+}
+
 @MainActor
 final class SuggestionPanelController {
     static let shared = SuggestionPanelController()
 
-    private var panel: NSPanel?
+    private var panel: KeyablePanel?
     private var hostingView: FixedSizeHostingView<SuggestionView>?
-    private var spanPanel: NSPanel?
+    private var spanPanel: KeyablePanel?
     private var spanHostingView: NSHostingView<SpanSuggestionView>?
     private var currentResult: CorrectionResult?
     private var currentState: SuggestionState?
@@ -101,17 +141,6 @@ final class SuggestionPanelController {
         }
     }
 
-    private func clampToScreen(_ origin: NSPoint, size: NSSize) -> NSPoint {
-        let screen = NSScreen.screens.first(where: { $0.frame.contains(origin) })
-            ?? NSScreen.main
-            ?? NSScreen.screens.first
-        guard let screen else { return origin }
-        let frame = screen.visibleFrame
-        let clampedX = max(frame.minX, min(frame.maxX - size.width, origin.x))
-        let clampedY = max(frame.minY, min(frame.maxY - size.height, origin.y))
-        return NSPoint(x: clampedX, y: clampedY)
-    }
-
     private func showOrUpdate(result: CorrectionResult?, state: SuggestionState) {
         self.currentResult = result
         self.currentState = state
@@ -140,7 +169,7 @@ final class SuggestionPanelController {
             panel = newPanel
             let origin = panelOrigin(panelSize: newPanel.frame.size)
             newPanel.setFrameOrigin(origin)
-            newPanel.orderFrontRegardless()
+            newPanel.presentAsKey()
             animateIn(newPanel)
             installClickMonitor(for: newPanel)
         }
@@ -186,10 +215,14 @@ final class SuggestionPanelController {
                     accumulated = chunk
                     showOrUpdate(result: nil, state: .streaming(original: original, current: accumulated))
                 }
-                // Streaming complete — build final result and show as suggestion
+                // Streaming complete: validate like the one-shot path (strips preambles, fences,
+                // think-tags; rejects truncated/drifted output) before offering it as a suggestion.
+                let language = LanguageDetector.detect(text: original, fallbackLanguage: "en")
+                let cleaned = CorrectionSanitizer.postProcess(
+                    raw: accumulated, original: original, promptType: promptType, language: language)
                 let finalResult = CorrectionResult(
                     original: original,
-                    corrected: accumulated.isEmpty ? original : accumulated,
+                    corrected: cleaned.isEmpty ? original : cleaned,
                     modelID: "streaming",
                     promptType: promptType.label
                 )
@@ -210,23 +243,34 @@ final class SuggestionPanelController {
         }
     }
 
+    /// The selection rect in AppKit coordinates, or nil when the bridge has no precise anchor.
+    /// `lastSelectionBoundsSync` holds an AX-space rect (top-left origin): either the selection
+    /// bounds or the focused window's frame. Its last-resort fallback stores
+    /// `NSScreen.main.visibleFrame` (AppKit space, and not an anchor at all), which is treated as
+    /// "no anchor" so the panel follows the mouse instead.
+    private func selectionAnchorRect() -> CGRect? {
+        let raw = AccessibilityBridge.shared.lastSelectionBoundsSync
+        guard raw != .zero, !raw.isNull, !raw.isInfinite else { return nil }
+        guard !NSScreen.screens.contains(where: { $0.visibleFrame == raw }) else { return nil }
+        return ScreenGeometry.appKitRect(fromAX: raw)
+    }
+
     private func panelOrigin(panelSize: NSSize) -> NSPoint {
-        let bounds = AccessibilityBridge.shared.lastSelectionBoundsSync
-        if bounds != .zero {
-            // Position below selected text; flip if too close to bottom edge
-            let x = bounds.midX - panelSize.width / 2
-            let belowY = bounds.minY - panelSize.height - 8
-            let origin = NSPoint(x: x, y: belowY)
-            let clamped = clampToScreen(origin, size: panelSize)
-            // If clamping moved us up (panel was below screen), try above selection instead
-            if clamped.y > belowY + 4 {
-                let aboveY = bounds.maxY + 8
-                return clampToScreen(NSPoint(x: x, y: aboveY), size: panelSize)
+        let gap: CGFloat = 8
+        if let anchor = selectionAnchorRect() {
+            // Position below the selection; if the screen edge pushes it up, go above instead.
+            let x = anchor.midX - panelSize.width / 2
+            let below = NSRect(origin: NSPoint(x: x, y: anchor.minY - panelSize.height - gap), size: panelSize)
+            let clamped = ScreenGeometry.clamp(below, toScreenFor: anchor)
+            if clamped.minY > below.minY + 4 {
+                let above = NSRect(origin: NSPoint(x: x, y: anchor.maxY + gap), size: panelSize)
+                return ScreenGeometry.clamp(above, toScreenFor: anchor).origin
             }
-            return clamped
+            return clamped.origin
         }
-        let mouseLoc = NSEvent.mouseLocation
-        return clampToScreen(NSPoint(x: mouseLoc.x + 20, y: mouseLoc.y - panelSize.height / 2), size: panelSize)
+        let mouse = NSEvent.mouseLocation
+        let frame = NSRect(origin: NSPoint(x: mouse.x + 20, y: mouse.y - panelSize.height / 2), size: panelSize)
+        return ScreenGeometry.clamp(frame, toScreenFor: NSRect(origin: mouse, size: .zero)).origin
     }
 
     private func installClickMonitor(for targetPanel: NSPanel) {
@@ -238,11 +282,11 @@ final class SuggestionPanelController {
         }
     }
 
-    private func createPanel(with view: SuggestionView) -> NSPanel {
+    private func createPanel(with view: SuggestionView) -> KeyablePanel {
         // P2.7: Dynamic sizing — use min/max instead of fixed 340×280.
         // macOS 26 re-entrant constraint crash is prevented by FixedSizeHostingView,
         // so we can safely allow the panel to grow to fit content.
-        let panel = NSPanel(
+        let panel = KeyablePanel(
             contentRect: NSRect(x: 0, y: 0, width: 340, height: 280),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -260,6 +304,7 @@ final class SuggestionPanelController {
         panel.setAccessibilityLabel("Correction suggestion")
         panel.minSize = NSSize(width: 300, height: 240)
         panel.maxSize = NSSize(width: 520, height: 520)
+        panel.onCancel = { [weak self] in self?.close() }
 
         let hv = FixedSizeHostingView(rootView: view)
         hv.sizingOptions = []
@@ -278,11 +323,13 @@ final class SuggestionPanelController {
             Logger.ui.debug("SuggestionPanel: applyCorrection called with empty correctedText")
             return
         }
+        panel?.relinquishKeyFocus()
         Task { [weak self] in
             guard let self else { return }
             do {
                 self.lastAppliedRange = try await AccessibilityBridge.shared.replaceSelectedText(
-                    with: result.correctedText, range: result.replacementRange, expectedPID: result.capturedPID)
+                    with: result.correctedText, range: result.replacementRange, expectedPID: result.capturedPID,
+                    expectedText: result.originalText)
                 Task { await HistoryStore.shared.add(result: result) }
                 self.showOrUpdate(result: result, state: .applied(result))
                 self.undoTask?.cancel()
@@ -302,6 +349,7 @@ final class SuggestionPanelController {
         undoTask?.cancel()
         undoTask = nil
         guard let result = currentResult else { close(); return }
+        panel?.relinquishKeyFocus()
         Task { [weak self] in
             guard let self else { return }
             do {
@@ -309,7 +357,8 @@ final class SuggestionPanelController {
                 // clipboard/live-selection → replace current selection, never a
                 // fabricated span that could corrupt unrelated text).
                 try await AccessibilityBridge.shared.replaceSelectedText(
-                    with: result.originalText, range: self.lastAppliedRange, expectedPID: result.capturedPID)
+                    with: result.originalText, range: self.lastAppliedRange, expectedPID: result.capturedPID,
+                    expectedText: self.lastAppliedRange == nil ? nil : result.correctedText)
                 let state: SuggestionState = result.hasChanges ? .suggestion(result) : .noErrors
                 self.showOrUpdate(result: result, state: state)
             } catch {
@@ -483,7 +532,7 @@ final class SuggestionPanelController {
             self?.closeSpanPanel()
         }
 
-        let newPanel = NSPanel(
+        let newPanel = KeyablePanel(
             contentRect: NSRect(x: 0, y: 0, width: 420, height: 460),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -498,6 +547,7 @@ final class SuggestionPanelController {
         newPanel.setAccessibilityElement(true)
         newPanel.setAccessibilityRole(.group)
         newPanel.setAccessibilityLabel("Correction suggestion")
+        newPanel.onCancel = { [weak self] in self?.closeSpanPanel() }
 
         let hv = NSHostingView(rootView: view)
         hv.sizingOptions = []
@@ -507,7 +557,7 @@ final class SuggestionPanelController {
 
         let origin = panelOrigin(panelSize: newPanel.frame.size)
         newPanel.setFrameOrigin(origin)
-        newPanel.orderFrontRegardless()
+        newPanel.presentAsKey()
         animateIn(newPanel)
     }
 
@@ -518,7 +568,8 @@ final class SuggestionPanelController {
             guard let self else { return }
             do {
                 self.lastAppliedRange = try await AccessibilityBridge.shared.replaceSelectedText(
-                    with: result.correctedText, range: result.replacementRange, expectedPID: result.capturedPID)
+                    with: result.correctedText, range: result.replacementRange, expectedPID: result.capturedPID,
+                    expectedText: result.originalText)
                 Task { await HistoryStore.shared.add(result: result) }
                 if result.promptType == PromptType.expand.label {
                     Task { await self.learnContactFromExpand(result: result) }
@@ -547,6 +598,8 @@ final class SuggestionPanelController {
         guard let panel = spanPanel else { return }
         spanPanel = nil
         spanHostingView = nil
+        // Drop key status now, not after the fade: an apply may paste into the target app next.
+        panel.relinquishKeyFocus()
         animateOut(panel) { panel.orderOut(nil) }
     }
 
@@ -572,6 +625,7 @@ final class SuggestionPanelController {
         self.panel = nil
         self.hostingView = nil
         self.currentState = nil
+        panel.relinquishKeyFocus()
         animateOut(panel) {
             panel.orderOut(nil)
         }

@@ -92,7 +92,8 @@ final class InlineHighlightController {
                     try await AccessibilityBridge.shared.replaceRange(
                         annotation.charRange,
                         with: annotation.suggestedFix,
-                        pid: pid
+                        pid: pid,
+                        expectedText: annotation.originalSnippet
                     )
                 } catch {
                     failures += 1
@@ -134,7 +135,7 @@ final class InlineHighlightController {
         let margin: CGFloat = 40
         let unionRect = rects.map(\.0).reduce(CGRect.null) { $0.union($1) }
         let underlayFrame = unionRect == .null
-            ? (NSScreen.main?.frame ?? .zero)
+            ? (ScreenGeometry.primaryScreen?.frame ?? .zero)
             : unionRect.insetBy(dx: -margin, dy: -margin)
 
         let underlay = NSWindow(
@@ -250,7 +251,7 @@ final class InlineHighlightController {
         let margin: CGFloat = 40
         let unionRect = rects.map(\.0).reduce(CGRect.null) { $0.union($1) }
         let underlayFrame = unionRect == .null
-            ? (NSScreen.main?.frame ?? .zero)
+            ? (ScreenGeometry.primaryScreen?.frame ?? .zero)
             : unionRect.insetBy(dx: -margin, dy: -margin)
 
         let underlay = NSWindow(

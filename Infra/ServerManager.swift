@@ -1,6 +1,7 @@
 import Foundation
 import Darwin
 import Metal
+import OSLog
 
 extension Notification.Name {
     static let serverStateDidChange = Notification.Name("serverStateDidChange")
@@ -8,22 +9,41 @@ extension Notification.Name {
 
 actor ServerManager: Sendable {
     /// Main server for correction/fluency (may reuse an external llama-server on the standard ports).
-    static let shared = ServerManager()
+    static let shared = ServerManager(role: "main")
     /// Dedicated server for inline completion when the user picks a different completion model.
     /// Never reuses an external server (that would serve the wrong model) and uses its own port range.
-    static let completion = ServerManager(allowExternalReuse: false, contextSize: 1024)
+    static let completion = ServerManager(role: "completion", allowExternalReuse: false, contextSize: 1024)
 
+    /// Stops every llama-server this app launched. Call on quit (AppDelegate) so the
+    /// completion server is not left running and holding RAM.
+    static func stopAll() async {
+        async let main: Void = shared.stop()
+        async let completionStop: Void = completion.stop()
+        _ = await (main, completionStop)
+    }
+
+    private let role: String
     private let allowExternalReuse: Bool
     private let contextSize: Int            // KV context window; smaller = much less RAM
     private var currentModelPath: String?   // model our own process was launched with
-    init(allowExternalReuse: Bool = true, contextSize: Int = 4096) {
+    private let pidRecordURL: URL
+    private let logURL: URL?
+    init(role: String, allowExternalReuse: Bool = true, contextSize: Int = 4096) {
+        self.role = role
         self.allowExternalReuse = allowExternalReuse
         self.contextSize = contextSize
+        let suffix = role == "main" ? "" : "-\(role)"
+        self.pidRecordURL = Self.runDirectory.appendingPathComponent("llama-server\(suffix).pid")
+        self.logURL = Self.logsDirectory?.appendingPathComponent("llama-server\(suffix).log")
     }
 
     private var process: Process?
+    private var logHandle: FileHandle?
     private var startupTask: Task<Void, Error>?
     private var forceKillTask: Task<Void, Never>?
+    private var reapTask: Task<Void, Never>?
+    /// Ports held by a stale server of ours that could not be killed: never adopt them as "external".
+    private var excludedPorts: Set<Int> = []
     private var isExternalServer: Bool = false
     private var _currentPort: Int = 0
     var currentPort: Int {
@@ -39,6 +59,11 @@ actor ServerManager: Sendable {
             try await existingTask.value
             return currentPort
         }
+
+        // A crash/force-quit leaves our llama-server running; kill it before probing ports,
+        // otherwise it would be adopted as an "external" server (wrong model, never stopped).
+        if reapTask == nil { reapTask = Task { await reapOrphanOnLaunch() } }
+        await reapTask?.value
 
         // 0. If our own server is already running a DIFFERENT model, restart it so a model change
         //    (user picked a new correction/completion model) actually takes effect.
@@ -82,7 +107,7 @@ actor ServerManager: Sendable {
 
     private func findExistingServer() async -> Int? {
         // Only probe llama-server ports — NOT 11434 (Ollama), which would cause wrong model to be used
-        for port in Constants.candidateServerPorts {
+        for port in Constants.candidateServerPorts where !excludedPorts.contains(port) {
             if await checkServerHealth(port: port) {
                 return port
             }
@@ -111,7 +136,8 @@ actor ServerManager: Sendable {
             throw CorrectionError.serverNotRunning
         }
 
-        let logHandle = Self.openServerLogHandle()
+        try? logHandle?.close()
+        logHandle = logURL.flatMap { LogRotation.openAppendHandle(at: $0, maxBytes: Constants.logRotationMaxBytes) }
 
         // RAM-aware context: KV cache scales with context length. On low-RAM machines (≤8GB)
         // cap it to keep memory in check.
@@ -133,7 +159,11 @@ actor ServerManager: Sendable {
                 "-c", "\(effectiveContext)",
                 "--threads", "\(max(2, ProcessInfo.processInfo.processorCount / 2))",
                 "--n-gpu-layers", gpuLayers(),
-                "--flash-attn", "auto"
+                "--flash-attn", "auto",
+                // Thinking models (Gemma 4, Qwen 3) otherwise spend the whole token budget on a
+                // hidden reasoning trace: content comes back empty, finish_reason=length, and the
+                // correction times out. Corrections and completions never want a trace.
+                "--reasoning", "off"
             ]
 
             close(probeSock)
@@ -146,6 +176,7 @@ actor ServerManager: Sendable {
                 throw CorrectionError.serverNotRunning
             }
             self.process = process
+            writePidRecord(process: process, port: port, executable: serverURL)
 
             do {
                 for healthAttempt in 0..<Constants.serverHealthAttempts {
@@ -160,10 +191,12 @@ actor ServerManager: Sendable {
 
                 process.terminate()
                 self.process = nil
+                removePidRecord()
                 currentPort = 0
             } catch {
                 process.terminate()
                 self.process = nil
+                removePidRecord()
                 currentPort = 0
                 throw error
             }
@@ -185,6 +218,7 @@ actor ServerManager: Sendable {
         
         guard let process = process, process.isRunning else {
             self.process = nil
+            releaseOwnProcessResources()
             currentPort = 0
             return
         }
@@ -209,13 +243,18 @@ actor ServerManager: Sendable {
             waitpid(pid_t(pid), nil, WNOHANG)
         }
         self.process = nil
+        releaseOwnProcessResources()
         currentPort = 0
     }
 
+    /// nil when no own process is tracked (external server or not started).
+    func ownProcessAlive() -> Bool? {
+        guard !isExternalServer, let process else { return nil }
+        return process.isRunning
+    }
+
     nonisolated func forceKill() {
-        Task { @MainActor in
-            await Self.shared.internalForceKill()
-        }
+        Task { await self.internalForceKill() }
     }
 
     private func internalForceKill() {
@@ -327,14 +366,145 @@ actor ServerManager: Sendable {
         kill(pid, 0) == 0
     }
 
-    private static func openServerLogHandle() -> FileHandle? {
-        guard let logsDir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("Logs/Parrot") else { return nil }
-        try? FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
-        let logURL = logsDir.appendingPathComponent("llama-server.log")
-        if !FileManager.default.fileExists(atPath: logURL.path) {
-            FileManager.default.createFile(atPath: logURL.path, contents: nil)
+    private static var logsDirectory: URL? {
+        FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("Logs/Parrot")
+    }
+
+    // MARK: - Own-process bookkeeping (pid file, log handle)
+
+    private static var runDirectory: URL {
+        (AppPaths.applicationSupport
+            ?? FileManager.default.temporaryDirectory)
+            .appendingPathComponent("Parrot/run")
+    }
+
+    private func writePidRecord(process: Process, port: Int, executable: URL) {
+        let record = ServerPidRecord(pid: process.processIdentifier, port: port,
+                                     executablePath: executable.path(percentEncoded: false))
+        do {
+            try ServerPidRecord.write(record, to: pidRecordURL)
+        } catch {
+            Logger.server.error("ServerManager[\(self.role, privacy: .public)]: cannot write pid file — \(error.localizedDescription, privacy: .public)")
         }
-        return FileHandle(forWritingAtPath: logURL.path)
+    }
+
+    private func removePidRecord() {
+        ServerPidRecord.remove(at: pidRecordURL)
+    }
+
+    private func releaseOwnProcessResources() {
+        removePidRecord()
+        try? logHandle?.close()
+        logHandle = nil
+    }
+
+    private func reapOrphanOnLaunch() async {
+        let outcome = await Self.reapOrphan(recordURL: pidRecordURL, knownExecutables: LlamaInstaller.candidateExecutables)
+        switch outcome {
+        case .none:
+            break
+        case .notOurs:
+            Logger.server.info("ServerManager[\(self.role, privacy: .public)]: stale pid file belonged to another program — ignored")
+        case .terminated(let pid):
+            Logger.server.info("ServerManager[\(self.role, privacy: .public)]: terminated orphaned llama-server pid \(pid, privacy: .public)")
+        case .stillRunning(let pid, let port):
+            excludedPorts.insert(port)
+            Logger.server.error("ServerManager[\(self.role, privacy: .public)]: orphaned llama-server pid \(pid, privacy: .public) survived SIGKILL — port \(port, privacy: .public) will not be adopted")
+        }
+    }
+
+    // MARK: - Orphan reaping (pure enough to test with a stand-in process)
+
+    enum OrphanReapOutcome: Equatable {
+        case none                                  // no pid file, or recorded process is gone
+        case notOurs                               // pid reused by an unrelated program
+        case terminated(pid: Int32)
+        case stillRunning(pid: Int32, port: Int)
+    }
+
+    /// Reads the pid file written at spawn; if that pid is alive and runs one of our known
+    /// llama-server executables, terminates it (SIGTERM, then SIGKILL). The pid file is removed
+    /// unless the process survived.
+    static func reapOrphan(recordURL: URL, knownExecutables: [String]) async -> OrphanReapOutcome {
+        guard let record = ServerPidRecord.read(from: recordURL) else {
+            ServerPidRecord.remove(at: recordURL)
+            return .none
+        }
+        let pid = record.pid
+        guard pid > 0, pid != getpid(), isAlive(pid) else {
+            ServerPidRecord.remove(at: recordURL)
+            return .none
+        }
+        let known = knownExecutables + [record.executablePath]
+        guard isKnownServerExecutable(procPath: processExecutablePath(pid: pid), knownPaths: known) else {
+            ServerPidRecord.remove(at: recordURL)
+            return .notOurs
+        }
+        kill(pid, SIGTERM)
+        if await waitForExit(pid, timeout: Constants.serverStopTimeout) == false {
+            kill(pid, SIGKILL)
+            guard await waitForExit(pid, timeout: 1) else {
+                return .stillRunning(pid: pid, port: record.port)
+            }
+        }
+        ServerPidRecord.remove(at: recordURL)
+        return .terminated(pid: pid)
+    }
+
+    static func isKnownServerExecutable(procPath: String?, knownPaths: [String]) -> Bool {
+        guard let procPath, !procPath.isEmpty else { return false }
+        let resolved = URL(fileURLWithPath: procPath).resolvingSymlinksInPath().path
+        return knownPaths.contains { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path == resolved }
+    }
+
+    /// Executable path of a running process (proc_pidpath), nil if it does not exist.
+    static func processExecutablePath(pid: Int32) -> String? {
+        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
+        let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        guard length > 0 else { return nil }
+        return String(cString: buffer)
+    }
+
+    private static func isAlive(_ pid: Int32) -> Bool {
+        // A zombie still answers kill(0) but has no executable path.
+        kill(pid, 0) == 0 && processExecutablePath(pid: pid) != nil
+    }
+
+    private static func waitForExit(_ pid: Int32, timeout: TimeInterval) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while isAlive(pid) {
+            guard Date() < deadline else { return false }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return true
+    }
+}
+
+/// What ServerManager writes next to the app's data when it spawns llama-server, so a later
+/// launch can recognise (and kill) a server orphaned by a crash or force-quit.
+struct ServerPidRecord: Codable, Equatable {
+    let pid: Int32
+    let port: Int
+    let executablePath: String
+
+    static func write(_ record: ServerPidRecord, to url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode(record).write(to: url, options: .atomic)
+    }
+
+    static func read(from url: URL) -> ServerPidRecord? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(ServerPidRecord.self, from: data)
+    }
+
+    static func remove(at url: URL) {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path(percentEncoded: false)) else { return }
+        do {
+            try fm.removeItem(at: url)
+        } catch {
+            Logger.server.error("ServerPidRecord: cannot remove \(url.lastPathComponent, privacy: .public) — \(error.localizedDescription, privacy: .public)")
+        }
     }
 }

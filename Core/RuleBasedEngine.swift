@@ -67,6 +67,27 @@ actor RuleBasedEngine {
         return RuleBasedResult(text: result, fixes: fixes)
     }
 
+    /// Every rule match located in `text` itself (UTF-16 NSRange), one span per occurrence.
+    /// `check` rewrites the text rule by rule, so its fixes carry no reliable position;
+    /// looking a fix up with `range(of:)` would pin every repeat onto the first occurrence.
+    /// Overlaps between rules are resolved downstream by SpanMerger.
+    func spans(in text: String, language: String = "it") -> [CorrectionSpan] {
+        let fullRange = NSRange(text.startIndex..., in: text)
+        let ns = text as NSString
+        return compiledRules
+            .filter { $0.rule.isUniversal || $0.rule.languages.contains(language) }
+            .flatMap { rule, regex in
+                regex.matches(in: text, range: fullRange).compactMap { match -> CorrectionSpan? in
+                    let original = ns.substring(with: match.range)
+                    let replacement = rule.replacement(original)
+                    guard original != replacement else { return nil }
+                    return CorrectionSpan(range: match.range, original: original, replacement: replacement,
+                                          reason: rule.reason, confidence: 1.0, source: .ruleBased)
+                }
+            }
+            .sorted { $0.range.location < $1.range.location }
+    }
+
     private static func makeRules() -> [GrammarRule] {
         [
             GrammarRule(

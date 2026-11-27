@@ -2,6 +2,17 @@ import Foundation
 import CryptoKit
 import OSLog
 
+/// Launch-stable string hash (SHA-256 hex prefix) for keys that are persisted to disk.
+/// Swift's `hashValue` is seeded per process and must never be used for that.
+enum StableHash {
+    static let defaultHexLength = 16
+
+    static func hex(_ string: String, length: Int = defaultHexLength) -> String {
+        let digest = SHA256.hash(data: Data(string.utf8))
+        return String(digest.map { String(format: "%02x", $0) }.joined().prefix(length))
+    }
+}
+
 actor CorrectionCache: Sendable {
     static let shared = CorrectionCache()
 
@@ -15,7 +26,7 @@ actor CorrectionCache: Sendable {
     var currentMemoryBytesForTesting: Int { currentMemoryBytes }
 
     let cacheFileURL: URL = {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let support = AppPaths.applicationSupport
             ?? FileManager.default.temporaryDirectory
         return support.appendingPathComponent("Parrot/correction_cache.json")
     }()
@@ -36,14 +47,8 @@ actor CorrectionCache: Sendable {
     // MARK: - Key generation
 
     private func cacheKey(text: String, promptType: String, modelID: String, language: String) -> String {
-        let textHash: String
-        if let data = text.data(using: .utf8) {
-            let digest = SHA256.hash(data: data)
-            let hex = digest.map { String(format: "%02x", $0) }.joined()
-            textHash = String(hex.prefix(32))
-        } else {
-            textHash = String(text.hashValue)
-        }
+        // 32 hex chars: same width as before, so entries persisted by older builds still match.
+        let textHash = StableHash.hex(text, length: 32)
         return "\(promptType)|\(language)|\(modelID)|\(textHash)"
     }
 

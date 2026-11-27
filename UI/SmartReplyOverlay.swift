@@ -56,7 +56,7 @@ final class SmartReplyController {
 
         let size = panel.frame.size
         var origin = NSPoint(x: caretRect.midX - size.width / 2, y: caretRect.minY - size.height - 8)
-        let screen = NSScreen.screens.first(where: { $0.frame.contains(caretRect) }) ?? NSScreen.main
+        let screen = ScreenGeometry.screen(for: caretRect)
         if let vf = screen?.visibleFrame {
             if origin.y < vf.minY { origin.y = caretRect.maxY + 8 }
             if origin.x < vf.minX { origin.x = vf.minX }
@@ -162,7 +162,8 @@ private struct SmartReplyView: View {
     }
 
     private func loadReplies() async {
-        let screenH = NSScreen.main?.frame.height ?? 0
+        // AX↔AppKit flips use the PRIMARY screen height, not the key-window screen.
+        let screenH = ScreenGeometry.primaryScreen?.frame.height ?? 0
         var context = await ScreenContextProvider.shared.currentContext(pid: pid, caretRect: caretRect, screenHeight: screenH)
         if context.isEmpty {
             context = await AccessibilityBridge.shared.completionContext(pid: pid)?.preContext ?? ""

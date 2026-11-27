@@ -1,4 +1,5 @@
 import Cocoa
+import OSLog
 
 @MainActor
 final class DirectApplyToast {
@@ -7,6 +8,7 @@ final class DirectApplyToast {
     private static var undoOriginal: String?
     private static var undoPID: pid_t?
     private static var undoRange: CFRange?
+    private static var undoCorrected: String?
 
     private static var reduceMotion: Bool {
         NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -49,6 +51,7 @@ final class DirectApplyToast {
         dismissTask?.cancel()
         dismissAnimated(currentWindow)
         undoOriginal = original
+        undoCorrected = corrected
         undoPID = pid
         undoRange = range
 
@@ -74,11 +77,15 @@ final class DirectApplyToast {
         guard let original = undoOriginal else { return }
         let range = undoRange
         let pid = undoPID
+        // With a captured span, only undo while it still holds what we wrote.
+        let expected = range == nil ? nil : undoCorrected
         Task {
             do {
-                try await AccessibilityBridge.shared.replaceSelectedText(with: original, range: range, expectedPID: pid)
+                _ = try await AccessibilityBridge.shared.replaceSelectedText(
+                    with: original, range: range, expectedPID: pid, expectedText: expected)
             } catch {
-                // Cmd+Z available as manual fallback
+                Logger.ui.error("DirectApplyToast: undo failed: \(error.localizedDescription)")
+                await MainActor.run { show(message: "Couldn't undo — press ⌘Z in the app") }
             }
         }
         dismissAnimated(currentWindow)
@@ -171,16 +178,10 @@ final class DirectApplyToast {
 
         panel.contentView = containerView
 
+        // Clamp into the screen the MOUSE is on (the toast is placed next to it), not NSScreen.main.
         let mouse = NSEvent.mouseLocation
-        let origin = NSPoint(x: mouse.x + 20, y: mouse.y - 60)
-        if let screen = NSScreen.main ?? NSScreen.screens.first {
-            let frame = screen.visibleFrame
-            let clampedX = max(frame.minX, min(frame.maxX - size.width, origin.x))
-            let clampedY = max(frame.minY, min(frame.maxY - size.height, origin.y))
-            panel.setFrameOrigin(NSPoint(x: clampedX, y: clampedY))
-        } else {
-            panel.setFrameOrigin(origin)
-        }
+        let frame = NSRect(origin: NSPoint(x: mouse.x + 20, y: mouse.y - 60), size: size)
+        panel.setFrameOrigin(ScreenGeometry.clamp(frame, toScreenFor: NSRect(origin: mouse, size: .zero)).origin)
 
         return panel
     }

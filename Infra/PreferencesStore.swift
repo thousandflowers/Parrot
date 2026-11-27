@@ -49,25 +49,48 @@ final class PreferencesStore {
     var openAIBaseURL: String { get { string(Constants.UserDefaultsKey.openAIBaseURL, fallback: "https://api.openai.com/v1") } set { set(newValue, for: Constants.UserDefaultsKey.openAIBaseURL) } }
     var openAIModel: String { get { string(Constants.UserDefaultsKey.openAIModel, fallback: "gpt-4o-mini") } set { set(newValue, for: Constants.UserDefaultsKey.openAIModel) } }
     var openAIAPIKey: String {
-        get {
-            observe()
-            if let cached = _cachedAPIKeys["openai"] { return cached }
-            let key = (try? KeychainService.shared.load(for: "openai")) ?? ""
-            _cachedAPIKeys["openai"] = key
+        get { apiKey(for: "openai") }
+        set { storeAPIKey(newValue, for: "openai") }
+    }
+
+    /// Last Keychain write/delete failure per provider ("openai", "openrouter"); nil = OK.
+    /// The UI should show it next to the key field — a failed save is not cached, so the key
+    /// field will read back empty instead of pretending the key was stored.
+    private(set) var apiKeySaveErrors: [String: String] = [:]
+
+    private func apiKey(for provider: String) -> String {
+        observe()
+        if let cached = _cachedAPIKeys[provider] { return cached }
+        do {
+            let key = try KeychainService.shared.load(for: provider)
+            _cachedAPIKeys[provider] = key
             return key
+        } catch KeychainError.itemNotFound {
+            _cachedAPIKeys[provider] = ""
+            return ""
+        } catch {
+            // Transient (locked keychain, interaction not allowed…): don't cache "" for the session.
+            Logger.infra.error("PreferencesStore: failed to read \(provider, privacy: .public) key: \(error.localizedDescription, privacy: .public)")
+            return ""
         }
-        set {
-            if newValue.isEmpty {
-                do { try KeychainService.shared.delete(for: "openai") }
-                catch { Logger.infra.error("PreferencesStore: failed to delete OpenAI key: \(error.localizedDescription, privacy: .public)") }
-                _cachedAPIKeys.removeValue(forKey: "openai")
+    }
+
+    private func storeAPIKey(_ value: String, for provider: String) {
+        do {
+            if value.isEmpty {
+                try KeychainService.shared.delete(for: provider)
+                _cachedAPIKeys.removeValue(forKey: provider)
             } else {
-                do { try KeychainService.shared.save(key: newValue, for: "openai") }
-                catch { Logger.infra.error("PreferencesStore: failed to save OpenAI key: \(error.localizedDescription, privacy: .public)") }
-                _cachedAPIKeys["openai"] = newValue
+                try KeychainService.shared.save(key: value, for: provider)
+                _cachedAPIKeys[provider] = value
             }
-            invalidate()
+            apiKeySaveErrors.removeValue(forKey: provider)
+        } catch {
+            Logger.infra.error("PreferencesStore: failed to \(value.isEmpty ? "delete" : "save", privacy: .public) \(provider, privacy: .public) key: \(error.localizedDescription, privacy: .public)")
+            _cachedAPIKeys.removeValue(forKey: provider)
+            apiKeySaveErrors[provider] = "Could not \(value.isEmpty ? "remove" : "save") the API key in the Keychain (\(error.localizedDescription))."
         }
+        invalidate()
     }
 
     // MARK: - Ollama / OpenRouter
@@ -75,25 +98,8 @@ final class PreferencesStore {
     var ollamaBaseURL: String { get { string(Constants.UserDefaultsKey.ollamaBaseURL, fallback: "http://localhost:11434") } set { set(newValue, for: Constants.UserDefaultsKey.ollamaBaseURL) } }
     var ollamaModel: String { get { string(Constants.UserDefaultsKey.ollamaModel, fallback: "llama3.2") } set { set(newValue, for: Constants.UserDefaultsKey.ollamaModel) } }
     var openRouterAPIKey: String {
-        get {
-            observe()
-            if let cached = _cachedAPIKeys["openrouter"] { return cached }
-            let key = (try? KeychainService.shared.load(for: "openrouter")) ?? ""
-            _cachedAPIKeys["openrouter"] = key
-            return key
-        }
-        set {
-            if newValue.isEmpty {
-                do { try KeychainService.shared.delete(for: "openrouter") }
-                catch { Logger.infra.error("PreferencesStore: failed to delete OpenRouter key: \(error.localizedDescription, privacy: .public)") }
-                _cachedAPIKeys.removeValue(forKey: "openrouter")
-            } else {
-                do { try KeychainService.shared.save(key: newValue, for: "openrouter") }
-                catch { Logger.infra.error("PreferencesStore: failed to save OpenRouter key: \(error.localizedDescription, privacy: .public)") }
-                _cachedAPIKeys["openrouter"] = newValue
-            }
-            invalidate()
-        }
+        get { apiKey(for: "openrouter") }
+        set { storeAPIKey(newValue, for: "openrouter") }
     }
     var openRouterModel: String { get { string(Constants.UserDefaultsKey.openRouterModel, fallback: "openai/gpt-4o-mini") } set { set(newValue, for: Constants.UserDefaultsKey.openRouterModel) } }
     var translationLanguage: String { get { string(Constants.UserDefaultsKey.translationLanguage, fallback: "en") } set { set(newValue, for: Constants.UserDefaultsKey.translationLanguage) } }

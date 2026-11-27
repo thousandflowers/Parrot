@@ -5,7 +5,7 @@ import Foundation
 /// only its feature set:
 ///   - **Parrot** — grammar / fluency correction (Accessibility only).
 ///   - **Wren**   — inline completion + typo fix (Input Monitoring + optional Screen Recording).
-enum AppMode {
+enum AppMode: CaseIterable {
     case parrot
     case wren
 
@@ -20,4 +20,8 @@ enum AppMode {
     var showsCompletion: Bool { self == .wren }
 
     var displayName: String { self == .wren ? "Wren" : "Parrot" }
+
+    /// Whether this mode's first-run onboarding has its own Accessibility permission step
+    /// (Parrot's does; Wren's covers Input Monitoring and Screen Recording only).
+    var onboardingCoversAccessibility: Bool { self == .parrot }
 }

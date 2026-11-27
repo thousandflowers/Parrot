@@ -34,16 +34,30 @@ if [ -z "${SIGNING_IDENTITY:-}" ]; then
     DEV_ID_HASH="$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -1 | awk '{print $2}')"
     SIGNING_IDENTITY="${DEV_ID_HASH:--}"
 fi
-SIGN_OPTS="--force --timestamp=none"
-[ "${SIGNING_IDENTITY}" = "-" ] && echo "[i] Ad-hoc signing." || echo "[i] Signing identity: ${SIGNING_IDENTITY}"
+# Hardened runtime is mandatory for notarization; Developer ID builds also need a secure timestamp.
+# Local Apple Development builds keep --timestamp=none (offline-friendly) but still enable the
+# hardened runtime so the same entitlements get exercised before a release.
+if [ "${SIGNING_IDENTITY}" = "-" ]; then
+    SIGN_OPTS="--force --timestamp=none"
+    echo "[i] Ad-hoc signing."
+elif [[ "${SIGNING_IDENTITY}" == *"Developer ID"* ]]; then
+    SIGN_OPTS="--force --timestamp --options runtime"
+    echo "[i] Signing identity (Developer ID, hardened runtime): ${SIGNING_IDENTITY}"
+else
+    SIGN_OPTS="--force --timestamp=none --options runtime"
+    echo "[i] Signing identity (hardened runtime): ${SIGNING_IDENTITY}"
+fi
 
 echo "[*] Building arm64 (${CONFIG})..."
 swift build -c "${CONFIG}" --arch arm64 --product Parrot
 swift build -c "${CONFIG}" --arch arm64 --product ParrotCompletionHelper
 
-BIN=".build/arm64-apple-macosx/${CONFIG}/Parrot"
-HELPER=".build/arm64-apple-macosx/${CONFIG}/ParrotCompletionHelper"
-SPARKLE_SRC=".build/arm64-apple-macosx/${CONFIG}/Sparkle.framework"
+# Ask SwiftPM where products live: the default swiftbuild system uses .build/out/Products/<Config>,
+# the native one .build/arm64-apple-macosx/<config>.
+BIN_DIR="$(swift build -c "${CONFIG}" --arch arm64 --show-bin-path)"
+BIN="${BIN_DIR}/Parrot"
+HELPER="${BIN_DIR}/ParrotCompletionHelper"
+SPARKLE_SRC="${BIN_DIR}/Sparkle.framework"
 
 echo "[*] Assembling ${APP_DIR}..."
 rm -rf "${APP_DIR}"
@@ -56,19 +70,13 @@ cp "${HELPER}" "${MACOS}/ParrotCompletionHelper"
 install_name_tool -add_rpath "@loader_path/../Frameworks" "${MACOS}/ParrotCompletionHelper" 2>/dev/null || true
 install_name_tool -delete_rpath "/opt/homebrew/lib" "${MACOS}/ParrotCompletionHelper" 2>/dev/null || true
 
-# MLX Metal shaders: SwiftPM cannot compile .metal sources (mlx-swift README), so reuse the
-# metallib produced by an xcodebuild pass when available. Without it the MLX backend reports
-# "unavailable" at runtime (it does not crash).
-MLX_METALLIB=$(ls .xcbuild/Build/Products/*/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib 2>/dev/null | head -1)
-if [ -n "${MLX_METALLIB}" ]; then
-    cp "${MLX_METALLIB}" "${MACOS}/mlx.metallib"
-    echo "[✓] MLX metallib bundled"
-else
-    echo "[i] No MLX metallib (run 'xcodebuild build -scheme Parrot-Package -destination platform=macOS -derivedDataPath .xcbuild' once to enable the MLX backend)"
-fi
 
-# App icon
-cp Resources/AppIcon.icns "${RES}/"
+# shellcheck source=scripts/bundle-deps.sh
+source scripts/bundle-deps.sh
+bundle_swiftpm_resources "${BIN_DIR}" "${RES}"
+
+# App icon (Wren's own; Resources/AppIcon.icns is Parrot's)
+cp Resources/WrenIcon.icns "${RES}/AppIcon.icns"
 
 # Menu bar icon (template image for NSImageView)
 cp Resources/MenuIcon.png "${RES}/"
@@ -82,36 +90,14 @@ echo "[*] Bundling model $(basename "${MODEL_PATH}") ($(du -h "${MODEL_PATH}" | 
 cp "${MODEL_PATH}" "${RES}/Models/"
 
 # Sparkle (the main binary links it). Architecture-independent framework.
-[ -d "${SPARKLE_SRC}" ] && cp -r "${SPARKLE_SRC}" "${FRAMEWORKS}/" || { echo "[!] Sparkle.framework missing" >&2; exit 1; }
+[ -d "${SPARKLE_SRC}" ] || { echo "[!] Sparkle.framework missing" >&2; exit 1; }
+ditto "${SPARKLE_SRC}" "${FRAMEWORKS}/Sparkle.framework"   # ditto keeps Versions/Current symlinks (cp -r flattens them)
 
-# --- libllama + ggml only (NO llama-server, mtmd, ssl, crypto) ---
-LLAMA_LIB="/opt/homebrew/opt/llama.cpp/lib"
-GGML_LIB="/opt/homebrew/opt/ggml/lib"
-DYLIBS=(
-    "${LLAMA_LIB}/libllama.0.dylib"
-    "${GGML_LIB}/libggml.0.dylib"
-    "${GGML_LIB}/libggml-base.0.dylib"
-)
-for src in "${DYLIBS[@]}"; do
-    real="$(readlink -f "$src" 2>/dev/null || realpath "$src")"
-    [ -f "$real" ] && cp "$real" "${FRAMEWORKS}/$(basename "$src")" || { echo "[!] Missing dylib: $src" >&2; exit 1; }
-done
-
-# Rewrite Homebrew paths → @rpath so the bundle is self-contained.
-fix_binary() {
-    local b="$1"
-    install_name_tool -change "${LLAMA_LIB}/libllama.0.dylib" "@rpath/libllama.0.dylib" "$b" 2>/dev/null || true
-    for name in libggml.0.dylib libggml-base.0.dylib; do
-        install_name_tool -change "${GGML_LIB}/${name}" "@rpath/${name}" "$b" 2>/dev/null || true
-    done
-}
-fix_binary "${MACOS}/ParrotCompletionHelper"
-for dylib in "${FRAMEWORKS}"/libllama*.dylib "${FRAMEWORKS}"/libggml*.dylib; do
-    name=$(basename "$dylib")
-    install_name_tool -id "@rpath/${name}" "$dylib" 2>/dev/null || true
-    install_name_tool -add_rpath "@loader_path" "$dylib" 2>/dev/null || true
-    fix_binary "$dylib"
-done
+# --- libllama + everything it transitively needs from Homebrew (ggml, libomp, ...) ---
+bundle_closure "${MACOS}/ParrotCompletionHelper"
+bundle_ggml_plugins "${MACOS}"
+echo "[✓] Bundled ggml backends: $(find "${MACOS}" -maxdepth 1 -name "libggml-*.so" | wc -l | tr -d " ")"
+echo "[✓] Bundled dylibs: $(find "${FRAMEWORKS}" -maxdepth 1 -name "*.dylib" | wc -l | tr -d " ")"
 
 # --- Info.plist (Wren identity) ---
 sed \
@@ -126,10 +112,19 @@ sed \
   || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Wren" "${PLIST_DST}"
 /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "${PLIST_DST}" 2>/dev/null \
   || /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile AppIcon" "${PLIST_DST}"
+# The shared Info.plist claims the parrot:// scheme for PopClip/deep-link corrections. Wren doesn't
+# correct, and when both apps are installed Launch Services may hand parrot:// links to Wren, so
+# Parrot never receives them. Wren must not claim it.
+/usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes" "${PLIST_DST}" 2>/dev/null || true
+# Release builds stamp the tag version (Info.plist carries Parrot's version otherwise).
+if [ -n "${APP_VERSION:-}" ]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" "${PLIST_DST}"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(git rev-list --count HEAD 2>/dev/null || echo 1)" "${PLIST_DST}"
+fi
 
 # --- Sign inside-out ---
 echo "[*] Signing..."
-for dylib in "${FRAMEWORKS}"/libllama*.dylib "${FRAMEWORKS}"/libggml*.dylib; do
+for dylib in "${FRAMEWORKS}"/*.dylib; do
     codesign --sign "${SIGNING_IDENTITY}" ${SIGN_OPTS} "$dylib"
 done
 SPARKLE_VB="${FRAMEWORKS}/Sparkle.framework/Versions/B"
@@ -137,6 +132,7 @@ for xpc in "${SPARKLE_VB}/XPCServices"/*.xpc; do [ -d "$xpc" ] && codesign --sig
 [ -d "${SPARKLE_VB}/Updater.app" ] && codesign --sign "${SIGNING_IDENTITY}" ${SIGN_OPTS} "${SPARKLE_VB}/Updater.app"
 [ -f "${SPARKLE_VB}/Autoupdate" ] && codesign --sign "${SIGNING_IDENTITY}" ${SIGN_OPTS} "${SPARKLE_VB}/Autoupdate"
 [ -f "${SPARKLE_VB}/Sparkle" ] && codesign --sign "${SIGNING_IDENTITY}" ${SIGN_OPTS} "${SPARKLE_VB}/Sparkle"
+for plugin in "${MACOS}"/libggml-*.so; do codesign --sign "${SIGNING_IDENTITY}" ${SIGN_OPTS} "$plugin"; done
 codesign --sign "${SIGNING_IDENTITY}" ${SIGN_OPTS} "${MACOS}/ParrotCompletionHelper"
 codesign --sign "${SIGNING_IDENTITY}" --entitlements "${ENTITLEMENTS}" ${SIGN_OPTS} "${APP_DIR}"
 

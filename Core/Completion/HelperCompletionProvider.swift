@@ -10,6 +10,15 @@ actor HelperCompletionProvider: CompletionProviding {
 
     private var process: Process?
     private var stdinHandle: FileHandle?
+    private var stdoutHandle: FileHandle?
+    /// Single consumer of the helper's stdout chunks, so they reach `onData` strictly in order.
+    private var readerTask: Task<Void, Never>?
+    /// Bumped on every launch and teardown. Chunks and exit notices carry the generation of the
+    /// helper that produced them; anything from an older helper is stale and dropped.
+    private var processGeneration = 0
+    /// Bumped by `cancelInflight()`. A request that was superseded while it waited for the pipe
+    /// sees a newer epoch once it gets the pipe and bails instead of running a useless generation.
+    private var supersedeEpoch = 0
     private var modelInUse: String?
     private var buffer = Data()
     private var pending: CheckedContinuation<String, Never>?
@@ -34,10 +43,20 @@ actor HelperCompletionProvider: CompletionProviding {
         if pipeWaiters.isEmpty { pipeBusy = false } else { pipeWaiters.removeFirst().resume() }
     }
 
-    private struct Req: Encodable { let prefix: String; let maxTokens: Int; let id: Int; let latinOnly: Bool; let seed: UInt32; let temperature: Double; let repeatPenalty: Double; let suppressMarkup: Bool; let language: String? }
+    /// Warm inference is fast; a request this slow means the helper is hung → tear it down.
+    private static let warmTimeoutSeconds: Double = 12
+    /// Cold start loads the model and compiles Metal kernels (slow, one-time).
+    private static let coldTimeoutSeconds: Double = 60
+
+    /// Writing to a dead helper's stdin raises SIGPIPE, whose default action kills the whole app.
+    /// Ignored process-wide (idempotent, evaluated once) so the write throws EPIPE instead.
+    private static let ignoreSIGPIPE: Void = { _ = signal(SIGPIPE, SIG_IGN) }()
+
+    private struct Req: Encodable { let prefix: String; let maxTokens: Int; let id: Int; let latinOnly: Bool; let seed: UInt32; let temperature: Double; let repeatPenalty: Double; let suppressMarkup: Bool }
     private struct Resp: Decodable { let text: String; let id: Int }
 
     func complete(context: CompletionContext, maxWords: Int, allowCode: Bool) async throws -> String {
+        let epoch = supersedeEpoch   // a later cancelInflight() marks this request superseded
         guard let modelPath = await dedicatedModelPath(), ramAllows(modelPath) else {
             return try await fallback.complete(context: context, maxWords: maxWords, allowCode: allowCode)
         }
@@ -65,9 +84,7 @@ actor HelperCompletionProvider: CompletionProviding {
         // budget-stop, so a little extra room keeps the trimmed result at the intended word count.
         let temp = Constants.completionTemperature
         let repPenalty = temp < 0.15 ? 1.0 : 1.3   // lower t = less repetition penalty (don't fight the cold)
-        let lang: String? = context.language.split(separator: "-").first.map(String.init)   // "it-IT" → "it"
-        guard let line = try? JSONEncoder().encode(Req(prefix: pre, maxTokens: max(12, maxWords * 3 + 4), id: reqID, latinOnly: latinOnly, seed: context.generationSeed, temperature: temp, repeatPenalty: repPenalty, suppressMarkup: !allowCode, language: lang)),
-              let stdin = stdinHandle else {
+        guard let line = try? JSONEncoder().encode(Req(prefix: pre, maxTokens: max(12, maxWords * 3 + 4), id: reqID, latinOnly: latinOnly, seed: context.generationSeed, temperature: temp, repeatPenalty: repPenalty, suppressMarkup: !allowCode)) else {
             return try await fallback.complete(context: context, maxWords: maxWords, allowCode: allowCode)
         }
 
@@ -77,26 +94,37 @@ actor HelperCompletionProvider: CompletionProviding {
         let tInfer = Date()                 // DIAG: time blocked on the pipe vs time in inference
         defer { releasePipe() }
 
-        // Warm timeout 12s: gemma-3-4b's FIRST inference compiles Metal kernels (slow, one-time); warm
-        // calls are much faster. Cold (pre-ready) start loads the model → 60s. On timeout we do NOT
-        // tear down the helper — that caused a cold-restart flicker spiral. Request ids let a late
-        // response for an abandoned request be ignored, so the helper stays warm and the next works.
-        let timeoutSeconds: Double = helperReady ? 12 : 60
-        let text: String? = await withTaskGroup(of: String?.self) { group in
-            group.addTask { await self.sendAndAwait(line, id: reqID, stdin: stdin) }
-            group.addTask { try? await Task.sleep(for: .seconds(timeoutSeconds)); return nil }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
-        }
-        CrashLogger.log("DIAG helper-timing: id=\(reqID) pipeWait=\(Int(tInfer.timeIntervalSince(tBeforePipe)*1000))ms infer=\(Int(Date().timeIntervalSince(tInfer)*1000))ms ready=\(helperReady) result=\(text == nil ? "nil" : "len=\(text!.count)")")
-        guard let text else {
-            // Timed out: abandon THIS request but keep the helper ALIVE (no teardown → no spiral).
-            // Clear the dangling continuation; a late response for reqID is ignored by id-match below.
-            resumePending(with: "")
+        // Superseded while queued on the pipe (cancelInflight only reaches the request that is
+        // already in flight) → bail so the newest request is not stuck behind a stale generation.
+        guard epoch == supersedeEpoch, !Task.isCancelled else {
+            CrashLogger.log("DIAG helper: id=\(reqID) superseded while waiting for the pipe — skipped")
             return ""
         }
+        // The helper may have exited or been torn down while we waited: relaunch if needed and use
+        // the CURRENT stdin handle, never one captured before the wait.
+        guard (try? ensureHelper(modelPath: modelPath)) != nil, let stdin = stdinHandle else { return "" }
+
+        // A timeout resumes the pending continuation itself (the await below is not cancellable, so
+        // racing it in a task group could never fire) and tears down the hung helper; the next
+        // request relaunches it. Request ids still discard a late response for an abandoned request.
+        let timeoutSeconds = helperReady ? Self.warmTimeoutSeconds : Self.coldTimeoutSeconds
+        let timeout = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(timeoutSeconds)) } catch { return }   // cancelled → answered in time
+            await self?.timeoutFired(requestID: reqID, after: timeoutSeconds)
+        }
+        let text = await sendAndAwait(line, id: reqID, stdin: stdin)
+        timeout.cancel()
+        CrashLogger.log("DIAG helper-timing: id=\(reqID) pipeWait=\(Int(tInfer.timeIntervalSince(tBeforePipe)*1000))ms infer=\(Int(Date().timeIntervalSince(tInfer)*1000))ms ready=\(helperReady) result=len=\(text.count)")
         return text
+    }
+
+    /// Resumes the request still waiting after `seconds` (exactly once, via `resumePending`) and
+    /// kills the helper that failed to answer, so `pipeBusy` is released and the next call restarts it.
+    private func timeoutFired(requestID: Int, after seconds: Double) {
+        guard pending != nil, pendingID == requestID else { return }   // already answered/abandoned
+        Logger.infra.info("completion helper timed out after \(Int(seconds))s (id=\(requestID)) — restarting it")
+        resumePending(with: "")
+        teardownHelper()
     }
 
     // MARK: - Pipe request/response
@@ -124,7 +152,10 @@ actor HelperCompletionProvider: CompletionProviding {
         }
     }
 
-    private func onData(_ chunk: Data) {
+    private func onData(_ chunk: Data, generation: Int) {
+        // A chunk from a torn-down helper (e.g. its {"ready":true}) must not touch the new helper's
+        // state — it would mark a still-loading helper ready and shrink its timeout.
+        guard generation == processGeneration else { return }
         buffer.append(chunk)
         while let nl = buffer.firstIndex(of: 0x0A) {
             let lineData = buffer.subdata(in: buffer.startIndex..<nl)
@@ -177,14 +208,42 @@ actor HelperCompletionProvider: CompletionProviding {
         proc.standardInput = inPipe
         proc.standardOutput = outPipe
         proc.standardError = FileHandle.nullDevice
-        outPipe.fileHandleForReading.readabilityHandler = { [weak self] h in
+        _ = Self.ignoreSIGPIPE
+
+        processGeneration += 1
+        let generation = processGeneration
+        // Chunks go through ONE ordered stream with ONE consumer: an unordered `Task` per chunk
+        // could deliver them out of order and corrupt the line buffer.
+        let (chunks, sink) = AsyncStream.makeStream(of: Data.self)
+        let outHandle = outPipe.fileHandleForReading
+        outHandle.readabilityHandler = { h in
             let d = h.availableData
-            guard !d.isEmpty, let self else { return }
-            Task { await self.onData(d) }
+            guard !d.isEmpty else {
+                // EOF (helper exited). Unregister, or the handler re-fires forever at 100% CPU.
+                h.readabilityHandler = nil
+                sink.finish()
+                return
+            }
+            sink.yield(d)
         }
-        try proc.run()
+        proc.terminationHandler = { [weak self] _ in
+            Task { await self?.helperExited(generation: generation) }
+        }
+        do {
+            try proc.run()
+        } catch {
+            outHandle.readabilityHandler = nil
+            sink.finish()
+            try? outHandle.close()
+            try? inPipe.fileHandleForWriting.close()
+            throw error
+        }
+        readerTask = Task { [weak self] in
+            for await chunk in chunks { await self?.onData(chunk, generation: generation) }
+        }
         process = proc
         stdinHandle = inPipe.fileHandleForWriting
+        stdoutHandle = outHandle
         modelInUse = modelPath
         Logger.infra.info("completion helper started for \(modelPath, privacy: .public)")
     }
@@ -196,8 +255,9 @@ actor HelperCompletionProvider: CompletionProviding {
     /// returns at once; its `defer { releasePipe() }` then hands the pipe to the next waiter in
     /// order (no manual drain, no double-release of `pipeBusy`). The subprocess keeps generating the
     /// old request, but its late response carries a stale id and is discarded by the id-match in
-    /// `onData` — the same mechanism the timeout path relies on to keep the helper alive.
+    /// `onData`. Requests still queued behind the pipe are superseded via `supersedeEpoch`.
     func cancelInflight() {
+        supersedeEpoch &+= 1   // also supersedes requests still queued on the pipe
         guard pending != nil else { return }
         #if DEBUG
         CrashLogger.log("DIAG helper: cancelInflight — abandoning in-flight request, helper kept warm")
@@ -207,12 +267,29 @@ actor HelperCompletionProvider: CompletionProviding {
 
     private func teardownHelper() {
         resumePending(with: "")
+        processGeneration += 1   // late chunks / exit notice from this helper are now stale
+        stdoutHandle?.readabilityHandler = nil
+        readerTask?.cancel()
+        // Close our pipe ends explicitly (one fd pair per restart otherwise lingers). Closing stdin
+        // also makes the helper see EOF and exit on its own.
+        try? stdinHandle?.close()
+        try? stdoutHandle?.close()
         if let p = process, p.isRunning { p.terminate() }
         process = nil
         stdinHandle = nil
+        stdoutHandle = nil
+        readerTask = nil
         modelInUse = nil
         buffer.removeAll()
         helperReady = false
+    }
+
+    /// The helper process exited on its own (crash, OOM, EOF). Clear its state and release a waiting
+    /// request; the next `complete()` relaunches it.
+    private func helperExited(generation: Int) {
+        guard generation == processGeneration else { return }   // an older helper we already tore down
+        Logger.infra.info("completion helper exited — will relaunch on next request")
+        teardownHelper()
     }
 
     private static func helperExecutableURL() -> URL? {

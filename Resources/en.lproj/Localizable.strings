@@ -100,6 +100,23 @@
 
 /* Accessibility alert (AppDelegate) */
 "alert.accessibility.title" = "Accessibility Permissions Required";
-"alert.accessibility.body" = "Parrot uses Accessibility to read and correct text in other apps.\n\nOpen System Settings > Privacy & Security > Accessibility and add Parrot.\n\n⚠️ After granting permission, macOS will quit Parrot. Relaunch it from the Applications folder or Dock.";
+"alert.accessibility.body_format" = "%1$@ uses Accessibility to read and edit text in other apps.\n\nOpen System Settings > Privacy & Security > Accessibility and add %1$@.\n\n⚠️ After granting permission, macOS will quit %1$@. Relaunch it from the Applications folder or Dock.";
 "alert.accessibility.open_settings" = "Open Settings";
 "alert.accessibility.ignore" = "Don't show again";
+
+/* Added 2026-11-27: keys used in code but missing here (showed as raw keys) */
+"alert.completion.no_model.body" = "Wren generates suggestions with an on-device model. Download a model in Settings to turn on inline completion.";
+"alert.completion.no_model.open_settings" = "Open Settings";
+"alert.completion.no_model.title" = "No model installed";
+"model.llama1b.reason" = "Light and fast — good for short English texts";
+"model.llama3b.reason" = "Better quality for English — Mac with 8 GB RAM or more";
+"model.phi.reason" = "Solid English quality — Mac with 8 GB RAM or more";
+"model.qwen05b.reason" = "Smallest and fastest — basic fixes, runs on any Mac";
+"panel.streaming" = "Correcting...";
+"realtime.errors" = "Issues found";
+"realtime.ok" = "No issues";
+"tone.opener.casualMessage" = "Hey! Just wanted to tell you that";
+"tone.opener.formalEmail" = "Dear Dr. Smith, I am writing to";
+"tone.opener.narrative" = "That morning, as soon as I woke up,";
+"tone.opener.politeRequest" = "Would you mind";
+"tone.opener.workTechnical" = "I updated the module and now";

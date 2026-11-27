@@ -100,8 +100,10 @@ private struct InputMonitoringStep: View {
                 .multilineTextAlignment(.center).foregroundStyle(Color.textSecondary)
                 .padding(.horizontal, 48)
             if !granted {
-                Button("Grant access") { _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent) }
+                Button("Grant access") { requestInputMonitoring() }
                     .buttonStyle(.borderedProminent)
+                    .accessibilityLabel("Grant Input Monitoring access")
+                    .accessibilityHint("Asks macOS for Input Monitoring, or opens System Settings if it was already denied")
                 Text("System Settings → Privacy & Security → Input Monitoring → enable Wren")
                     .font(.caption).foregroundStyle(Color.textSecondary)
             }
@@ -114,6 +116,20 @@ private struct InputMonitoringStep: View {
                 granted = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
             }
         }
+    }
+
+    /// `IOHIDRequestAccess` only shows the system prompt while the status is undetermined; after a
+    /// denial it silently returns false. In that case send the user to the Settings pane instead.
+    private func requestInputMonitoring() {
+        let status = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
+        guard status != kIOHIDAccessTypeGranted else { granted = true; return }
+        if status == kIOHIDAccessTypeUnknown, IOHIDRequestAccess(kIOHIDRequestTypeListenEvent) {
+            granted = true
+            return
+        }
+        guard status == kIOHIDAccessTypeDenied,
+              let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") else { return }
+        NSWorkspace.shared.open(url)
     }
 }
 

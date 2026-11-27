@@ -8,16 +8,13 @@ actor CustomRuleStore {
     private let fileURL: URL
 
     private init() {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let base = AppPaths.applicationSupport
             ?? FileManager.default.temporaryDirectory
         let appSupport = base.appendingPathComponent("Parrot")
         try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
         let url = appSupport.appendingPathComponent("custom_rules.json")
         fileURL = url
-        if let data = try? Data(contentsOf: url),
-           let decoded = try? JSONDecoder().decode([CustomRule].self, from: data) {
-            rules = decoded
-        }
+        rules = PersistentJSON.load([CustomRule].self, from: url) ?? []
     }
 
     func allRules() -> [CustomRule] { rules }

@@ -38,7 +38,7 @@ actor ContactStore {
     private let fileURL: URL?
 
     private static func makeFileURL() -> URL {
-        let dir = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let dir = (AppPaths.applicationSupport
             ?? FileManager.default.temporaryDirectory).appendingPathComponent("Parrot")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("contacts.json")
@@ -46,16 +46,13 @@ actor ContactStore {
 
     /// Pass `persistent: true` for the app singleton; omit for in-memory test instances.
     init(persistent: Bool = false) {
-        if persistent {
-            let url = Self.makeFileURL()
-            fileURL = url
-            if let data = try? Data(contentsOf: url),
-               let decoded = try? JSONDecoder().decode([ContactProfile].self, from: data) {
-                contacts = decoded
-            }
-        } else {
-            fileURL = nil
-        }
+        self.init(fileURL: persistent ? Self.makeFileURL() : nil)
+    }
+
+    /// Persists to `fileURL` (nil = in-memory). Injectable so tests never touch real user data.
+    init(fileURL: URL?) {
+        self.fileURL = fileURL
+        contacts = fileURL.flatMap { PersistentJSON.load([ContactProfile].self, from: $0) } ?? []
     }
 
     var all: [ContactProfile] { contacts }

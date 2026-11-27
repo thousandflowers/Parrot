@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 struct KnowledgeDocument: Identifiable, Codable, Sendable, Hashable {
     let id: UUID
@@ -19,18 +20,14 @@ actor KnowledgeBase {
     private var documents: [KnowledgeDocument] = []
 
     private nonisolated static var fileURL: URL {
-        let dir = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory)
+        let dir = (AppPaths.applicationSupport ?? FileManager.default.temporaryDirectory)
             .appendingPathComponent("Parrot")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("knowledge.json")
     }
 
     private init() {
-        let url = Self.fileURL
-        if let data = try? Data(contentsOf: url),
-           let decoded = try? JSONDecoder().decode([KnowledgeDocument].self, from: data) {
-            documents = decoded
-        }
+        documents = PersistentJSON.load([KnowledgeDocument].self, from: Self.fileURL) ?? []
     }
 
     var allDocuments: [KnowledgeDocument] { documents }
@@ -54,23 +51,7 @@ actor KnowledgeBase {
     }
 
     func contextForPrompt(text: String, maxTokens: Int = 500) -> String? {
-        guard !documents.isEmpty else { return nil }
-
-        let relevant = documents
-            .filter { doc in
-                let words = doc.content.split(separator: " ").map { $0.lowercased() }
-                let textWords = Set(text.split(separator: " ").map { $0.lowercased() })
-                return words.contains { textWords.contains($0) }
-            }
-            .sorted { a, b in
-                // File > snippet > auto_learned — numeric priority avoids
-                // the incomplete ternary that produced indeterminate ordering
-                // for equally-classified items.
-                let lhs: Int = a.source == .file ? 3 : a.source == .snippet ? 2 : 1
-                let rhs: Int = b.source == .file ? 3 : b.source == .snippet ? 2 : 1
-                return lhs > rhs
-            }
-
+        let relevant = Self.relevantDocuments(documents, for: text)
         guard !relevant.isEmpty else { return nil }
 
         let combined = relevant
@@ -86,34 +67,91 @@ actor KnowledgeBase {
     }
 
     func learnFromCorrection(original: String, corrected: String) {
-        guard original != corrected else { return }
-        let diff = original.split(separator: " ").enumerated()
-            .filter { i, word in
-                let corrWords = corrected.split(separator: " ")
-                return i < corrWords.count && word.lowercased() != corrWords[i].lowercased()
-            }
-            .map { _, word in String(word) }
-
-        guard !diff.isEmpty else { return }
-
-        let existing = documents.first { doc in
-            doc.source == .autoLearned && doc.content.contains(diff.first ?? "")
-        }
-
-        if let existing {
-            var updated = existing
-            updated.content += "\n" + corrected
-            updateDocument(updated)
-        } else {
-            addDocument(
-                title: "Pattern: \(diff.prefix(3).joined(separator: " → "))",
-                content: "Original: \(original)\nCorrected: \(corrected)",
-                source: .autoLearned
-            )
-        }
+        let updated = Self.learning(from: documents, original: original, corrected: corrected)
+        guard updated != documents else { return }
+        documents = updated
+        save()
     }
 
     private func save() {
-        try? JSONEncoder().encode(documents).write(to: Self.fileURL, options: .atomic)
+        let count = documents.count
+        do {
+            try JSONEncoder().encode(documents).write(to: Self.fileURL, options: .atomic)
+        } catch {
+            Logger.core.error("KnowledgeBase: save failed (\(count, privacy: .public) docs): \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    // MARK: - Pure logic (testable)
+
+    /// Lower-cased alphanumeric tokens long enough to carry meaning. Length, not a stop-word
+    /// list, filters out function words ("the", "and", "per", "che") in any language.
+    nonisolated static func terms(in text: String) -> Set<String> {
+        Set(text.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.count >= Constants.knowledgeMinTermLength })
+    }
+
+    /// Documents sharing enough meaningful terms with `text`, best source first, then most overlap.
+    /// A short text with a single meaningful term needs only that one term to match.
+    nonisolated static func relevantDocuments(_ docs: [KnowledgeDocument], for text: String) -> [KnowledgeDocument] {
+        let textTerms = terms(in: text)
+        guard !textTerms.isEmpty else { return [] }
+        let required = min(Constants.knowledgeMinSharedTerms, textTerms.count)
+        return docs
+            .map { (doc: $0, overlap: terms(in: $0.content).intersection(textTerms).count) }
+            .filter { $0.overlap >= required }
+            .sorted { a, b in
+                let lhs = priority(a.doc.source), rhs = priority(b.doc.source)
+                return lhs != rhs ? lhs > rhs : a.overlap > b.overlap
+            }
+            .map(\.doc)
+    }
+
+    /// Returns `docs` with the correction recorded: appended to the auto-learned doc for the
+    /// exact same word pattern, or as a new doc. Each doc is capped (oldest examples dropped).
+    nonisolated static func learning(from docs: [KnowledgeDocument], original: String, corrected: String,
+                                     now: Date = Date()) -> [KnowledgeDocument] {
+        guard original != corrected else { return docs }
+        let correctedWords = corrected.split(separator: " ")
+        let changes = original.split(separator: " ").enumerated()
+            .filter { i, word in i < correctedWords.count && word.lowercased() != correctedWords[i].lowercased() }
+            .map { i, word in "\(word.lowercased())→\(correctedWords[i].lowercased())" }
+        guard !changes.isEmpty else { return docs }
+
+        let title = "Pattern: \(changes.prefix(3).joined(separator: ", "))"
+        guard let index = docs.firstIndex(where: { $0.source == .autoLearned && $0.title == title }) else {
+            let content = capped("Original: \(original)\nCorrected: \(corrected)")
+            return docs + [KnowledgeDocument(id: UUID(), title: title, content: content, source: .autoLearned, createdAt: now)]
+        }
+        let existing = docs[index]
+        let lines = existing.content.split(separator: "\n", omittingEmptySubsequences: true)
+        guard !lines.contains(Substring(corrected)) else { return docs }
+        var updated = existing
+        updated.content = capped(existing.content + "\n" + corrected)
+        return docs.enumerated().map { $0.offset == index ? updated : $0.element }
+    }
+
+    /// Keeps the newest whole lines within `Constants.knowledgeAutoLearnedMaxChars`.
+    private nonisolated static func capped(_ content: String) -> String {
+        let limit = Constants.knowledgeAutoLearnedMaxChars
+        guard content.count > limit else { return content }
+        var kept: [Substring] = []
+        var total = 0
+        for line in content.split(separator: "\n").reversed() {
+            let cost = line.count + (kept.isEmpty ? 0 : 1)
+            guard total + cost <= limit else { break }
+            kept.append(line)
+            total += cost
+        }
+        return kept.reversed().joined(separator: "\n")
+    }
+
+    private nonisolated static func priority(_ source: KnowledgeDocument.Source) -> Int {
+        switch source {
+        case .file: 3
+        case .snippet: 2
+        case .autoLearned: 1
+        }
     }
 }
