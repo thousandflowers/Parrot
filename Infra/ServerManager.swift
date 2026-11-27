@@ -159,7 +159,11 @@ actor ServerManager: Sendable {
                 "-c", "\(effectiveContext)",
                 "--threads", "\(max(2, ProcessInfo.processInfo.processorCount / 2))",
                 "--n-gpu-layers", gpuLayers(),
-                "--flash-attn", "auto"
+                "--flash-attn", "auto",
+                // Thinking models (Gemma 4, Qwen 3) otherwise spend the whole token budget on a
+                // hidden reasoning trace: content comes back empty, finish_reason=length, and the
+                // correction times out. Corrections and completions never want a trace.
+                "--reasoning", "off"
             ]
 
             close(probeSock)
