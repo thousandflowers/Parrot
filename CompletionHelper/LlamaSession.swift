@@ -79,6 +79,24 @@ final class LlamaSession {
 
     /// A failed decode may leave partially processed ubatches in memory (see llama.h): the resident
     /// state is unknown, so drop it entirely and let the next call rebuild from scratch.
+    /// Decodes `tokens` into sequence 0 at explicit positions `startPos...`, requesting logits for
+    /// the last one (what the sampler reads). llama_batch_ext + llama_process replace the
+    /// deprecated llama_batch_get_one + llama_decode (llama.cpp 1.x).
+    private func decode(_ tokens: [llama_token], startPos: Int) -> Bool {
+        guard !tokens.isEmpty, let batch = llama_batch_ext_init(ctx) else { return false }
+        defer { llama_batch_ext_free(batch) }
+        for (offset, token) in tokens.enumerated() {
+            let idx = llama_batch_ext_add_token(batch, 0, token)
+            guard idx >= 0 else { return false }
+            var pos = llama_pos(startPos + offset)
+            guard llama_batch_ext_set_pos(batch, idx, &pos) else { return false }
+            if offset == tokens.count - 1 {
+                guard llama_batch_ext_set_output_logits(batch, idx, true) else { return false }
+            }
+        }
+        return llama_process(ctx, LLAMA_PROCESS_TYPE_DECODE, batch) == 0
+    }
+
     private func resetResident() {
         llama_memory_clear(llama_get_memory(ctx), true)
         cached = []
@@ -183,9 +201,7 @@ final class LlamaSession {
         p = cached.count                              // 0 if the backend had to clear everything
 
         // Decode the new prompt tokens (auto position resumes at p).
-        var newTokens = Array(promptTokens[p...])
-        var batch = llama_batch_get_one(&newTokens, Int32(newTokens.count))
-        guard llama_decode(ctx, batch) == 0 else { resetResident(); return "" }
+        guard decode(Array(promptTokens[p...]), startPos: p) else { resetResident(); return "" }
         cached = promptTokens
 
         // Sampler chain: [logit_bias] → top_k → top_p → min_p → temp → repeat_penalty → dist.
@@ -241,9 +257,8 @@ final class LlamaSession {
                 }
             }
             outBytes += pc
-            batch = llama_batch_get_one(&id, 1)
             // Only a successfully decoded token is resident in the KV cache.
-            guard llama_decode(ctx, batch) == 0 else { resetResident(); break }
+            guard decode([id], startPos: cached.count) else { resetResident(); break }
             cached.append(id)
         }
         // Decode once; a budget stop mid-character drops the incomplete tail instead of U+FFFD.
