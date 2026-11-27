@@ -47,7 +47,7 @@ enum ModelCatalog {
                   isOnboardingCandidate: true),
             model(id: "gemma-4-E4B-it-q4_k_m", name: "Gemma 4 E4B IT (8B)",
                   reason: String(localized: "model.gemma4b.reason"), sizeLabel: "~4 GB",
-                  ramRequired: 6, urlString: "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf",
+                  ramRequired: 6, urlString: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf",
                   isOnboardingCandidate: true),
         ] as [ModelRecommendation?]).compactMap { $0 }
     }
