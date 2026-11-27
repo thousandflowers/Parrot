@@ -42,4 +42,14 @@ final class CompletionFixPostprocessorTests: XCTestCase {
         let r = CompletionPostprocessor.clean(raw: "ption desk", preContext: "I went to the rece", maxWords: 4, midWord: true)
         XCTAssertEqual(r, "ption desk")
     }
+
+    func testCandidateLanguages_shortContextUsesOnlyPreferredPrimaries() {
+        XCTAssertEqual(WordBoundary.candidateLanguages(context: "rece", preferred: ["it-IT", "en-US", "it"]), ["it", "en"])
+    }
+
+    func testCandidateLanguages_longContextPutsDetectedFirst() {
+        let langs = WordBoundary.candidateLanguages(
+            context: "Ciao Marco, ci vediamo domani al solito posto per il caffè", preferred: ["en-US"])
+        XCTAssertEqual(langs, ["it", "en"])
+    }
 }

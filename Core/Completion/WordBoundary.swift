@@ -39,11 +39,27 @@ enum WordBoundary {
         let combined = trailingWord + continuation
         guard combined.count >= 3, trailingWord.count >= 1, continuation.count >= 1 else { return false }
         let checker = NSSpellChecker.shared
-        let sample = context.isEmpty ? combined : context
-        let lang = NSLinguisticTagger.dominantLanguage(for: sample)
-            .flatMap { checker.availableLanguages.contains($0) ? $0 : nil } ?? "en"
-        let r = checker.checkSpelling(of: combined, startingAt: 0, language: lang,
-                                      wrap: false, inSpellDocumentWithTag: 0, wordCount: nil)
-        return r.location == NSNotFound   // not flagged → a real word → it was mid-token
+        // A real word in ANY language the user writes in counts: the context's language when there
+        // is enough text to detect it, plus the user's preferred languages. Never guess from the
+        // glued token itself ("Eugenioand" → Romanian) or from a fragment too short to detect.
+        let available = Set(checker.availableLanguages)
+        let languages = candidateLanguages(context: context, preferred: Locale.preferredLanguages)
+            .filter { available.contains($0) }
+        return (languages.isEmpty ? ["en"] : languages).contains { lang in
+            checker.checkSpelling(of: combined, startingAt: 0, language: lang,
+                                  wrap: false, inSpellDocumentWithTag: 0, wordCount: nil).location == NSNotFound
+        }
+    }
+
+    /// Detected context language first (only from text long enough to be reliable), then the
+    /// user's preferred languages as primary subtags ("it-IT" → "it"), without duplicates.
+    nonisolated static func candidateLanguages(context: String, preferred: [String]) -> [String] {
+        let detected = context.count >= LanguageDetector.longTextMinLength
+            ? NSLinguisticTagger.dominantLanguage(for: context).map { [$0] } ?? []
+            : []
+        let primaries = preferred.compactMap { $0.split(separator: "-").first.map(String.init) }
+        return (detected + primaries).reduce(into: [String]()) { acc, lang in
+            if !acc.contains(lang) { acc.append(lang) }
+        }
     }
 }
